@@ -27,7 +27,7 @@ mcp_lock_acquire() {
     sleep "${MCPBASH_LOCK_POLL_INTERVAL}"
   done
 
-  printf '%s' "${BASHPID:-$$}" > "${path}/pid"
+  printf '%s' "${BASHPID:-$$}" >"${path}/pid"
 }
 
 mcp_lock_release() {

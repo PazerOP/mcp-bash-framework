@@ -105,7 +105,7 @@ mcp_core_wait_for_available_slot() {
   local max="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
   local active
   case "${max}" in
-    ''|*[!0-9]*) max=16 ;;
+    '' | *[!0-9]*) max=16 ;;
     0) max=1 ;;
   esac
   while :; do
@@ -125,7 +125,7 @@ mcp_core_process_legacy_batch() {
   local batch_output=""
 
   case "${tool}" in
-    gojq|jq)
+    gojq | jq)
       if ! batch_output="$(printf '%s' "${array_json}" | "${bin}" -c '.[]' 2>/dev/null)"; then
         return 1
       fi
@@ -148,7 +148,7 @@ for entry in data:
   while IFS= read -r item; do
     [ -z "${item}" ] && continue
     mcp_core_handle_line "${item}"
-  done <<< "${batch_output}"$'\n'
+  done <<<"${batch_output}"$'\n'
 
   return 0
 }
@@ -160,7 +160,7 @@ mcp_core_guard_response_size() {
   local size
 
   case "${limit}" in
-    ''|*[!0-9]*) limit=10485760 ;;
+    '' | *[!0-9]*) limit=10485760 ;;
   esac
   if [ -z "${payload}" ]; then
     printf '%s' "${payload}"
@@ -196,7 +196,7 @@ mcp_core_rate_limit() {
   esac
 
   case "${limit}" in
-    ''|*[!0-9]*) limit=100 ;;
+    '' | *[!0-9]*) limit=100 ;;
     0) return 0 ;;
   esac
 
@@ -309,7 +309,7 @@ mcp_core_resolve_handler() {
   MCPBASH_RESOLVED_ASYNC="false"
 
   case "${method}" in
-    initialize|shutdown|exit|initialized|notifications/initialized)
+    initialize | shutdown | exit | initialized | notifications/initialized)
       MCPBASH_RESOLVED_HANDLER="mcp_handle_lifecycle"
       ;;
     ping)
@@ -433,13 +433,13 @@ mcp_core_timeout_for_method() {
   local timeout_value=""
 
   case "${method}" in
-    tools/*|resources/*|prompts/get|completion/complete)
+    tools/* | resources/* | prompts/get | completion/complete)
       if mcp_runtime_is_minimal_mode; then
         printf ''
         return 0
       fi
       case "${MCPBASH_JSON_TOOL}" in
-        gojq|jq)
+        gojq | jq)
           timeout_value="$(printf '%s' "${json_line}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.params.timeoutSecs // empty' 2>/dev/null || true)"
           ;;
         python)
@@ -592,7 +592,8 @@ mcp_core_lookup_pgid() {
   local pgid=""
 
   if command -v python3 >/dev/null 2>&1; then
-    pgid="$(python3 - "$pid" <<'PY'
+    pgid="$(
+      python3 - "$pid" <<'PY'
 import os, sys
 pid = int(sys.argv[1])
 try:
@@ -600,9 +601,10 @@ try:
 except Exception:
     pass
 PY
-)"
+    )"
   elif command -v python >/dev/null 2>&1; then
-    pgid="$(python - "$pid" <<'PY'
+    pgid="$(
+      python - "$pid" <<'PY'
 import os, sys
 pid = int(sys.argv[1])
 try:
@@ -610,7 +612,7 @@ try:
 except Exception:
     pass
 PY
-)"
+    )"
   fi
 
   if [ -z "${pgid}" ]; then
@@ -696,7 +698,7 @@ mcp_core_get_id_key() {
 
 mcp_core_method_allowed_preinit() {
   case "$1" in
-    initialize|notifications/initialized|notifications/cancelled|shutdown|exit)
+    initialize | notifications/initialized | notifications/cancelled | shutdown | exit)
       return 0
       ;;
     *)
@@ -707,7 +709,7 @@ mcp_core_method_allowed_preinit() {
 
 mcp_core_method_allowed_during_shutdown() {
   case "$1" in
-    exit|shutdown|notifications/cancelled|notifications/initialized)
+    exit | shutdown | notifications/cancelled | notifications/initialized)
       return 0
       ;;
     *)
@@ -764,10 +766,10 @@ mcp_core_normalize_timeout() {
   local value="$1"
   value="$(printf '%s' "${value}" | tr -d '\r\n')"
   case "${value}" in
-    '' ) printf '' ;;
-    *[!0-9]* ) printf '' ;;
-    0 ) printf '' ;;
-    * ) printf '%s' "${value}" ;;
+    '') printf '' ;;
+    *[!0-9]*) printf '' ;;
+    0) printf '' ;;
+    *) printf '%s' "${value}" ;;
   esac
 }
 
@@ -792,7 +794,8 @@ mcp_core_extract_log_level() {
     return 0
   fi
   local level
-  level="$(LINE="${line}" "${py}" <<'PY'
+  level="$(
+    LINE="${line}" "${py}" <<'PY'
 import json, os, sys
 try:
     data = json.loads(os.environ["LINE"])
@@ -801,7 +804,7 @@ try:
 except Exception:
     print("info")
 PY
-)"
+  )"
   [ -z "${level}" ] && level="info"
   printf '%s' "${level}"
 }

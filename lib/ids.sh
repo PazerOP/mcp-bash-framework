@@ -76,7 +76,7 @@ mcp_ids_track_worker() {
 
   local path
   path="$(mcp_ids_state_path "pid" "${key}")"
-  printf '%s %s %s' "${pid}" "${pgid}" "${stderr_path}" > "${path}"
+  printf '%s %s %s' "${pid}" "${pgid}" "${stderr_path}" >"${path}"
 }
 
 mcp_ids_clear_worker() {
@@ -106,7 +106,7 @@ mcp_ids_mark_cancelled() {
   fi
   local cancelled_path
   cancelled_path="$(mcp_ids_state_path "cancelled" "${key}")"
-  printf '%s' "1" > "${cancelled_path}"
+  printf '%s' "1" >"${cancelled_path}"
 }
 
 mcp_ids_is_cancelled_key() {

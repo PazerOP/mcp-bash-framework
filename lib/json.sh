@@ -32,7 +32,7 @@ mcp_json_normalize_line() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       mcp_json_normalize_with_jq "${line}"
       ;;
     python)
@@ -78,7 +78,7 @@ mcp_json_trim() {
   local value="$1"
   while [ -n "${value}" ]; do
     case "${value}" in
-      $'\r'*|$'\n'*|$'\t'*|' '*)
+      $'\r'* | $'\n'* | $'\t'* | ' '*)
         value="${value#?}"
         ;;
       *)
@@ -89,7 +89,7 @@ mcp_json_trim() {
 
   while [ -n "${value}" ]; do
     case "${value}" in
-      *$'\r'|*$'\n'|*$'\t'|*' ')
+      *$'\r' | *$'\n' | *$'\t' | *' ')
         value="${value%?}"
         ;;
       *)
@@ -126,7 +126,7 @@ mcp_json_extract_method() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.method | strings' 2>/dev/null; then
         return 1
       fi
@@ -155,7 +155,7 @@ mcp_json_extract_id() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.id' 2>/dev/null; then
         return 1
       fi
@@ -252,13 +252,13 @@ mcp_json_minimal_split_pairs() {
           in_string=1
         fi
         ;;
-      '{'|'[')
+      '{' | '[')
         current="${current}${char}"
         if [ "${in_string}" = "0" ]; then
           depth=$((depth + 1))
         fi
         ;;
-      '}'|']')
+      '}' | ']')
         current="${current}${char}"
         if [ "${in_string}" = "0" ]; then
           depth=$((depth - 1))
@@ -365,12 +365,12 @@ mcp_json_minimal_find_colon() {
           in_string=1
         fi
         ;;
-      '{'|'[')
+      '{' | '[')
         if [ "${in_string}" = "0" ]; then
           depth=$((depth + 1))
         fi
         ;;
-      '}'|']')
+      '}' | ']')
         if [ "${in_string}" = "0" ]; then
           depth=$((depth - 1))
           if [ "${depth}" -lt 0 ]; then
@@ -384,8 +384,7 @@ mcp_json_minimal_find_colon() {
           return 0
         fi
         ;;
-      *)
-        ;;
+      *) ;;
     esac
     i=$((i + 1))
   done
@@ -458,15 +457,14 @@ mcp_json_minimal_is_number() {
   while [ "${i}" -lt "${len}" ]; do
     char="${num:i:1}"
     case "${char}" in
-      [0-9])
-        ;;
+      [0-9]) ;;
       .)
         if [ "${seen_decimal}" -eq 1 ] || [ "${seen_exponent}" -eq 1 ]; then
           return 1
         fi
         seen_decimal=1
         ;;
-      e|E)
+      e | E)
         if [ "${seen_exponent}" -eq 1 ]; then
           return 1
         fi
@@ -503,7 +501,7 @@ mcp_json_extract_cancel_id() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.params.requestId // .params.id' 2>/dev/null; then
         return 1
       fi
@@ -534,7 +532,7 @@ mcp_json_extract_protocol_version() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.params.protocolVersion // empty' 2>/dev/null; then
         printf ''
       fi
@@ -564,7 +562,7 @@ mcp_json_extract_limit() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.limit? // ""' 2>/dev/null
       ;;
     python)
@@ -591,7 +589,7 @@ mcp_json_extract_cursor() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.cursor? // ""' 2>/dev/null
       ;;
     python)
@@ -618,7 +616,7 @@ mcp_json_extract_tool_name() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
       ;;
     python)
@@ -645,7 +643,7 @@ mcp_json_extract_arguments() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '.params.arguments // {}' 2>/dev/null; then
         printf '{}'
       fi
@@ -675,7 +673,7 @@ mcp_json_extract_timeout_override() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.timeoutSecs? // ""' 2>/dev/null
       ;;
     python)
@@ -702,7 +700,7 @@ mcp_json_extract_resource_name() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
       ;;
     python)
@@ -729,7 +727,7 @@ mcp_json_extract_resource_uri() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.uri? // ""' 2>/dev/null
       ;;
     python)
@@ -756,7 +754,7 @@ mcp_json_extract_subscription_id() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.subscriptionId? // ""' 2>/dev/null
       ;;
     python)
@@ -783,7 +781,7 @@ mcp_json_extract_progress_token() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params._meta.progressToken? // ""' 2>/dev/null
       ;;
     python)
@@ -811,7 +809,7 @@ mcp_json_extract_completion_name() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
       ;;
     python)
@@ -838,7 +836,7 @@ mcp_json_extract_log_level() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.level? // ""' 2>/dev/null
       ;;
     python)
@@ -865,7 +863,7 @@ mcp_json_extract_completion_arguments() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '.params.arguments // {}' 2>/dev/null; then
         printf '{}'
       fi
@@ -895,7 +893,7 @@ mcp_json_extract_prompt_name() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
       ;;
     python)
@@ -922,7 +920,7 @@ mcp_json_extract_prompt_arguments() {
   fi
 
   case "${MCPBASH_JSON_TOOL}" in
-    gojq|jq)
+    gojq | jq)
       if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '.params.arguments // {}' 2>/dev/null; then
         printf '{}'
       fi

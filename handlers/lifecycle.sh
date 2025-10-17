@@ -33,7 +33,7 @@ mcp_handle_lifecycle() {
 
       printf '%s' "$(mcp_spec_build_initialize_response "${id}" "${capabilities}")"
       ;;
-    notifications/initialized|initialized)
+    notifications/initialized | initialized)
       # shellcheck disable=SC2034
       MCPBASH_INITIALIZED=true
       printf '%s' "${MCPBASH_NO_RESPONSE}"

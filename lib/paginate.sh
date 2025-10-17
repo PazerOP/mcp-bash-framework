@@ -49,7 +49,8 @@ mcp_paginate_decode() {
   fi
 
   local result
-  if ! result="$(CURSOR="${cursor}" EXPECTED_COLLECTION="${expected_collection}" EXPECTED_HASH="${expected_hash}" "${py}" <<'PY'
+  if ! result="$(
+    CURSOR="${cursor}" EXPECTED_COLLECTION="${expected_collection}" EXPECTED_HASH="${expected_hash}" "${py}" <<'PY'
 import json, base64, os, sys
 cursor = os.environ["CURSOR"]
 expected_collection = os.environ["EXPECTED_COLLECTION"]
@@ -66,7 +67,7 @@ if expected_hash and payload.get('hash') != expected_hash:
 offset = payload.get('offset', 0)
 print(offset)
 PY
-)"; then
+  )"; then
     return 1
   fi
 

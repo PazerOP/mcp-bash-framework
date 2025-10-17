@@ -49,7 +49,8 @@ mcp_resources_apply_manual() {
     return 1
   }
   local registry_json
-  if ! registry_json="$(INPUT="${manual_json}" "${py}" <<'PY'
+  if ! registry_json="$(
+    INPUT="${manual_json}" "${py}" <<'PY'
 import json, os, sys, hashlib, time
 data = json.loads(os.environ.get("INPUT", "{}"))
 resources = data.get("resources", [])
@@ -67,29 +68,31 @@ registry = {
 }
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     return 1
   fi
   local new_hash
-  new_hash="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  new_hash="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
+  )"
   if [ "${new_hash}" != "${MCP_RESOURCES_REGISTRY_HASH}" ]; then
     MCP_RESOURCES_CHANGED=true
   fi
   MCP_RESOURCES_REGISTRY_JSON="${registry_json}"
   MCP_RESOURCES_REGISTRY_HASH="${new_hash}"
-# shellcheck disable=SC2034
   # shellcheck disable=SC2034
   # shellcheck disable=SC2034
   # shellcheck disable=SC2034
-  MCP_RESOURCES_TOTAL="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  # shellcheck disable=SC2034
+  MCP_RESOURCES_TOTAL="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
 PY
-)"
+  )"
   MCP_RESOURCES_LAST_SCAN="$(date +%s)"
   printf '%s' "${registry_json}" >"${MCP_RESOURCES_REGISTRY_PATH}"
 }
@@ -111,11 +114,12 @@ mcp_resources_refresh_registry() {
   if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ] && [ -f "${MCP_RESOURCES_REGISTRY_PATH}" ]; then
     MCP_RESOURCES_REGISTRY_JSON="$(cat "${MCP_RESOURCES_REGISTRY_PATH}")"
     if [ -n "${py}" ]; then
-      MCP_RESOURCES_REGISTRY_HASH="$(REGISTRY_JSON="${MCP_RESOURCES_REGISTRY_JSON}" "${py}" <<'PY'
+      MCP_RESOURCES_REGISTRY_HASH="$(
+        REGISTRY_JSON="${MCP_RESOURCES_REGISTRY_JSON}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
+      )"
     fi
   fi
   if [ -n "${MCP_RESOURCES_REGISTRY_JSON}" ] && [ $((now - MCP_RESOURCES_LAST_SCAN)) -lt "${MCP_RESOURCES_TTL}" ]; then
@@ -140,7 +144,8 @@ mcp_resources_scan() {
   }
 
   local registry_json
-  registry_json="$(ROOT="${MCPBASH_ROOT}" RES_DIR="${MCPBASH_ROOT}/resources" "${py}" <<'PY'
+  registry_json="$(
+    ROOT="${MCPBASH_ROOT}" RES_DIR="${MCPBASH_ROOT}/resources" "${py}" <<'PY'
 import os, json, sys, hashlib, time
 root = os.environ["ROOT"]
 resources_dir = os.environ["RES_DIR"]
@@ -200,20 +205,22 @@ registry = {
 }
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-)"
+  )"
 
   MCP_RESOURCES_REGISTRY_JSON="${registry_json}"
-  MCP_RESOURCES_REGISTRY_HASH="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  MCP_RESOURCES_REGISTRY_HASH="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
-# shellcheck disable=SC2034
-  MCP_RESOURCES_TOTAL="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  )"
+  # shellcheck disable=SC2034
+  MCP_RESOURCES_TOTAL="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
 PY
-)"
+  )"
 
   printf '%s' "${registry_json}" >"${MCP_RESOURCES_REGISTRY_PATH}"
 }
@@ -231,9 +238,9 @@ mcp_resources_decode_cursor() {
 mcp_resources_list() {
   local limit="$1"
   local cursor="$2"
-# shellcheck disable=SC2034
+  # shellcheck disable=SC2034
   MCP_RESOURCES_ERR_CODE=0
-# shellcheck disable=SC2034
+  # shellcheck disable=SC2034
   MCP_RESOURCES_ERR_MESSAGE=""
 
   mcp_resources_refresh_registry || {
@@ -252,7 +259,7 @@ mcp_resources_list() {
     numeric_limit=50
   else
     case "${limit}" in
-      ''|*[!0-9]*) numeric_limit=50 ;;
+      '' | *[!0-9]*) numeric_limit=50 ;;
       0) numeric_limit=50 ;;
       *) numeric_limit="${limit}" ;;
     esac
@@ -270,7 +277,8 @@ mcp_resources_list() {
   fi
 
   local result_json
-  if ! result_json="$(REGISTRY="${MCP_RESOURCES_REGISTRY_JSON}" OFFSET="${offset}" LIMIT="${numeric_limit}" PYTHONIOENCODING="utf-8" "${py}" <<'PY'
+  if ! result_json="$(
+    REGISTRY="${MCP_RESOURCES_REGISTRY_JSON}" OFFSET="${offset}" LIMIT="${numeric_limit}" PYTHONIOENCODING="utf-8" "${py}" <<'PY'
 import json, os, base64, sys
 registry = json.loads(os.environ["REGISTRY"])
 items = registry.get("items", [])
@@ -284,7 +292,7 @@ if offset + limit < len(items):
     result["nextCursor"] = encoded
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     mcp_resources_error -32603 "Unable to paginate resources"
     return 1
   fi
@@ -307,7 +315,8 @@ mcp_resources_metadata_for_name() {
   local py
   py="$(mcp_resources_python)" || return 1
   local metadata
-  if ! metadata="$(REGISTRY="${MCP_RESOURCES_REGISTRY_JSON}" TARGET="${name}" "${py}" <<'PY'
+  if ! metadata="$(
+    REGISTRY="${MCP_RESOURCES_REGISTRY_JSON}" TARGET="${name}" "${py}" <<'PY'
 import json, os, sys
 registry = json.loads(os.environ["REGISTRY"])
 target = os.environ["TARGET"]
@@ -317,7 +326,7 @@ for item in registry.get("items", []):
         sys.exit(0)
 sys.exit(1)
 PY
-)"; then
+  )"; then
     return 1
   fi
   printf '%s' "${metadata}"
@@ -327,7 +336,7 @@ mcp_resources_provider_from_uri() {
   local uri="$1"
   case "${uri}" in
     file://*) echo "file" ;;
-    git://*|https://*) echo "stub" ;;
+    git://* | https://*) echo "stub" ;;
     *) echo "" ;;
   esac
 }
@@ -346,14 +355,14 @@ mcp_resources_read_file() {
       local real_root
       real_root="$(realpath -m "${root}")"
       case "${path}" in
-        "${real_root}"|"${real_root}"/*)
+        "${real_root}" | "${real_root}"/*)
           allowed=true
           break
           ;;
       esac
     else
       case "${path}" in
-        "${root}"|"${root}"/*)
+        "${root}" | "${root}"/*)
           allowed=true
           break
           ;;
@@ -407,7 +416,8 @@ mcp_resources_read() {
   local py
   py="$(mcp_resources_python)" || return 1
   local info_json
-  info_json="$(METADATA="${metadata}" URI_OVERRIDE="${explicit_uri}" "${py}" <<'PY'
+  info_json="$(
+    METADATA="${metadata}" URI_OVERRIDE="${explicit_uri}" "${py}" <<'PY'
 import json, os
 metadata = json.loads(os.environ.get("METADATA", "{}"))
 uri = os.environ.get("URI_OVERRIDE") or metadata.get("uri") or ""
@@ -419,26 +429,29 @@ print(json.dumps({
     "mimeType": mime
 }, ensure_ascii=False, separators=(',', ':')))
 PY
-)"
+  )"
   local uri provider mime
-  uri="$(INFO="${info_json}" "${py}" <<'PY'
+  uri="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 print(info.get("uri") or "")
 PY
-)"
-  provider="$(INFO="${info_json}" "${py}" <<'PY'
+  )"
+  provider="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 print(info.get("provider") or "file")
 PY
-)"
-  mime="$(INFO="${info_json}" "${py}" <<'PY'
+  )"
+  mime="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 print(info.get("mimeType") or "text/plain")
 PY
-)"
+  )"
   if [ -z "${uri}" ]; then
     mcp_resources_error -32602 "Resource URI missing"
     return 1
@@ -448,7 +461,8 @@ PY
     return 1
   fi
   local result
-  result="$(CONTENT="${content}" MIME="${mime}" URI="${uri}" "${py}" <<'PY'
+  result="$(
+    CONTENT="${content}" MIME="${mime}" URI="${uri}" "${py}" <<'PY'
 import json, os
 content = os.environ.get("CONTENT", "")
 mime = os.environ.get("MIME", "text/plain")
@@ -459,6 +473,6 @@ print(json.dumps({
     "content": content
 }, ensure_ascii=False, separators=(',', ':')))
 PY
-)"
+  )"
   printf '%s' "${result}"
 }

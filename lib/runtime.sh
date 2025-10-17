@@ -27,7 +27,7 @@ mcp_runtime_init_paths() {
   fi
 
   if [ -z "${MCPBASH_STATE_SEED}" ]; then
-    MCPBASH_STATE_SEED="${RANDOM}"  # Spec §5: STATE_SEED initialized once per boot.
+    MCPBASH_STATE_SEED="${RANDOM}" # Spec §5: STATE_SEED initialized once per boot.
   fi
 
   if [ -z "${MCPBASH_STATE_DIR}" ]; then

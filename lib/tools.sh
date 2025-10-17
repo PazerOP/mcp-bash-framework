@@ -48,7 +48,8 @@ mcp_tools_apply_manual() {
     return 1
   }
   local registry_json
-  if ! registry_json="$(INPUT="${manual_json}" "${py}" <<'PY'
+  if ! registry_json="$(
+    INPUT="${manual_json}" "${py}" <<'PY'
 import json, os, sys, hashlib, time
 data = json.loads(os.environ.get("INPUT", "{}"))
 tools = data.get("tools", [])
@@ -66,26 +67,28 @@ registry = {
 }
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     return 1
   fi
   local new_hash
-  new_hash="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  new_hash="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
+  )"
   if [ "${new_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
     MCP_TOOLS_CHANGED=true
   fi
   MCP_TOOLS_REGISTRY_JSON="${registry_json}"
   MCP_TOOLS_REGISTRY_HASH="${new_hash}"
   # shellcheck disable=SC2034
-  MCP_TOOLS_TOTAL="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  MCP_TOOLS_TOTAL="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
 PY
-)"
+  )"
   MCP_TOOLS_LAST_SCAN="$(date +%s)"
   printf '%s' "${registry_json}" >"${MCP_TOOLS_REGISTRY_PATH}"
 }
@@ -107,11 +110,12 @@ mcp_tools_refresh_registry() {
   if [ -z "${MCP_TOOLS_REGISTRY_JSON}" ] && [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
     MCP_TOOLS_REGISTRY_JSON="$(cat "${MCP_TOOLS_REGISTRY_PATH}")"
     if [ -n "${py}" ]; then
-    MCP_TOOLS_REGISTRY_HASH="$(REGISTRY_JSON="${MCP_TOOLS_REGISTRY_JSON}" "${py}" <<'PY'
+      MCP_TOOLS_REGISTRY_HASH="$(
+        REGISTRY_JSON="${MCP_TOOLS_REGISTRY_JSON}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
+      )"
     fi
   fi
   if [ -n "${MCP_TOOLS_REGISTRY_JSON}" ] && [ $((now - MCP_TOOLS_LAST_SCAN)) -lt "${MCP_TOOLS_TTL}" ]; then
@@ -136,7 +140,8 @@ mcp_tools_scan() {
   }
 
   local registry_json
-  registry_json="$(ROOT="${MCPBASH_ROOT}" TOOLS_DIR="${MCPBASH_TOOLS_DIR}" "${py}" <<'PY'
+  registry_json="$(
+    ROOT="${MCPBASH_ROOT}" TOOLS_DIR="${MCPBASH_TOOLS_DIR}" "${py}" <<'PY'
 import os, json, sys, hashlib, time
 root = os.environ["ROOT"]
 tools_dir = os.environ["TOOLS_DIR"]
@@ -230,20 +235,22 @@ registry = {
 }
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-)"
+  )"
 
   MCP_TOOLS_REGISTRY_JSON="${registry_json}"
-  MCP_TOOLS_REGISTRY_HASH="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  MCP_TOOLS_REGISTRY_HASH="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
 PY
-)"
+  )"
   # shellcheck disable=SC2034
-  MCP_TOOLS_TOTAL="$(REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+  MCP_TOOLS_TOTAL="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
 import json, os
 print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
 PY
-)"
+  )"
 
   printf '%s' "${registry_json}" >"${MCP_TOOLS_REGISTRY_PATH}"
 }
@@ -291,7 +298,7 @@ mcp_tools_list() {
     numeric_limit=50
   else
     case "${limit}" in
-      ''|*[!0-9]*) numeric_limit=50 ;;
+      '' | *[!0-9]*) numeric_limit=50 ;;
       0) numeric_limit=50 ;;
       *) numeric_limit="${limit}" ;;
     esac
@@ -309,7 +316,8 @@ mcp_tools_list() {
   fi
 
   local result_json
-  if ! result_json="$(REGISTRY="${MCP_TOOLS_REGISTRY_JSON}" OFFSET="${offset}" LIMIT="${numeric_limit}" PYTHONIOENCODING="utf-8" "${py}" <<'PY'
+  if ! result_json="$(
+    REGISTRY="${MCP_TOOLS_REGISTRY_JSON}" OFFSET="${offset}" LIMIT="${numeric_limit}" PYTHONIOENCODING="utf-8" "${py}" <<'PY'
 import json, os, base64, sys
 registry = json.loads(os.environ["REGISTRY"])
 items = registry.get("items", [])
@@ -323,7 +331,7 @@ if offset + limit < len(items):
     result["nextCursor"] = encoded
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     mcp_tools_error -32603 "Unable to paginate tools"
     return 1
   fi
@@ -337,7 +345,8 @@ mcp_tools_metadata_for_name() {
   local py
   py="$(mcp_tools_python)" || return 1
   local metadata
-  if ! metadata="$(REGISTRY="${MCP_TOOLS_REGISTRY_JSON}" TARGET="${name}" "${py}" <<'PY'
+  if ! metadata="$(
+    REGISTRY="${MCP_TOOLS_REGISTRY_JSON}" TARGET="${name}" "${py}" <<'PY'
 import json, os, sys
 registry = json.loads(os.environ["REGISTRY"])
 target = os.environ["TARGET"]
@@ -347,7 +356,7 @@ for item in registry.get("items", []):
         sys.exit(0)
 sys.exit(1)
 PY
-)"; then
+  )"; then
     return 1
   fi
 
@@ -376,7 +385,8 @@ mcp_tools_call() {
   fi
 
   local info_json
-  if ! info_json="$(TOOL_METADATA="${metadata}" "${py}" <<'PY'
+  if ! info_json="$(
+    TOOL_METADATA="${metadata}" "${py}" <<'PY'
 import json, os
 metadata = json.loads(os.environ["TOOL_METADATA"])
 print(json.dumps({
@@ -385,18 +395,19 @@ print(json.dumps({
     "timeoutSecs": metadata.get("timeoutSecs")
 }, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     mcp_tools_error -32603 "Unable to prepare tool metadata"
     return 1
   fi
 
   local tool_path
-  tool_path="$(INFO="${info_json}" "${py}" <<'PY'
+  tool_path="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 print(info.get("path") or "")
 PY
-)"
+  )"
 
   if [ -z "${tool_path}" ]; then
     mcp_tools_error -32601 "Tool path unavailable"
@@ -410,22 +421,24 @@ PY
   fi
 
   local metadata_timeout
-  metadata_timeout="$(INFO="${info_json}" "${py}" <<'PY'
+  metadata_timeout="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 value = info.get("timeoutSecs")
 print("" if value is None else str(int(value)))
 PY
-)"
+  )"
 
   local output_schema
-  output_schema="$(INFO="${info_json}" "${py}" <<'PY'
+  output_schema="$(
+    INFO="${info_json}" "${py}" <<'PY'
 import json, os
 info = json.loads(os.environ["INFO"])
 value = info.get("outputSchema")
 print("" if value is None else json.dumps(value, ensure_ascii=False, separators=(',', ':')))
 PY
-)"
+  )"
 
   local effective_timeout="${timeout_override}"
   if [ -z "${effective_timeout}" ] && [ -n "${metadata_timeout}" ]; then
@@ -465,7 +478,8 @@ PY
   rm -f "${stdout_file}" "${stderr_file}"
 
   local result_json
-  if ! result_json="$(TOOL_STDOUT="${stdout_content}" TOOL_STDERR="${stderr_content}" TOOL_METADATA="${metadata}" TOOL_ARGS_JSON="${args_json}" TOOL_NAME="${name}" OUTPUT_SCHEMA="${output_schema}" EXIT_CODE="${exit_code}" HAS_JSON_TOOL="${has_json_tool}" "${py}" <<'PY'
+  if ! result_json="$(
+    TOOL_STDOUT="${stdout_content}" TOOL_STDERR="${stderr_content}" TOOL_METADATA="${metadata}" TOOL_ARGS_JSON="${args_json}" TOOL_NAME="${name}" OUTPUT_SCHEMA="${output_schema}" EXIT_CODE="${exit_code}" HAS_JSON_TOOL="${has_json_tool}" "${py}" <<'PY'
 import json, os
 stdout = os.environ.get("TOOL_STDOUT", "")
 stderr = os.environ.get("TOOL_STDERR", "")
@@ -494,7 +508,7 @@ if exit_code != 0:
     result["isError"] = True
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PY
-)"; then
+  )"; then
     mcp_tools_error -32603 "Unable to format tool result"
     return 1
   fi

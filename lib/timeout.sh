@@ -26,7 +26,7 @@ with_timeout() {
   local worker_pid
   local watchdog_pid
 
-  ( "${cmd[@]}" ) &
+  ("${cmd[@]}") &
   worker_pid=$!
 
   mcp_timeout_spawn_watchdog "${worker_pid}" "${seconds}" &

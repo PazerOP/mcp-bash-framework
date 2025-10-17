@@ -27,7 +27,7 @@ for root in ${roots}; do
     check_root="$(realpath -m "${root}")"
   fi
   case "${path}" in
-    "${check_root}"|"${check_root}"/*)
+    "${check_root}" | "${check_root}"/*)
       allowed=true
       break
       ;;
