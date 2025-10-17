@@ -1,0 +1,11 @@
+{
+  "name": "example.echoArg",
+  "description": "Echos a provided value",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "value": {"type": "string"}
+    },
+    "required": ["value"]
+  }
+}

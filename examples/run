@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  printf 'Usage: %s <example-id>\n' "$0" >&2
+  exit 1
+fi
+
+EXAMPLE_ID="$1"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXAMPLE_DIR="${SCRIPT_DIR}/${EXAMPLE_ID}"
+if [ ! -d "${EXAMPLE_DIR}" ]; then
+  printf 'Example %s not found\n' "${EXAMPLE_ID}" >&2
+  exit 1
+fi
+
+TMPDIR="$(mktemp -d)"
+cleanup() {
+  rm -rf "${TMPDIR}"
+}
+trap cleanup EXIT INT TERM
+
+printf 'Detected JSON tooling: %s\n' "${MCPBASH_JSON_TOOL:-unknown}" >&2
+
+cp -a "${SCRIPT_DIR}/../bin" "${TMPDIR}/"
+cp -a "${SCRIPT_DIR}/../lib" "${TMPDIR}/"
+cp -a "${SCRIPT_DIR}/../handlers" "${TMPDIR}/"
+cp -a "${SCRIPT_DIR}/../providers" "${TMPDIR}/"
+cp -a "${SCRIPT_DIR}/../sdk" "${TMPDIR}/"
+cp -a "${SCRIPT_DIR}/../resources" "${TMPDIR}/" 2>/dev/null || true
+cp -a "${SCRIPT_DIR}/../tools" "${TMPDIR}/" 2>/dev/null || true
+cp -a "${SCRIPT_DIR}/../prompts" "${TMPDIR}/" 2>/dev/null || true
+cp -a "${EXAMPLE_DIR}/"* "${TMPDIR}/" 2>/dev/null || true
+
+cd "${TMPDIR}" || exit 1
+exec "${TMPDIR}/bin/mcp-bash"

@@ -1,0 +1,4 @@
+{
+  "name": "example.logger",
+  "description": "Emits an informational log entry"
+}
