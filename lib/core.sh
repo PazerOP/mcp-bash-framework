@@ -36,6 +36,12 @@ mcp_core_bootstrap_state() {
   mcp_io_init
   . "${MCPBASH_ROOT}/lib/timeout.sh"
   MCPBASH_MAIN_PGID="$(mcp_core_lookup_pgid "$$")"
+  MCPBASH_MAX_CONCURRENT_REQUESTS="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
+  MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
+  MCPBASH_MAX_PROGRESS_PER_MIN="${MCPBASH_MAX_PROGRESS_PER_MIN:-100}"
+  MCPBASH_MAX_LOGS_PER_MIN="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN}}"
+  MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
+  MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
 
   # setup SDK notification streams
   MCP_PROGRESS_STREAM="${MCPBASH_STATE_DIR}/progress.ndjson"
@@ -69,6 +75,153 @@ mcp_core_wait_for_workers() {
   done
 }
 
+mcp_core_wait_for_one_worker() {
+  local pids pid status
+  pids="$(jobs -p 2>/dev/null || true)"
+  if [ -z "${pids}" ]; then
+    sleep 0.01
+    return 0
+  fi
+  for pid in ${pids}; do
+    if ! wait "${pid}"; then
+      status=$?
+      printf '%s\n' "mcp-bash: background worker ${pid} exited with status ${status}" >&2
+    fi
+    return 0
+  done
+}
+
+mcp_core_active_worker_count() {
+  local pids
+  pids="$(jobs -p 2>/dev/null || true)"
+  if [ -z "${pids}" ]; then
+    printf '0'
+    return 0
+  fi
+  printf '%s' "$(printf '%s\n' "${pids}" | wc -l | tr -d ' ')"
+}
+
+mcp_core_wait_for_available_slot() {
+  local max="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
+  local active
+  case "${max}" in
+    ''|*[!0-9]*) max=16 ;;
+    0) max=1 ;;
+  esac
+  while :; do
+    active="$(mcp_core_active_worker_count)"
+    if [ "${active}" -lt "${max}" ]; then
+      break
+    fi
+    mcp_core_wait_for_one_worker
+  done
+}
+
+mcp_core_process_legacy_batch() {
+  local array_json="$1"
+  local tool="$MCPBASH_JSON_TOOL"
+  local bin="$MCPBASH_JSON_TOOL_BIN"
+  local item
+  local batch_output=""
+
+  case "${tool}" in
+    gojq|jq)
+      if ! batch_output="$(printf '%s' "${array_json}" | "${bin}" -c '.[]' 2>/dev/null)"; then
+        return 1
+      fi
+      ;;
+    python)
+      if ! batch_output="$(printf '%s' "${array_json}" | "${bin}" -c 'import json,sys
+data=json.load(sys.stdin)
+if not isinstance(data, list):
+    raise SystemExit(1)
+for entry in data:
+    sys.stdout.write(json.dumps(entry, separators=(",", ":")) + "\n")' 2>/dev/null)"; then
+        return 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  while IFS= read -r item; do
+    [ -z "${item}" ] && continue
+    mcp_core_handle_line "${item}"
+  done <<< "${batch_output}"$'\n'
+
+  return 0
+}
+
+mcp_core_guard_response_size() {
+  local id_json="$1"
+  local payload="$2"
+  local limit="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
+  local size
+
+  case "${limit}" in
+    ''|*[!0-9]*) limit=10485760 ;;
+  esac
+  if [ -z "${payload}" ]; then
+    printf '%s' "${payload}"
+    return 0
+  fi
+
+  size="$(LC_ALL=C printf '%s' "${payload}" | wc -c | tr -d ' ')"
+  if [ "${size}" -le "${limit}" ]; then
+    printf '%s' "${payload}"
+    return 0
+  fi
+
+  printf '%s\n' "mcp-bash: response exceeded ${limit} bytes for id ${id_json:-null}" >&2
+  mcp_core_build_error_response "${id_json:-null}" -32603 "Response exceeded MAX_TOOL_OUTPUT_SIZE" ""
+}
+
+mcp_core_rate_limit() {
+  local key="$1"
+  local kind="$2"
+  local limit
+  local file
+  local now
+  local preserved=""
+  local line
+  local count=0
+
+  [ -z "${key}" ] && return 0
+
+  case "${kind}" in
+    progress) limit="${MCPBASH_MAX_PROGRESS_PER_MIN:-100}" ;;
+    log) limit="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN:-100}}" ;;
+    *) limit=100 ;;
+  esac
+
+  case "${limit}" in
+    ''|*[!0-9]*) limit=100 ;;
+    0) return 0 ;;
+  esac
+
+  file="${MCPBASH_STATE_DIR}/rate.${kind}.${key}.log"
+  now="$(date +%s)"
+
+  if [ -f "${file}" ]; then
+    while IFS= read -r line; do
+      [ -z "${line}" ] && continue
+      if [ $((now - line)) -lt 60 ]; then
+        preserved="${preserved}${line}"$'\n'
+        count=$((count + 1))
+      fi
+    done <"${file}"
+  fi
+
+  if [ "${count}" -ge "${limit}" ]; then
+    printf '%s' "${preserved}" >"${file}"
+    return 1
+  fi
+
+  printf '%s%s\n' "${preserved}" "${now}" >"${file}"
+  return 0
+}
+
 mcp_core_handle_line() {
   local raw_line="$1"
   local normalized_line
@@ -80,6 +233,17 @@ mcp_core_handle_line() {
   }
 
   if [ -z "${normalized_line}" ]; then
+    return
+  fi
+
+  if mcp_json_is_array "${normalized_line}"; then
+    if ! mcp_runtime_batches_enabled; then
+      mcp_core_emit_parse_error "Invalid Request" -32600 "Batch arrays are disabled"
+      return
+    fi
+    if ! mcp_core_process_legacy_batch "${normalized_line}"; then
+      mcp_core_emit_parse_error "Invalid Request" -32600 "Unable to process batch array"
+    fi
     return
   fi
 
@@ -203,6 +367,7 @@ mcp_core_execute_handler() {
     fi
   fi
 
+  response="$(mcp_core_guard_response_size "${id_json}" "${response}")"
   rpc_send_line "${response}"
 }
 
@@ -214,6 +379,8 @@ mcp_core_spawn_worker() {
   local key
   local stderr_file=""
   local timeout=""
+
+  mcp_core_wait_for_available_slot
 
   key="$(mcp_core_get_id_key "${id_json}")"
 
@@ -263,6 +430,7 @@ mcp_core_spawn_worker() {
 mcp_core_timeout_for_method() {
   local method="$1"
   local json_line="$2"
+  local timeout_value=""
 
   case "${method}" in
     tools/*|resources/*|prompts/get|completion/complete)
@@ -272,26 +440,19 @@ mcp_core_timeout_for_method() {
       fi
       case "${MCPBASH_JSON_TOOL}" in
         gojq|jq)
-          if ! printf '%s' "${json_line}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.params.timeoutSecs // empty' 2>/dev/null; then
-            printf ''
-            return 0
-          fi
+          timeout_value="$(printf '%s' "${json_line}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.params.timeoutSecs // empty' 2>/dev/null || true)"
           ;;
         python)
-          if ! printf '%s' "${json_line}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'import json,sys
+          timeout_value="$(printf '%s' "${json_line}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'import json,sys
 data=json.load(sys.stdin)
 params=data.get("params", {})
 value=params.get("timeoutSecs")
 if value is None:
     raise SystemExit(1)
-sys.stdout.write(str(int(value)))' 2>/dev/null; then
-            printf ''
-            return 0
-          fi
+sys.stdout.write(str(int(value)))' 2>/dev/null || true)"
           ;;
         *)
-          printf ''
-          return 0
+          timeout_value=""
           ;;
       esac
       ;;
@@ -300,6 +461,19 @@ sys.stdout.write(str(int(value)))' 2>/dev/null; then
       return 0
       ;;
   esac
+
+  if [ -z "${timeout_value}" ]; then
+    case "${method}" in
+      tools/*)
+        timeout_value="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
+        ;;
+      resources/subscribe)
+        timeout_value="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
+        ;;
+    esac
+  fi
+
+  printf '%s' "${timeout_value}"
 }
 
 mcp_core_worker_entry() {
@@ -329,16 +503,19 @@ mcp_core_worker_entry() {
   fi
 
   if [ -n "${response}" ]; then
+    response="$(mcp_core_guard_response_size "${id_json}" "${response}")"
     mcp_core_worker_emit "${key}" "${response}"
   fi
 
   if [ -n "${progress_stream}" ]; then
-    mcp_core_emit_progress_stream "${progress_stream}"
+    mcp_core_emit_progress_stream "${key}" "${progress_stream}"
     rm -f "${progress_stream}"
+    rm -f "${MCPBASH_STATE_DIR}/rate.progress.${key}.log"
   fi
   if [ -n "${log_stream}" ]; then
-    mcp_core_emit_log_stream "${log_stream}"
+    mcp_core_emit_log_stream "${key}" "${log_stream}"
     rm -f "${log_stream}"
+    rm -f "${MCPBASH_STATE_DIR}/rate.log.${key}.log"
   fi
 }
 
@@ -354,6 +531,8 @@ mcp_core_worker_cleanup() {
 
   if [ -n "${key}" ]; then
     mcp_ids_clear_worker "${key}"
+    rm -f "${MCPBASH_STATE_DIR}/rate.progress.${key}.log"
+    rm -f "${MCPBASH_STATE_DIR}/rate.log.${key}.log"
   fi
 
   if [ -n "${stderr_file}" ] && [ -f "${stderr_file}" ]; then
@@ -593,12 +772,15 @@ mcp_core_normalize_timeout() {
 }
 
 mcp_core_emit_progress_stream() {
-  local stream="$1"
+  local key="$1"
+  local stream="$2"
   [ -n "${stream}" ] || return 0
   [ -f "${stream}" ] || return 0
   while IFS= read -r line || [ -n "${line}" ]; do
     [ -z "${line}" ] && continue
-    rpc_send_line "${line}"
+    if mcp_core_rate_limit "${key}" "progress"; then
+      rpc_send_line "${line}"
+    fi
   done <"${stream}"
 }
 
@@ -625,7 +807,8 @@ PY
 }
 
 mcp_core_emit_log_stream() {
-  local stream="$1"
+  local key="$1"
+  local stream="$2"
   [ -n "${stream}" ] || return 0
   [ -f "${stream}" ] || return 0
   while IFS= read -r line || [ -n "${line}" ]; do
@@ -633,7 +816,9 @@ mcp_core_emit_log_stream() {
     local level
     level="$(mcp_core_extract_log_level "${line}")"
     if mcp_logging_is_enabled "${level}"; then
-      rpc_send_line "${line}"
+      if mcp_core_rate_limit "${key}" "log"; then
+        rpc_send_line "${line}"
+      fi
     fi
   done <"${stream}"
 }
