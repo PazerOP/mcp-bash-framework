@@ -5,6 +5,65 @@ set -euo pipefail
 
 MCPBASH_STDOUT_LOCK_NAME="stdout"
 MCPBASH_ICONV_AVAILABLE=""
+MCPBASH_ALLOW_CORRUPT_STDOUT="${MCPBASH_ALLOW_CORRUPT_STDOUT:-false}"
+
+mcp_io_corruption_file() {
+  if [ -z "${MCPBASH_STATE_DIR:-}" ]; then
+    printf ''
+    return 1
+  fi
+  printf '%s/corruption.log' "${MCPBASH_STATE_DIR}"
+}
+
+mcp_io_handle_corruption() {
+  local reason="$1"
+  local allow="${MCPBASH_ALLOW_CORRUPT_STDOUT:-false}"
+  local threshold="${MCPBASH_CORRUPTION_THRESHOLD:-3}"
+  local window="${MCPBASH_CORRUPTION_WINDOW:-60}"
+  local file
+  local preserved=""
+  local count=0
+  local now line
+
+  file="$(mcp_io_corruption_file || true)"
+  if [ -z "${file}" ]; then
+    return 0
+  fi
+
+  case "${threshold}" in
+    ''|*[!0-9]*) threshold=3 ;;
+    0) threshold=3 ;;
+  esac
+  case "${window}" in
+    ''|*[!0-9]*) window=60 ;;
+  esac
+
+  now="$(date +%s)"
+  if [ -f "${file}" ]; then
+    while IFS= read -r line; do
+      [ -z "${line}" ] && continue
+      if [ $((now - line)) -lt "${window}" ]; then
+        preserved="${preserved}${line}\n"
+        count=$((count + 1))
+      fi
+    done <"${file}"
+  fi
+
+  printf '%s\n' "mcp-bash: stdout corruption detected (${reason}); ${count} prior event(s) in the last ${window}s" >&2
+
+  printf '%s%s\n' "${preserved}" "${now}" >"${file}"
+
+  if [ "${allow}" = "true" ]; then
+    return 0
+  fi
+
+  if [ $((count + 1)) -ge "${threshold}" ]; then
+    printf '%s\n' 'mcp-bash: exiting due to repeated stdout corruption (Spec §16).' >&2
+    exit 2
+  fi
+
+  return 0
+}
 
 mcp_io_init() {
   mcp_lock_init
@@ -57,12 +116,23 @@ mcp_io_write_payload() {
 
   normalized="$(printf '%s' "${payload}" | tr -d '\r')"
 
+  case "${normalized}" in
+    *$'\n'*)
+      mcp_io_handle_corruption "multi-line payload"
+      return 1
+      ;;
+  esac
+
   if ! mcp_io_validate_utf8 "${normalized}"; then
     printf '%s\n' 'mcp-bash: dropping non-UTF8 payload to preserve stdout contract (Spec §5).' >&2
+    mcp_io_handle_corruption "invalid UTF-8"
     return 1
   fi
 
-  printf '%s\n' "${normalized}"
+  if ! printf '%s\n' "${normalized}"; then
+    mcp_io_handle_corruption "stdout write failure"
+    return 1
+  fi
   return 0
 }
 

@@ -40,6 +40,10 @@ mcp_handle_lifecycle() {
       ;;
     shutdown)
       MCPBASH_SHUTDOWN_PENDING=true
+      if [ "${MCPBASH_SHUTDOWN_TIMER_STARTED:-false}" != "true" ]; then
+        MCPBASH_SHUTDOWN_TIMER_STARTED=true
+        mcp_core_start_shutdown_watchdog &
+      fi
       printf '{"jsonrpc":"2.0","id":%s,"result":{}}' "${id}"
       ;;
     exit)

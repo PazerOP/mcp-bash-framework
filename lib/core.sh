@@ -42,6 +42,8 @@ mcp_core_bootstrap_state() {
   MCPBASH_MAX_LOGS_PER_MIN="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN}}"
   MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
   MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
+  MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
+  MCPBASH_SHUTDOWN_TIMER_STARTED=false
 
   # setup SDK notification streams
   MCP_PROGRESS_STREAM="${MCPBASH_STATE_DIR}/progress.ndjson"
@@ -115,6 +117,16 @@ mcp_core_wait_for_available_slot() {
     fi
     mcp_core_wait_for_one_worker
   done
+}
+
+mcp_core_start_shutdown_watchdog() {
+  local timeout="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
+  case "${timeout}" in
+    '' | *[!0-9]*) timeout=5 ;;
+  esac
+  sleep "${timeout}"
+  printf '%s\n' "mcp-bash: shutdown timeout (${timeout}s) elapsed; terminating." >&2
+  exit 0
 }
 
 mcp_core_process_legacy_batch() {
