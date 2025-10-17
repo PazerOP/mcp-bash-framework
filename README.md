@@ -116,3 +116,4 @@ Structure mirrors the Spec §3 repository contract: stable core modules live und
 ## Logging (Spec §13)
 - `handlers/logging.sh` enforces RFC-5424 log levels via `logging/setLevel` and rejects invalid inputs with `-32602`, defaulting to `info` (overridable via `MCPBASH_LOG_LEVEL_DEFAULT`).
 - `lib/logging.sh` tracks the active level and filters SDK-originated log notifications; worker subshells funnel JSON log entries through per-request streams that `lib/core.sh` emits after execution, keeping stdout protocol-safe.
+# Trigger workflow update
