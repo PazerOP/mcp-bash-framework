@@ -237,6 +237,7 @@ mcp_core_spawn_worker() {
   progress_token="$(mcp_json_extract_progress_token "${json_line}")"
 
   (
+    exec 2>"${stderr_file}"
     # shellcheck disable=SC2030
     export MCP_PROGRESS_STREAM="${progress_stream}"
     # shellcheck disable=SC2030
@@ -248,7 +249,7 @@ mcp_core_spawn_worker() {
     else
       mcp_core_worker_entry "${handler}" "${method}" "${json_line}" "${id_json}" "${key}" "${stderr_file}"
     fi
-  ) 2>"${stderr_file}" &
+  ) &
 
   local pid=$!
 

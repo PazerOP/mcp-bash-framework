@@ -238,6 +238,7 @@ mcp_json_minimal_split_pairs() {
       i=$((i + 1))
       continue
     fi
+    # shellcheck disable=SC1003 # manual escape handling keeps parser dependency-free
     case "${char}" in
       '\\')
         current="${current}${char}"
@@ -352,6 +353,7 @@ mcp_json_minimal_find_colon() {
       i=$((i + 1))
       continue
     fi
+    # shellcheck disable=SC1003 # manual escape handling keeps parser dependency-free
     case "${char}" in
       '\\')
         escape=1
@@ -402,6 +404,7 @@ mcp_json_minimal_unquote() {
     return 1
   fi
   local body="${value:1:length-2}"
+  # shellcheck disable=SC1003 # checking for literal backslashes within quoted JSON
   case "${body}" in
     *'\\'*)
       return 1
@@ -412,6 +415,7 @@ mcp_json_minimal_unquote() {
 
 mcp_json_minimal_validate_id() {
   local value="$1"
+  # shellcheck disable=SC1003 # minimal parser exploits literal patterns
   case "${value}" in
     \"*\"*)
       if ! mcp_json_minimal_unquote "${value}" >/dev/null; then
