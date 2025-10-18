@@ -8,6 +8,8 @@ MCPBASH_SHUTDOWN_PENDING=false
 MCPBASH_NO_RESPONSE="__MCP_NO_RESPONSE__"
 MCPBASH_INITIALIZE_HANDSHAKE_DONE=false
 MCPBASH_HANDLER_OUTPUT=""
+MCPBASH_SHUTDOWN_WATCHDOG_PID=""
+MCPBASH_EXIT_REQUESTED=false
 
 mcp_register_tool() {
 	local payload="$1"
@@ -135,9 +137,28 @@ mcp_core_start_shutdown_watchdog() {
 	case "${timeout}" in
 	'' | *[!0-9]*) timeout=5 ;;
 	esac
-	sleep "${timeout}"
-	printf '%s\n' "mcp-bash: shutdown timeout (${timeout}s) elapsed; terminating." >&2
-	exit 0
+	if [ -n "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" ]; then
+		if kill -0 "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null; then
+			return 0
+		fi
+		MCPBASH_SHUTDOWN_WATCHDOG_PID=""
+	fi
+	(
+		sleep "${timeout}"
+		printf '%s\n' "mcp-bash: shutdown timeout (${timeout}s) elapsed; terminating." >&2
+		exit 0
+	) &
+	MCPBASH_SHUTDOWN_WATCHDOG_PID=$!
+}
+
+mcp_core_cancel_shutdown_watchdog() {
+	if [ -z "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" ]; then
+		return 0
+	fi
+	if kill "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null; then
+		wait "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null || true
+	fi
+	MCPBASH_SHUTDOWN_WATCHDOG_PID=""
 }
 
 mcp_core_process_legacy_batch() {
@@ -278,6 +299,12 @@ mcp_core_handle_line() {
 	mcp_core_dispatch_object "${normalized_line}" "${method}"
 
 	mcp_core_emit_registry_notifications
+
+	if [ "${MCPBASH_EXIT_REQUESTED}" = true ]; then
+		mcp_core_wait_for_workers
+		mcp_runtime_cleanup
+		exit 0
+	fi
 }
 
 mcp_core_dispatch_object() {

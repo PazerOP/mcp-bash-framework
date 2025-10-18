@@ -50,7 +50,7 @@ mcp_handle_lifecycle() {
 		MCPBASH_SHUTDOWN_PENDING=true
 		if [ "${MCPBASH_SHUTDOWN_TIMER_STARTED:-false}" != "true" ]; then
 			MCPBASH_SHUTDOWN_TIMER_STARTED=true
-			mcp_core_start_shutdown_watchdog &
+			mcp_core_start_shutdown_watchdog
 		fi
 		printf '{"jsonrpc":"2.0","id":%s,"result":{}}' "${id}"
 		;;
@@ -59,9 +59,11 @@ mcp_handle_lifecycle() {
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32003,"message":"Shutdown not requested"}}' "${id}"
 			return 0
 		fi
+		mcp_core_cancel_shutdown_watchdog
+		MCPBASH_SHUTDOWN_TIMER_STARTED=false
+		# shellcheck disable=SC2034
+		MCPBASH_EXIT_REQUESTED=true
 		printf '{"jsonrpc":"2.0","id":%s,"result":{}}' "${id}"
-		mcp_runtime_cleanup
-		exit 0
 		;;
 	*)
 		printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"Unknown lifecycle method"}}' "${id}"

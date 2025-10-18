@@ -20,6 +20,22 @@ MCP_RESOURCES_MANUAL_BUFFER=""
 MCP_RESOURCES_MANUAL_DELIM=$'\036'
 MCP_RESOURCES_LOGGER="${MCP_RESOURCES_LOGGER:-mcp.resources}"
 
+mcp_resources_log_python_warnings() {
+	local warn_file="$1"
+	if [ ! -f "${warn_file}" ]; then
+		return 0
+	fi
+	if [ ! -s "${warn_file}" ]; then
+		rm -f "${warn_file}"
+		return 0
+	fi
+	while IFS= read -r warn_line || [ -n "${warn_line}" ]; do
+		[ -n "${warn_line}" ] || continue
+		mcp_logging_warning "${MCP_RESOURCES_LOGGER}" "${warn_line}"
+	done <"${warn_file}"
+	rm -f "${warn_file}"
+}
+
 mcp_resources_manual_begin() {
 	MCP_RESOURCES_MANUAL_ACTIVE=true
 	MCP_RESOURCES_MANUAL_BUFFER=""
@@ -512,12 +528,20 @@ mcp_resources_scan() {
 		return 0
 	}
 
+	local warn_file
+	warn_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resources-scan-warn.XXXXXX")"
 	local registry_json
-	registry_json="$(
-		ROOT="${MCPBASH_ROOT}" RES_DIR="${MCPBASH_ROOT}/resources" "${py}" <<'PY'
+	if ! registry_json="$(
+		ROOT="${MCPBASH_ROOT}" RES_DIR="${MCPBASH_ROOT}/resources" "${py}" 2>"${warn_file}" <<'PY'
 import os, json, sys, hashlib, time
+warnings = []
 root = os.environ["ROOT"]
 resources_dir = os.environ["RES_DIR"]
+allowed_providers = {"file", "git", "https"}
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None
 items = []
 if os.path.isdir(resources_dir):
     for dirpath, dirnames, filenames in os.walk(resources_dir):
@@ -541,29 +565,60 @@ if os.path.isdir(resources_dir):
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as fh:
                         text = fh.read()
-                except Exception:
+                except Exception as exc:
                     text = None
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: unable to read metadata ({exc})")
             if text:
                 parsed = None
                 try:
                     parsed = json.loads(text)
                 except Exception:
                     parsed = None
+                if parsed is None and yaml is not None:
+                    try:
+                        parsed = yaml.safe_load(text)
+                    except Exception as exc:
+                        parsed = None
+                        warnings.append(f"{os.path.relpath(meta_path, root)}: YAML parse failed ({exc})")
+                elif parsed is None and yaml is None:
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: PyYAML unavailable; metadata ignored")
                 if isinstance(parsed, dict):
                     meta = parsed
+                elif parsed is not None:
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: metadata is not an object; entry skipped")
             name = str(meta.get('name') or base)
-            description = meta.get('description') or ''
-            uri = meta.get('uri') or ''
-            mime = meta.get('mimeType') or 'text/plain'
+            description = str(meta.get('description') or '')
+            uri = str(meta.get('uri') or '')
+            mime = str(meta.get('mimeType') or 'text/plain')
             if not uri:
+                warnings.append(f"{name}: missing uri; entry skipped")
                 continue
+            provider = meta.get('provider')
+            if provider:
+                provider = str(provider)
+            if not provider:
+                provider = "file"
+                lower_uri = uri.lower()
+                if lower_uri.startswith("https://"):
+                    provider = "https"
+                elif lower_uri.startswith("git://"):
+                    provider = "git"
+            if provider not in allowed_providers:
+                warnings.append(f"{name}: unsupported provider {provider!r}; entry skipped")
+                continue
+            arguments = meta.get('arguments')
+            if not isinstance(arguments, dict):
+                if arguments is not None:
+                    warnings.append(f"{name}: arguments metadata ignored; expected object")
+                arguments = {"type": "object", "properties": {}}
             item = {
                 "name": name,
                 "description": description,
                 "path": rel,
-                "provider": meta.get('provider', 'file'),
+                "provider": provider,
                 "uri": uri,
-                "mimeType": mime
+                "mimeType": mime,
+                "arguments": arguments
             }
             items.append(item)
 items.sort(key=lambda x: x["name"])
@@ -576,9 +631,16 @@ registry = {
     "hash": hash_value,
     "total": len(items)
 }
+for warning in warnings:
+    print(warning, file=sys.stderr)
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-	)"
+	)"; then
+		local status=$?
+		mcp_resources_log_python_warnings "${warn_file}"
+		return "${status}"
+	fi
+	mcp_resources_log_python_warnings "${warn_file}"
 
 	MCP_RESOURCES_REGISTRY_JSON="${registry_json}"
 	MCP_RESOURCES_REGISTRY_HASH="$(
@@ -879,6 +941,15 @@ PY
 	if [ -z "${uri}" ]; then
 		mcp_resources_error -32602 "Resource URI missing"
 		return 1
+	fi
+	if [ -z "${provider}" ] || { [ "${provider}" != "file" ] && [ "${provider}" != "https" ] && [ "${provider}" != "git" ]; }; then
+		local inferred
+		inferred="$(mcp_resources_provider_from_uri "${uri}")"
+		if [ -n "${inferred}" ]; then
+			provider="${inferred}"
+		else
+			provider="file"
+		fi
 	fi
 	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Reading provider=${provider} uri=${uri}"
 	local content

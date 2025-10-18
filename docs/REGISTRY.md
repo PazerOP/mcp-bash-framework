@@ -96,6 +96,9 @@ Entries describe resource templates and providers.
 }
 ```
 
+- Metadata that cannot be parsed (missing `uri`, unsupported `provider`, non-object `arguments`, unreadable `.meta.yaml`) is skipped and logged as a warning through the structured logging subsystem, per Spec §16 “Metadata errors”.
+- When no `provider` is specified, the scanner infers one from the URI scheme (`file://`, `git://`, `https://`); unrecognised schemes default to `file` and are rejected if the provider script is unavailable (Spec §§8–9).
+
 ## `registry/prompts.json`
 
 Entries reference prompt templates and metadata.
