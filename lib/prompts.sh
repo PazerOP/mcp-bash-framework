@@ -364,26 +364,67 @@ mcp_prompts_render() {
   local args_json="$2"
   local py
   py="$(mcp_prompts_python)" || return 1
+  local sanitized_args
+  sanitized_args="$(
+    JSON_PAYLOAD="${args_json}" "${py}" <<'PY'
+import json, os, sys
+def quoted(value):
+    if isinstance(value, str):
+        return value.replace("$", "$$")
+    return value
+
+try:
+    raw = json.loads(os.environ.get("JSON_PAYLOAD", "{}"))
+except Exception:
+    print("{}")
+    sys.exit(0)
+
+if not isinstance(raw, dict):
+    raw_dict = {"value": raw}
+else:
+    raw_dict = raw
+
+template_args = {str(key): quoted(value) for key, value in raw_dict.items()}
+print(json.dumps({
+    "arguments": raw_dict,
+    "templateArgs": template_args
+}, ensure_ascii=False, separators=(',', ':')))
+PY
+  )"
+  local safe_args_json raw_args_json
+  safe_args_json="$(
+    INFO="${sanitized_args}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ["INFO"]).get("templateArgs", {}))
+PY
+  )"
+  raw_args_json="$(
+    INFO="${sanitized_args}" "${py}" <<'PY'
+import json, os
+print(json.dumps(json.loads(os.environ["INFO"]).get("arguments", {}), ensure_ascii=False, separators=(',', ':')))
+PY
+  )"
   local result
   if ! result="$(
-    TEMPLATE_DIR="${MCPBASH_ROOT}" METADATA="${metadata}" ARGS_JSON="${args_json}" "${py}" <<'PY'
+    TEMPLATE_DIR="${MCPBASH_ROOT}" METADATA="${metadata}" SAFE_ARGS="${safe_args_json}" RAW_ARGS="${raw_args_json}" "${py}" <<'PY'
 import json, os
 from string import Template
 meta = json.loads(os.environ["METADATA"])
-args = json.loads(os.environ.get("ARGS_JSON", "{}"))
+args = json.loads(os.environ.get("SAFE_ARGS", "{}"))
+raw_args = json.loads(os.environ.get("RAW_ARGS", "{}"))
 path = meta.get("path")
 if not path:
-    print(json.dumps({"text": "", "arguments": args}, separators=(',', ':')))
+    print(json.dumps({"text": "", "arguments": raw_args}, separators=(',', ':')))
     raise SystemExit(0)
 full_path = os.path.join(os.environ["TEMPLATE_DIR"], path)
 try:
     with open(full_path, 'r', encoding='utf-8') as fh:
         template = Template(fh.read())
 except OSError:
-    print(json.dumps({"text": "", "arguments": args}, separators=(',', ':')))
+    print(json.dumps({"text": "", "arguments": raw_args}, separators=(',', ':')))
     raise SystemExit(0)
 text = template.safe_substitute(args)
-print(json.dumps({"text": text, "arguments": args}, ensure_ascii=False, separators=(',', ':')))
+print(json.dumps({"text": text, "arguments": raw_args}, ensure_ascii=False, separators=(',', ':')))
 PY
   )"; then
     return 1

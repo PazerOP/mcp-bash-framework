@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/../.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/env.sh
+# shellcheck disable=SC1091
+. "${SCRIPT_DIR}/../common/env.sh"
+# shellcheck source=../common/assert.sh
+# shellcheck disable=SC1091
+. "${SCRIPT_DIR}/../common/assert.sh"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "${TMP}"' EXIT
@@ -12,9 +18,8 @@ cat <<'JSON' >"${TMP}/requests.ndjson"
 {"jsonrpc":"2.0","id":"2","method":"tools/list"}
 JSON
 
-./examples/run 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
+"${MCPBASH_ROOT}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
 
 if ! grep -q '"id":"2"' "${TMP}/responses.ndjson"; then
-  echo "tools/list response missing" >&2
-  exit 1
+	test_fail "tools/list response missing"
 fi
