@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TESTS=(
 	"test_capabilities.sh"
 	"test_completion.sh"
+	"test_tools.sh"
 )
 
 passed=0

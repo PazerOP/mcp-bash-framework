@@ -3,7 +3,16 @@
 
 set -euo pipefail
 
-# Implementers should emit JSON arrays for tools/resources/prompts via stdout
-# e.g. echo '{"tools": [...], "resources": [...], "prompts": [...]}'.
-# Current placeholder returns nothing, allowing auto-discovery to run.
-exit 0
+# Use mcp_register_tool/resource/prompt helpers (Spec §9 Manual Overrides).
+# Example:
+# mcp_register_tool '{
+#   "name": "manual-hello",
+#   "description": "Manual tool example",
+#   "path": "tools/manual/hello.sh",
+#   "arguments": {"type":"object","properties":{}}
+# }'
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	exit 0
+fi
+return 0

@@ -15,6 +15,157 @@ MCP_TOOLS_ERROR_MESSAGE=""
 MCP_TOOLS_TTL="${MCP_TOOLS_TTL:-5}"
 MCP_TOOLS_LAST_SCAN=0
 MCP_TOOLS_CHANGED=false
+MCP_TOOLS_MANUAL_ACTIVE=false
+MCP_TOOLS_MANUAL_BUFFER=""
+MCP_TOOLS_MANUAL_DELIM=$'\036'
+
+mcp_tools_manual_begin() {
+  MCP_TOOLS_MANUAL_ACTIVE=true
+  MCP_TOOLS_MANUAL_BUFFER=""
+}
+
+mcp_tools_manual_abort() {
+  MCP_TOOLS_MANUAL_ACTIVE=false
+  MCP_TOOLS_MANUAL_BUFFER=""
+}
+
+mcp_tools_register_manual() {
+  local payload="$1"
+  if [ "${MCP_TOOLS_MANUAL_ACTIVE}" != "true" ]; then
+    printf '%s\n' 'mcp_register_tool called outside manual registration window' >&2
+    return 1
+  fi
+  if [ -z "${payload}" ]; then
+    return 0
+  fi
+  if [ -n "${MCP_TOOLS_MANUAL_BUFFER}" ]; then
+    MCP_TOOLS_MANUAL_BUFFER="${MCP_TOOLS_MANUAL_BUFFER}${MCP_TOOLS_MANUAL_DELIM}${payload}"
+  else
+    MCP_TOOLS_MANUAL_BUFFER="${payload}"
+  fi
+  return 0
+}
+
+mcp_tools_manual_finalize() {
+  if [ "${MCP_TOOLS_MANUAL_ACTIVE}" != "true" ]; then
+    return 0
+  fi
+  local py
+  py="$(mcp_tools_python)" || {
+    mcp_tools_manual_abort
+    mcp_tools_error -32603 "Manual registration requires python"
+    return 1
+  }
+
+  local registry_json
+  if ! registry_json="$(
+    ITEMS="${MCP_TOOLS_MANUAL_BUFFER}" ROOT="${MCPBASH_ROOT}" DELIM="${MCP_TOOLS_MANUAL_DELIM}" "${py}" <<'PY'
+import json, os, hashlib, time, pathlib
+
+def normalize_path(entry_path, root):
+    if not entry_path:
+        raise ValueError("Tool entry missing path")
+    path_obj = pathlib.Path(entry_path)
+    root_path = pathlib.Path(root).resolve()
+    if path_obj.is_absolute():
+        resolved = path_obj.resolve()
+        try:
+            resolved.relative_to(root_path)
+        except ValueError:
+            raise ValueError(f"Tool path {entry_path!r} must be inside server root")
+        rel = resolved.relative_to(root_path)
+    else:
+        rel = (root_path / entry_path).resolve()
+        try:
+            rel.relative_to(root_path)
+        except ValueError:
+            raise ValueError(f"Tool path {entry_path!r} must not escape server root")
+        rel = rel.relative_to(root_path)
+    return str(rel).replace("\\", "/")
+
+buffer = os.environ.get("ITEMS", "")
+delimiter = os.environ.get("DELIM", "\x1e")
+root = os.environ.get("ROOT", "")
+if delimiter:
+    raw_entries = [entry for entry in buffer.split(delimiter) if entry]
+else:
+    raw_entries = [buffer] if buffer else []
+items = []
+seen = set()
+for raw in raw_entries:
+    data = json.loads(raw)
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("Tool entry missing name")
+    if name in seen:
+        raise ValueError(f"Duplicate tool name {name!r} in manual registration")
+    seen.add(name)
+    description = str(data.get("description") or "")
+    path = normalize_path(str(data.get("path") or ""), root)
+    entry = dict(data)
+    entry["name"] = name
+    entry["description"] = description
+    entry["path"] = path
+    arguments = entry.get("arguments")
+    if not isinstance(arguments, dict):
+        entry["arguments"] = {"type": "object", "properties": {}}
+    timeout = entry.get("timeoutSecs")
+    if timeout is not None:
+        try:
+            entry["timeoutSecs"] = int(timeout)
+        except Exception:
+            entry.pop("timeoutSecs", None)
+    items.append(entry)
+
+items.sort(key=lambda x: x.get("name", ""))
+
+hash_source = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+hash_value = hashlib.sha256(hash_source.encode('utf-8')).hexdigest()
+registry = {
+    "version": 1,
+    "generatedAt": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    "items": items,
+    "hash": hash_value,
+    "total": len(items)
+}
+print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
+PY
+  )"; then
+    mcp_tools_manual_abort
+    mcp_tools_error -32603 "Manual registration parsing failed"
+    return 1
+  fi
+
+  local previous_hash="${MCP_TOOLS_REGISTRY_HASH}"
+  MCP_TOOLS_REGISTRY_JSON="${registry_json}"
+  MCP_TOOLS_REGISTRY_HASH="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
+PY
+  )"
+  MCP_TOOLS_TOTAL="$(
+    REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
+PY
+  )"
+
+  if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${registry_json}"; then
+    mcp_tools_manual_abort
+    return 1
+  fi
+
+  MCP_TOOLS_MANUAL_ACTIVE=false
+  MCP_TOOLS_MANUAL_BUFFER=""
+
+  MCP_TOOLS_LAST_SCAN="$(date +%s)"
+  if [ "${previous_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
+    MCP_TOOLS_CHANGED=true
+  fi
+  printf '%s' "${registry_json}" >"${MCP_TOOLS_REGISTRY_PATH}"
+  return 0
+}
 
 mcp_tools_registry_max_bytes() {
   local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
@@ -65,7 +216,7 @@ mcp_tools_init() {
   mkdir -p "${MCPBASH_REGISTRY_DIR}"
 }
 
-mcp_tools_apply_manual() {
+mcp_tools_apply_manual_json() {
   local manual_json="$1"
   local py
   py="$(mcp_tools_python)" || {
@@ -121,15 +272,61 @@ PY
   printf '%s' "${registry_json}" >"${MCP_TOOLS_REGISTRY_PATH}"
 }
 
+mcp_tools_run_manual_script() {
+  if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+    return 1
+  fi
+
+  mcp_tools_manual_begin
+
+  local script_output_file
+  script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tools-manual-output.XXXXXX")"
+  local script_status=0
+
+  set +e
+  # shellcheck disable=SC1090
+  . "${MCPBASH_REGISTER_SCRIPT}" >"${script_output_file}" 2>&1
+  script_status=$?
+  set -e
+
+  local script_output
+  script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
+  rm -f "${script_output_file}"
+
+  if [ "${script_status}" -ne 0 ]; then
+    mcp_tools_manual_abort
+    mcp_tools_error -32603 "Manual registration script failed"
+    if [ -n "${script_output}" ]; then
+      printf '%s\n' "${script_output}" >&2
+    fi
+    return 1
+  fi
+
+  if [ -z "${MCP_TOOLS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+    mcp_tools_manual_abort
+    if ! mcp_tools_apply_manual_json "${script_output}"; then
+      return 1
+    fi
+    return 0
+  fi
+
+  if [ -n "${script_output}" ]; then
+    printf '%s\n' "${script_output}" >&2
+  fi
+
+  if ! mcp_tools_manual_finalize; then
+    return 1
+  fi
+  return 0
+}
+
 mcp_tools_refresh_registry() {
   mcp_tools_init
   if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
-    local manual_json
-    manual_json="$(${MCPBASH_REGISTER_SCRIPT} 2>/dev/null || true)"
-    if [ -n "${manual_json}" ]; then
-      mcp_tools_apply_manual "${manual_json}"
+    if mcp_tools_run_manual_script; then
       return 0
     fi
+    return 1
   fi
   local now
   now="$(date +%s)"
@@ -302,6 +499,22 @@ mcp_tools_consume_notification() {
   else
     printf ''
   fi
+}
+
+mcp_tools_poll() {
+  if mcp_runtime_is_minimal_mode; then
+    return 0
+  fi
+  local ttl="${MCP_TOOLS_TTL:-5}"
+  case "${ttl}" in
+    '' | *[!0-9]*) ttl=5 ;;
+  esac
+  local now
+  now="$(date +%s)"
+  if [ "${MCP_TOOLS_LAST_SCAN}" -eq 0 ] || [ $((now - MCP_TOOLS_LAST_SCAN)) -ge "${ttl}" ]; then
+    mcp_tools_refresh_registry || true
+  fi
+  return 0
 }
 
 mcp_tools_decode_cursor() {

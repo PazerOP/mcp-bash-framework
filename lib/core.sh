@@ -9,6 +9,11 @@ MCPBASH_NO_RESPONSE="__MCP_NO_RESPONSE__"
 MCPBASH_INITIALIZE_HANDSHAKE_DONE=false
 MCPBASH_HANDLER_OUTPUT=""
 
+mcp_register_tool() {
+  local payload="$1"
+  mcp_tools_register_manual "${payload}"
+}
+
 mcp_core_run() {
   mcp_core_require_handlers
   mcp_core_bootstrap_state
@@ -774,6 +779,7 @@ mcp_core_emit_log_stream() {
 
 mcp_core_emit_registry_notifications() {
   local note
+  mcp_tools_poll
   note="$(mcp_tools_consume_notification)"
   if [ -n "${note}" ]; then
     rpc_send_line "${note}"
