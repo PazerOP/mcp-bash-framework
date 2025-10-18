@@ -16,6 +16,138 @@ MCP_RESOURCES_TTL="${MCP_RESOURCES_TTL:-5}"
 MCP_RESOURCES_LAST_SCAN=0
 MCP_RESOURCES_CHANGED=false
 
+mcp_resources_hash_payload() {
+  local payload="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import hashlib, sys; sys.stdout.write(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())' <<<"${payload}"
+    return
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python -c 'import hashlib, sys; sys.stdout.write(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())' <<<"${payload}"
+    return
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "${payload}" | sha256sum | awk '{print $1}'
+    return
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "${payload}" | shasum -a 256 | awk '{print $1}'
+    return
+  fi
+  printf '%s' "${payload}" | cksum | awk '{print $1}'
+}
+
+mcp_resources_subscription_store() {
+  local subscription_id="$1"
+  local name="$2"
+  local uri="$3"
+  local fingerprint="$4"
+  local path="${MCPBASH_STATE_DIR}/resource_subscription.${subscription_id}"
+  printf '%s\n%s\n%s\n' "${name}" "${uri}" "${fingerprint}" >"${path}.tmp"
+  mv "${path}.tmp" "${path}"
+}
+
+mcp_resources_subscription_store_payload() {
+  local subscription_id="$1"
+  local name="$2"
+  local uri="$3"
+  local payload="$4"
+  local fingerprint
+  fingerprint="$(mcp_resources_hash_payload "${payload}")"
+  mcp_resources_subscription_store "${subscription_id}" "${name}" "${uri}" "${fingerprint}"
+}
+
+mcp_resources_subscription_store_error() {
+  local subscription_id="$1"
+  local name="$2"
+  local uri="$3"
+  local code="$4"
+  local message="$5"
+  local fingerprint
+  fingerprint="ERROR:${code}:$(mcp_resources_hash_payload "${message}")"
+  mcp_resources_subscription_store "${subscription_id}" "${name}" "${uri}" "${fingerprint}"
+}
+
+mcp_resources_emit_update() {
+  local subscription_id="$1"
+  local payload="$2"
+  local py
+  py="$(mcp_resources_python)" || return 0
+  local enriched
+  enriched="$(
+    PAYLOAD="${payload}" SUBSCRIPTION_ID="${subscription_id}" "${py}" <<'PY'
+import json, os
+data = json.loads(os.environ["PAYLOAD"])
+sub = os.environ.get("SUBSCRIPTION_ID")
+if sub:
+    data["subscriptionId"] = sub
+print(json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+PY
+  )"
+  rpc_send_line "$(printf '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":%s}' "${enriched}")"
+}
+
+mcp_resources_emit_error() {
+  local subscription_id="$1"
+  local code="$2"
+  local message="$3"
+  local py
+  py="$(mcp_resources_python)" || return 0
+  local payload
+  payload="$(
+    CODE="${code}" MESSAGE="${message}" SUBSCRIPTION_ID="${subscription_id}" "${py}" <<'PY'
+import json, os
+code = int(os.environ.get("CODE", "-32603"))
+message = os.environ.get("MESSAGE", "")
+print(json.dumps({
+    "subscriptionId": os.environ.get("SUBSCRIPTION_ID"),
+    "error": {"code": code, "message": message}
+}, ensure_ascii=False, separators=(',', ':')))
+PY
+  )"
+  rpc_send_line "$(printf '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":%s}' "${payload}")"
+}
+
+mcp_resources_poll_subscriptions() {
+  if mcp_runtime_is_minimal_mode; then
+    return 0
+  fi
+  [ -n "${MCPBASH_STATE_DIR:-}" ] || return 0
+  local path
+  for path in "${MCPBASH_STATE_DIR}"/resource_subscription.*; do
+    if [ ! -f "${path}" ]; then
+      continue
+    fi
+    local subscription_id name uri fingerprint
+    subscription_id="${path##*.}"
+    name=""
+    uri=""
+    fingerprint=""
+    {
+      IFS= read -r name || true
+      IFS= read -r uri || true
+      IFS= read -r fingerprint || true
+    } <"${path}"
+    local result
+    if result="$(mcp_resources_read "${name}" "${uri}")"; then
+      local new_fingerprint
+      new_fingerprint="$(mcp_resources_hash_payload "${result}")"
+      if [ "${new_fingerprint}" != "${fingerprint}" ]; then
+        mcp_resources_subscription_store "${subscription_id}" "${name}" "${uri}" "${new_fingerprint}"
+        mcp_resources_emit_update "${subscription_id}" "${result}"
+      fi
+    else
+      local code message error_fingerprint
+      code="${MCP_RESOURCES_ERR_CODE:- -32603}"
+      message="${MCP_RESOURCES_ERR_MESSAGE:-Unable to read resource}"
+      error_fingerprint="ERROR:${code}:$(mcp_resources_hash_payload "${message}")"
+      if [ "${error_fingerprint}" != "${fingerprint}" ]; then
+        mcp_resources_subscription_store "${subscription_id}" "${name}" "${uri}" "${error_fingerprint}"
+        mcp_resources_emit_error "${subscription_id}" "${code}" "${message}"
+      fi
+    fi
+  done
+}
 mcp_resources_registry_max_bytes() {
   local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
   case "${limit}" in

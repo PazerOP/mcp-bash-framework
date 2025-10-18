@@ -852,4 +852,5 @@ mcp_core_emit_registry_notifications() {
   if [ -n "${note}" ]; then
     rpc_send_line "${note}"
   fi
+  mcp_resources_poll_subscriptions
 }

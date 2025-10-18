@@ -75,17 +75,28 @@ mcp_handle_resources() {
         return 0
       fi
       subscription_id="sub-$(uuidgen 2>/dev/null || date +%s%N)"
-      local subscription_path="${MCPBASH_STATE_DIR}/resource_subscription.${subscription_id}"
-      printf '%s %s' "${name}" "${uri}" >"${subscription_path}"
       if ! result_json="$(mcp_resources_read "${name}" "${uri}")"; then
-        rm -f "${subscription_path}"
         local code="${MCP_RESOURCES_ERR_CODE:- -32603}"
         local message
         message=$(mcp_resources_quote "${MCP_RESOURCES_ERR_MESSAGE:-Unable to read resource}")
         printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
         return 0
       fi
-      rpc_send_line "$(printf '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":%s}' "${result_json}")"
+      local effective_uri
+      local py
+      py="$(mcp_resources_python 2>/dev/null)" || py=""
+      if [ -n "${py}" ]; then
+        effective_uri="$(
+          RESULT="${result_json}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ["RESULT"]).get("uri", ""))
+PY
+        )"
+      else
+        effective_uri="${uri}"
+      fi
+      mcp_resources_subscription_store_payload "${subscription_id}" "${name}" "${effective_uri}" "${result_json}"
+      mcp_resources_emit_update "${subscription_id}" "${result_json}"
       printf '{"jsonrpc":"2.0","id":%s,"result":{"subscriptionId":"%s"}}' "${id}" "${subscription_id}"
       ;;
     resources/unsubscribe)
