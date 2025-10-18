@@ -59,6 +59,13 @@ mcp-bash/
 ```
 Structure mirrors the Spec §3 repository contract: stable core modules live under `bin/` and `lib/`, protocol handlers sit in `handlers/`, extension points reside in `tools/`, `resources/`, `prompts/`, and `server.d/`, and runtime-generated registries are isolated under `registry/` for exclusion from version control.
 
+## Scaffolding Helpers (Spec §19)
+- `bin/mcp-bash scaffold tool <name>` creates `tools/<name>/` with an SDK-ready script, metadata (including `outputSchema`), and README pointers to follow-on examples.
+- `bin/mcp-bash scaffold prompt <name>` builds `prompts/<name>/` with a starter template and metadata describing arguments, easing prompt registration alongside Spec §10 guidance.
+- `bin/mcp-bash scaffold resource <name>` provisions `resources/<name>/` backed by the `file` provider, wiring a `file://` URI to the generated content for immediate list/read coverage.
+
+Edit the generated files, then run the relevant integration tests (`test/integration/test_tools.sh`, `test/integration/test_prompts.sh`, `test/integration/test_resources.sh`) to confirm compliance.
+
 ## Lifecycle Loop (Spec §4)
 - `bin/mcp-bash` now sources the runtime, JSON, RPC, and core libraries, confirms stdout targets a terminal or pipe, and enters `mcp_core_run` for the Spec §4 bootstrap.
 - Incoming lines are sanitized (BOM stripped, whitespace trimmed) and compacted with the detected JSON tooling or validated through the built-in minimal tokenizer before dispatch (Spec §4 bullet 2 paired with Spec §2 minimal-mode requirements).
