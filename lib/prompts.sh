@@ -16,7 +16,218 @@ MCP_PROMPTS_TTL="${MCP_PROMPTS_TTL:-5}"
 MCP_PROMPTS_LAST_SCAN=0
 MCP_PROMPTS_CHANGED=false
 MCP_PROMPTS_LOGGER="${MCP_PROMPTS_LOGGER:-mcp.prompts}"
+MCP_PROMPTS_MANUAL_ACTIVE=false
+MCP_PROMPTS_MANUAL_BUFFER=""
+MCP_PROMPTS_MANUAL_DELIM=$'\036'
 
+mcp_prompts_log_python_warnings() {
+	local warn_file="$1"
+	if [ ! -f "${warn_file}" ]; then
+		return 0
+	fi
+	if [ ! -s "${warn_file}" ]; then
+		rm -f "${warn_file}"
+		return 0
+	fi
+	while IFS= read -r warn_line || [ -n "${warn_line}" ]; do
+		[ -n "${warn_line}" ] || continue
+		mcp_logging_warning "${MCP_PROMPTS_LOGGER}" "${warn_line}"
+	done <"${warn_file}"
+	rm -f "${warn_file}"
+}
+
+mcp_prompts_manual_begin() {
+	MCP_PROMPTS_MANUAL_ACTIVE=true
+	MCP_PROMPTS_MANUAL_BUFFER=""
+}
+
+mcp_prompts_manual_abort() {
+	MCP_PROMPTS_MANUAL_ACTIVE=false
+	MCP_PROMPTS_MANUAL_BUFFER=""
+}
+
+mcp_prompts_register_manual() {
+	local payload="$1"
+	if [ "${MCP_PROMPTS_MANUAL_ACTIVE}" != "true" ]; then
+		return 0
+	fi
+	if [ -z "${payload}" ]; then
+		return 0
+	fi
+	if [ -n "${MCP_PROMPTS_MANUAL_BUFFER}" ]; then
+		MCP_PROMPTS_MANUAL_BUFFER="${MCP_PROMPTS_MANUAL_BUFFER}${MCP_PROMPTS_MANUAL_DELIM}${payload}"
+	else
+		MCP_PROMPTS_MANUAL_BUFFER="${payload}"
+	fi
+	return 0
+}
+
+mcp_prompts_manual_finalize() {
+	if [ "${MCP_PROMPTS_MANUAL_ACTIVE}" != "true" ]; then
+		return 0
+	fi
+	local py
+	py="$(mcp_prompts_python)" || {
+		mcp_prompts_manual_abort
+		mcp_prompts_error -32603 "Manual registration requires python"
+		return 1
+	}
+
+	local registry_json
+	if ! registry_json="$(
+		ITEMS="${MCP_PROMPTS_MANUAL_BUFFER}" ROOT="${MCPBASH_ROOT}" DELIM="${MCP_PROMPTS_MANUAL_DELIM}" "${py}" <<'PY'
+import json, os, hashlib, time, pathlib
+
+def normalize_path(entry_path, root):
+    if not entry_path:
+        raise ValueError("Prompt entry missing path")
+    root_path = pathlib.Path(root).resolve()
+    candidate = pathlib.Path(entry_path)
+    if candidate.is_absolute():
+        resolved = candidate.resolve()
+    else:
+        resolved = (root_path / candidate).resolve()
+    try:
+        rel = resolved.relative_to(root_path)
+    except ValueError:
+        raise ValueError(f"Prompt path {entry_path!r} must be inside server root")
+    return str(rel).replace("\\", "/")
+
+buffer = os.environ.get("ITEMS", "")
+delimiter = os.environ.get("DELIM", "\x1e")
+root = os.environ.get("ROOT", "")
+if delimiter:
+    raw_entries = [entry for entry in buffer.split(delimiter) if entry]
+else:
+    raw_entries = [buffer] if buffer else []
+items = []
+seen = set()
+for raw in raw_entries:
+    data = json.loads(raw)
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("Prompt entry missing name")
+    if name in seen:
+        raise ValueError(f"Duplicate prompt name {name!r} in manual registration")
+    seen.add(name)
+    description = str(data.get("description") or "")
+    path = normalize_path(str(data.get("path") or ""), root)
+    arguments = data.get("arguments")
+    if not isinstance(arguments, dict):
+        arguments = {"type": "object", "properties": {}}
+    role = data.get("role")
+    if role is not None:
+        role = str(role)
+    metadata = data.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        metadata = None
+    entry = dict(data)
+    entry["name"] = name
+    entry["description"] = description
+    entry["path"] = path
+    entry["arguments"] = arguments
+    if role is not None:
+        entry["role"] = role
+    if metadata is not None:
+        entry["metadata"] = metadata
+    items.append(entry)
+
+items.sort(key=lambda x: x.get("name", ""))
+
+hash_source = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+hash_value = hashlib.sha256(hash_source.encode('utf-8')).hexdigest()
+registry = {
+    "version": 1,
+    "generatedAt": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    "items": items,
+    "hash": hash_value,
+    "total": len(items)
+}
+print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
+PY
+	)"; then
+		mcp_prompts_manual_abort
+		mcp_prompts_error -32603 "Manual registration parsing failed"
+		return 1
+	fi
+
+	local previous_hash="${MCP_PROMPTS_REGISTRY_HASH}"
+	MCP_PROMPTS_REGISTRY_JSON="${registry_json}"
+	MCP_PROMPTS_REGISTRY_HASH="$(
+		REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('hash', ''))
+PY
+	)"
+	MCP_PROMPTS_TOTAL="$(
+		REGISTRY_JSON="${registry_json}" "${py}" <<'PY'
+import json, os
+print(json.loads(os.environ.get("REGISTRY_JSON", "{}")).get('total', 0))
+PY
+	)"
+
+	if ! mcp_prompts_enforce_registry_limits "${MCP_PROMPTS_TOTAL}" "${registry_json}"; then
+		mcp_prompts_manual_abort
+		return 1
+	fi
+
+	MCP_PROMPTS_LAST_SCAN="$(date +%s)"
+	if [ "${previous_hash}" != "${MCP_PROMPTS_REGISTRY_HASH}" ]; then
+		MCP_PROMPTS_CHANGED=true
+	fi
+	printf '%s' "${registry_json}" >"${MCP_PROMPTS_REGISTRY_PATH}"
+	MCP_PROMPTS_MANUAL_ACTIVE=false
+	MCP_PROMPTS_MANUAL_BUFFER=""
+	return 0
+}
+
+mcp_prompts_run_manual_script() {
+	if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+		return 1
+	fi
+
+	mcp_prompts_manual_begin
+
+	local script_output_file
+	script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-prompts-manual-output.XXXXXX")"
+	local script_status=0
+
+	set +e
+	# shellcheck disable=SC1090
+	. "${MCPBASH_REGISTER_SCRIPT}" >"${script_output_file}" 2>&1
+	script_status=$?
+	set -e
+
+	local script_output
+	script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
+	rm -f "${script_output_file}"
+
+	if [ "${script_status}" -ne 0 ]; then
+		mcp_prompts_manual_abort
+		mcp_prompts_error -32603 "Manual registration script failed"
+		if [ -n "${script_output}" ]; then
+			mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Manual registration script output: ${script_output}"
+		fi
+		return 1
+	fi
+
+	if [ -z "${MCP_PROMPTS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+		mcp_prompts_manual_abort
+		if ! mcp_prompts_apply_manual_json "${script_output}"; then
+			return 1
+		fi
+		return 0
+	fi
+
+	if [ -n "${script_output}" ]; then
+		mcp_logging_warning "${MCP_PROMPTS_LOGGER}" "Manual registration script output: ${script_output}"
+	fi
+
+	if ! mcp_prompts_manual_finalize; then
+		return 1
+	fi
+	return 0
+}
 mcp_prompts_registry_max_bytes() {
 	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
 	case "${limit}" in
@@ -68,7 +279,7 @@ mcp_prompts_init() {
 	mkdir -p "${MCPBASH_ROOT}/prompts" >/dev/null 2>&1 || true
 }
 
-mcp_prompts_apply_manual() {
+mcp_prompts_apply_manual_json() {
 	local manual_json="$1"
 	local py
 	py="$(mcp_prompts_python)" || {
@@ -128,12 +339,11 @@ PY
 mcp_prompts_refresh_registry() {
 	mcp_prompts_init
 	if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
-		local manual_json
-		manual_json="$(${MCPBASH_REGISTER_SCRIPT} 2>/dev/null || true)"
-		if [ -n "${manual_json}" ]; then
-			mcp_prompts_apply_manual "${manual_json}"
+		if mcp_prompts_run_manual_script; then
 			return 0
 		fi
+		mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Manual registration script returned empty output or non-zero"
+		return 1
 	fi
 	local now
 	now="$(date +%s)"
@@ -180,13 +390,20 @@ mcp_prompts_scan() {
 		return 0
 	}
 
+	local warn_file
+	warn_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-prompts-scan-warn.XXXXXX")"
 	local registry_json
-	registry_json="$(
-		ROOT="${MCPBASH_ROOT}" PROMPTS_DIR="${MCPBASH_ROOT}/prompts" "${py}" <<'PY'
-import os, json, hashlib, time
+	if ! registry_json="$(
+		ROOT="${MCPBASH_ROOT}" PROMPTS_DIR="${MCPBASH_ROOT}/prompts" "${py}" 2>"${warn_file}" <<'PY'
+import os, json, hashlib, time, sys
 root = os.environ['ROOT']
 prompts_dir = os.environ['PROMPTS_DIR']
 items = []
+warnings = []
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None
 if os.path.isdir(prompts_dir):
     for dirpath, dirnames, filenames in os.walk(prompts_dir):
         dirnames[:] = [d for d in dirnames if not d.startswith('.')]
@@ -196,6 +413,8 @@ if os.path.isdir(prompts_dir):
             continue
         for filename in filenames:
             if filename.startswith('.'):
+                continue
+            if filename.endswith('.meta.yaml'):
                 continue
             path = os.path.join(dirpath, filename)
             rel = os.path.relpath(path, root)
@@ -207,7 +426,8 @@ if os.path.isdir(prompts_dir):
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as fh:
                         text = fh.read()
-                except Exception:
+                except Exception as exc:
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: unable to read metadata ({exc})")
                     text = None
             if text:
                 parsed = None
@@ -215,18 +435,46 @@ if os.path.isdir(prompts_dir):
                     parsed = json.loads(text)
                 except Exception:
                     parsed = None
+                if parsed is None and yaml is not None:
+                    try:
+                        parsed = yaml.safe_load(text)
+                    except Exception as exc:
+                        warnings.append(f"{os.path.relpath(meta_path, root)}: YAML parse failed ({exc})")
+                        parsed = None
+                elif parsed is None and yaml is None:
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: PyYAML unavailable; metadata ignored")
                 if isinstance(parsed, dict):
                     meta = parsed
+                elif parsed is not None:
+                    warnings.append(f"{os.path.relpath(meta_path, root)}: metadata is not an object; entry skipped")
             name = str(meta.get('name') or base)
-            description = meta.get('description') or ''
-            arguments = meta.get('arguments') or {"type": "object", "properties": {}}
+            description = str(meta.get('description') or '')
+            arguments = meta.get('arguments')
+            if not isinstance(arguments, dict):
+                if arguments is not None:
+                    warnings.append(f"{name}: arguments metadata ignored; expected object")
+                arguments = {"type": "object", "properties": {}}
+            role = meta.get('role')
+            if role is not None:
+                role = str(role)
+            metadata = meta.get('metadata')
+            if metadata is not None and not isinstance(metadata, dict):
+                warnings.append(f"{name}: metadata field ignored; expected object")
+                metadata = None
+            safe_rel = rel.replace('\\', '/')
             item = {
                 "name": name,
                 "description": description,
-                "path": rel,
+                "path": safe_rel,
                 "arguments": arguments
             }
+            if role:
+                item["role"] = role
+            if metadata is not None:
+                item["metadata"] = metadata
             items.append(item)
+for warning in warnings:
+    print(warning, file=sys.stderr)
 items.sort(key=lambda x: x["name"])
 hash_source = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 hash_value = hashlib.sha256(hash_source.encode('utf-8')).hexdigest()
@@ -239,7 +487,12 @@ registry = {
 }
 print(json.dumps(registry, ensure_ascii=False, separators=(',', ':')))
 PY
-	)"
+	)"; then
+		local status=$?
+		mcp_prompts_log_python_warnings "${warn_file}"
+		return "${status}"
+	fi
+	mcp_prompts_log_python_warnings "${warn_file}"
 
 	MCP_PROMPTS_REGISTRY_JSON="${registry_json}"
 	MCP_PROMPTS_REGISTRY_HASH="$(
@@ -396,7 +649,7 @@ PY
 	safe_args_json="$(
 		INFO="${sanitized_args}" "${py}" <<'PY'
 import json, os
-print(json.loads(os.environ["INFO"]).get("templateArgs", {}))
+print(json.dumps(json.loads(os.environ["INFO"]).get("templateArgs", {}), ensure_ascii=False, separators=(',', ':')))
 PY
 	)"
 	raw_args_json="$(
@@ -414,23 +667,61 @@ meta = json.loads(os.environ["METADATA"])
 args = json.loads(os.environ.get("SAFE_ARGS", "{}"))
 raw_args = json.loads(os.environ.get("RAW_ARGS", "{}"))
 path = meta.get("path")
+description = str(meta.get("description") or "")
+role = str(meta.get("role") or "system")
+metadata_value = meta.get("metadata")
+if metadata_value is not None and not isinstance(metadata_value, dict):
+    metadata_value = None
+def emit(text_value):
+    result = {
+        "text": text_value,
+        "arguments": raw_args,
+        "messages": [
+            {
+                "role": role,
+                "content": [{"type": "text", "text": text_value}]
+            }
+        ]
+    }
+    if description:
+        result["description"] = description
+    if metadata_value is not None:
+        result["metadata"] = metadata_value
+    print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
+
 if not path:
-    print(json.dumps({"text": "", "arguments": raw_args}, separators=(',', ':')))
+    emit("")
     raise SystemExit(0)
 full_path = os.path.join(os.environ["TEMPLATE_DIR"], path)
 try:
     with open(full_path, 'r', encoding='utf-8') as fh:
         template = Template(fh.read())
 except OSError:
-    print(json.dumps({"text": "", "arguments": raw_args}, separators=(',', ':')))
+    emit("")
     raise SystemExit(0)
 text = template.safe_substitute(args)
-print(json.dumps({"text": text, "arguments": raw_args}, ensure_ascii=False, separators=(',', ':')))
+emit(text)
 PY
 	)"; then
 		return 1
 	fi
 	printf '%s' "${result}"
+}
+
+mcp_prompts_poll() {
+	if mcp_runtime_is_minimal_mode; then
+		return 0
+	fi
+	local ttl="${MCP_PROMPTS_TTL:-5}"
+	case "${ttl}" in
+	'' | *[!0-9]*) ttl=5 ;;
+	esac
+	local now
+	now="$(date +%s)"
+	if [ "${MCP_PROMPTS_LAST_SCAN}" -eq 0 ] || [ $((now - MCP_PROMPTS_LAST_SCAN)) -ge "${ttl}" ]; then
+		mcp_prompts_refresh_registry || true
+	fi
+	return 0
 }
 
 mcp_prompts_consume_notification() {

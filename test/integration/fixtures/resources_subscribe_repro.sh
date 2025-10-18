@@ -8,20 +8,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/mcp-subscribe.XXXXXX")"
 cleanup() {
-  if [ -n "${TMP_ROOT:-}" ] && [ -d "${TMP_ROOT}" ]; then
-    rm -rf "${TMP_ROOT}"
-  fi
+	if [ -n "${TMP_ROOT:-}" ] && [ -d "${TMP_ROOT}" ]; then
+		rm -rf "${TMP_ROOT}"
+	fi
 }
 trap cleanup EXIT
 
 stage_workspace() {
-  local dest="$1"
-  mkdir -p "${dest}"
-  cp -a "${REPO_ROOT}/bin" "${dest}/"
-  cp -a "${REPO_ROOT}/lib" "${dest}/"
-  cp -a "${REPO_ROOT}/handlers" "${dest}/"
-  cp -a "${REPO_ROOT}/providers" "${dest}/"
-  cp -a "${REPO_ROOT}/sdk" "${dest}/"
+	local dest="$1"
+	mkdir -p "${dest}"
+	cp -a "${REPO_ROOT}/bin" "${dest}/"
+	cp -a "${REPO_ROOT}/lib" "${dest}/"
+	cp -a "${REPO_ROOT}/handlers" "${dest}/"
+	cp -a "${REPO_ROOT}/providers" "${dest}/"
+	cp -a "${REPO_ROOT}/sdk" "${dest}/"
 }
 
 WORKSPACE="${TMP_ROOT}/workspace"

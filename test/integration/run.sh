@@ -13,6 +13,7 @@ TESTS=(
 	"test_capabilities.sh"
 	"test_completion.sh"
 	"test_tools.sh"
+	"test_prompts.sh"
 	"test_resources.sh"
 )
 

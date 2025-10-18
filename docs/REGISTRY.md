@@ -128,6 +128,9 @@ Entries reference prompt templates and metadata.
 }
 ```
 
+- Malformed prompt metadata (e.g., unreadable `.meta.yaml`, non-object `arguments`, unsupported `metadata` fields) is skipped and surfaced via structured warnings through the logging subsystem, per Spec §16.
+- Optional `role` and `metadata` properties discovered during scanning are preserved for downstream rendering.
+
 ## TTL and Regeneration
 
 - TTL defaults to five seconds (`MCP_TOOLS_TTL`, etc.) as noted in Spec §9 item 6.
