@@ -11,6 +11,8 @@ MCPBASH_LOCK_ROOT=""
 MCPBASH_STATE_DIR=""
 MCPBASH_STATE_SEED=""
 MCPBASH_CLEANUP_REGISTERED="false"
+MCPBASH_JOB_CONTROL_ENABLED="false"
+MCPBASH_PROCESS_GROUP_WARNED="false"
 MCPBASH_REGISTRY_DIR=""
 MCPBASH_TOOLS_DIR=""
 MCPBASH_REGISTER_SCRIPT=""
@@ -150,4 +152,130 @@ mcp_runtime_log_batch_mode() {
 
 mcp_runtime_is_minimal_mode() {
   [ "${MCPBASH_MODE}" = "minimal" ]
+}
+
+mcp_runtime_enable_job_control() {
+  # Spec §5: enable job-control fallback so background workers receive dedicated process groups.
+  if [ "${MCPBASH_JOB_CONTROL_ENABLED}" = "true" ]; then
+    return 0
+  fi
+  if set -m 2>/dev/null; then
+    MCPBASH_JOB_CONTROL_ENABLED="true"
+  fi
+}
+
+mcp_runtime_set_process_group() {
+  # Spec §5: isolate worker processes so cancellation and timeouts can target entire trees.
+  local pid="$1"
+  [ -n "${pid}" ] || return 1
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$pid" <<'PY' >/dev/null 2>&1 && return 0
+import os, sys
+pid = int(sys.argv[1])
+try:
+    os.setpgid(pid, pid)
+except Exception:
+    pass
+PY
+  fi
+
+  if command -v python >/dev/null 2>&1; then
+    python - "$pid" <<'PY' >/dev/null 2>&1 && return 0
+import os, sys
+pid = int(sys.argv[1])
+try:
+    os.setpgid(pid, pid)
+except Exception:
+    pass
+PY
+  fi
+
+  if command -v perl >/dev/null 2>&1; then
+    perl -MPOSIX -e "POSIX::setpgid($pid,$pid)" >/dev/null 2>&1 && return 0
+  fi
+
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -e "Process.setpgid(${pid},${pid})" >/dev/null 2>&1 && return 0
+  fi
+
+  if [ "${MCPBASH_JOB_CONTROL_ENABLED}" = "true" ]; then
+    # Job-control mode already increases the odds workers are isolated; treat as success.
+    return 0
+  fi
+
+  if [ "${MCPBASH_PROCESS_GROUP_WARNED}" != "true" ]; then
+    MCPBASH_PROCESS_GROUP_WARNED="true"
+    printf '%s\n' 'mcp-bash: unable to assign dedicated process groups; cancellation may be less effective (Spec §5).' >&2
+  fi
+  return 1
+}
+
+mcp_runtime_lookup_pgid() {
+  local pid="$1"
+  local pgid=""
+  [ -n "${pid}" ] || return 1
+
+  if command -v python3 >/dev/null 2>&1; then
+    pgid="$(
+      python3 - "$pid" <<'PY'
+import os, sys
+pid = int(sys.argv[1])
+try:
+    print(os.getpgid(pid))
+except Exception:
+    pass
+PY
+    )"
+  fi
+
+  if [ -z "${pgid}" ] && command -v python >/dev/null 2>&1; then
+    pgid="$(
+      python - "$pid" <<'PY'
+import os, sys
+pid = int(sys.argv[1])
+try:
+    print(os.getpgid(pid))
+except Exception:
+    pass
+PY
+    )"
+  fi
+
+  if [ -z "${pgid}" ] && command -v perl >/dev/null 2>&1; then
+    pgid="$(perl -MPOSIX -e "print POSIX::getpgid($pid)" 2>/dev/null)"
+  fi
+
+  if [ -z "${pgid}" ] && command -v ruby >/dev/null 2>&1; then
+    pgid="$(ruby -e "begin; puts Process.getpgid(${pid}); rescue; end" 2>/dev/null)"
+  fi
+
+  if [ -z "${pgid}" ]; then
+    pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
+  fi
+
+  if [ -z "${pgid}" ]; then
+    pgid="${pid}"
+  fi
+
+  printf '%s' "${pgid}"
+}
+
+mcp_runtime_signal_group() {
+  # Send signals to a process group when available (Spec §5/§6 escalations).
+  local pgid="$1"
+  local signal="$2"
+  local fallback_pid="$3"
+  local main_pgid="$4"
+
+  if [ -n "${pgid}" ] && [ -n "${signal}" ] && [ -n "${fallback_pid}" ]; then
+    if [ -n "${main_pgid}" ] && [ "${pgid}" = "${main_pgid}" ]; then
+      kill -"${signal}" "${fallback_pid}" 2>/dev/null
+      return 0
+    fi
+    if kill -"${signal}" "-${pgid}" 2>/dev/null; then
+      return 0
+    fi
+    kill -"${signal}" "${fallback_pid}" 2>/dev/null
+  fi
 }

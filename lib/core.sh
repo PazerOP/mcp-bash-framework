@@ -34,8 +34,9 @@ mcp_core_bootstrap_state() {
   mcp_ids_init_state
   mcp_lock_init
   mcp_io_init
+  mcp_runtime_enable_job_control
   . "${MCPBASH_ROOT}/lib/timeout.sh"
-  MCPBASH_MAIN_PGID="$(mcp_core_lookup_pgid "$$")"
+  MCPBASH_MAIN_PGID="$(mcp_runtime_lookup_pgid "$$")"
   MCPBASH_MAX_CONCURRENT_REQUESTS="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
   MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
   MCPBASH_MAX_PROGRESS_PER_MIN="${MCPBASH_MAX_PROGRESS_PER_MIN:-100}"
@@ -432,9 +433,9 @@ mcp_core_spawn_worker() {
 
   local pid=$!
 
-  mcp_core_assign_process_group "${pid}"
+  mcp_runtime_set_process_group "${pid}" || true
   local pgid
-  pgid="$(mcp_core_lookup_pgid "${pid}")"
+  pgid="$(mcp_runtime_lookup_pgid "${pid}")"
 
   mcp_ids_track_worker "${key}" "${pid}" "${pgid}" "${stderr_file}"
 }
@@ -575,69 +576,6 @@ mcp_core_invoke_handler() {
   return "${status}"
 }
 
-mcp_core_assign_process_group() {
-  local pid="$1"
-
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$pid" <<'PY' >/dev/null 2>&1
-import os, sys
-pid = int(sys.argv[1])
-try:
-    os.setpgid(pid, pid)
-except Exception:
-    pass
-PY
-  elif command -v python >/dev/null 2>&1; then
-    python - "$pid" <<'PY' >/dev/null 2>&1
-import os, sys
-pid = int(sys.argv[1])
-try:
-    os.setpgid(pid, pid)
-except Exception:
-    pass
-PY
-  fi
-}
-
-mcp_core_lookup_pgid() {
-  local pid="$1"
-  local pgid=""
-
-  if command -v python3 >/dev/null 2>&1; then
-    pgid="$(
-      python3 - "$pid" <<'PY'
-import os, sys
-pid = int(sys.argv[1])
-try:
-    print(os.getpgid(pid))
-except Exception:
-    pass
-PY
-    )"
-  elif command -v python >/dev/null 2>&1; then
-    pgid="$(
-      python - "$pid" <<'PY'
-import os, sys
-pid = int(sys.argv[1])
-try:
-    print(os.getpgid(pid))
-except Exception:
-    pass
-PY
-    )"
-  fi
-
-  if [ -z "${pgid}" ]; then
-    pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
-  fi
-
-  if [ -z "${pgid}" ]; then
-    pgid="${pid}"
-  fi
-
-  printf '%s' "${pgid}"
-}
-
 mcp_core_handle_cancel_notification() {
   local json_line="$1"
   local cancel_id
@@ -691,11 +629,7 @@ mcp_core_send_signal_chain() {
   local pgid="$2"
   local signal="$3"
 
-  if [ -n "${pgid}" ] && [ "${pgid}" != "${MCPBASH_MAIN_PGID}" ]; then
-    kill -"${signal}" "-${pgid}" 2>/dev/null || kill -"${signal}" "${pid}" 2>/dev/null
-  else
-    kill -"${signal}" "${pid}" 2>/dev/null
-  fi
+  mcp_runtime_signal_group "${pgid}" "${signal}" "${pid}" "${MCPBASH_MAIN_PGID}"
 }
 
 mcp_core_process_alive() {
