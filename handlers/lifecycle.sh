@@ -20,18 +20,26 @@ mcp_handle_lifecycle() {
 
       local requested_version=""
       requested_version="$(mcp_json_extract_protocol_version "${json_payload}")"
-      if [ -n "${requested_version}" ] && [ "${requested_version}" != "${MCPBASH_PROTOCOL_VERSION}" ]; then
+      local negotiated_version=""
+      if ! negotiated_version="$(mcp_spec_resolve_protocol_version "${requested_version}")"; then
         printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":"Unsupported protocol version"}}' "${id}"
         return 0
       fi
 
+      # shellcheck disable=SC2034
+      MCPBASH_NEGOTIATED_PROTOCOL_VERSION="${negotiated_version}"
+
+      if [ -n "${requested_version}" ] && [ "${requested_version}" != "${negotiated_version}" ]; then
+        printf '%s\n' "Degraded protocol to ${negotiated_version} per client request (Spec §7)." >&2
+      fi
+
       local capabilities
-      capabilities="$(mcp_spec_capabilities_for_runtime)"
+      capabilities="$(mcp_spec_capabilities_for_runtime "${negotiated_version}")"
 
       MCPBASH_INITIALIZE_HANDSHAKE_DONE=true
       MCPBASH_INITIALIZED=false
 
-      printf '%s' "$(mcp_spec_build_initialize_response "${id}" "${capabilities}")"
+      printf '%s' "$(mcp_spec_build_initialize_response "${id}" "${capabilities}" "${negotiated_version}")"
       ;;
     notifications/initialized | initialized)
       # shellcheck disable=SC2034
