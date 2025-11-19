@@ -498,7 +498,7 @@ mcp_prompts_emit_render_result() {
 	local description="$4"
 	local metadata_value="$5"
 	
-	jq -n \
+	jq -n -c \
 		--arg text "${text}" \
 		--argjson args "${args_json:-{}}" \
 		--arg role "${role}" \

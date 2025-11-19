@@ -524,7 +524,7 @@ mcp_completion_normalize_output() {
 	local limit="${2:-5}"
 	local start="${3:-0}"
 	printf '%s' "$(
-		jq -n \
+		jq -n -c \
 			--arg raw "${script_output}" \
 			--argjson limit "${limit}" \
 			--argjson start "${start}" '
@@ -575,7 +575,7 @@ mcp_completion_builtin_generate() {
 		parsed_args="{}"
 	fi
 	printf '%s' "$(
-		jq -n \
+		jq -n -c \
 			--arg name "${name}" \
 			--argjson args "${parsed_args}" \
 			--argjson limit "${limit}" \

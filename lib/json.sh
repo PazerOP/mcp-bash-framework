@@ -188,6 +188,7 @@ mcp_json_extract_id() {
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
 		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.id' 2>/dev/null; then
+			printf 'ID extraction failed for: %s using %s\n' "${json}" "${MCPBASH_JSON_TOOL_BIN}" >&2
 			return 1
 		fi
 		;;

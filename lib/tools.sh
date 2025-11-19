@@ -299,7 +299,7 @@ mcp_tools_scan() {
 	if [ -d "${MCPBASH_TOOLS_DIR}" ]; then
 		find "${MCPBASH_TOOLS_DIR}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
 			if [ ! -x "${path}" ]; then
-				continue
+            continue
 			fi
 			local rel_path="${path#${MCPBASH_ROOT}/}"
 			local base_name="$(basename "${path}")"
@@ -665,7 +665,7 @@ mcp_tools_call() {
 	esac
 
 	local result_json
-	result_json="$(jq -n \
+	result_json="$(jq -n -c \
 		--arg name "${name}" \
 		--rawfile stdout "${stdout_content}" \
 		--rawfile stderr "${stderr_content}" \

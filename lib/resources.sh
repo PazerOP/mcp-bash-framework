@@ -161,7 +161,7 @@ mcp_resources_emit_update() {
 	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Emit update subscription=${subscription_id}"
 	local enriched
 	enriched="$(echo "${payload}" | jq -c --arg sub "${subscription_id}" '. + {subscriptionId: $sub}')"
-	rpc_send_line_direct "$(jq -n --argjson params "${enriched}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
+	rpc_send_line_direct "$(jq -n -c --argjson params "${enriched}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
 }
 
 mcp_resources_emit_error() {
@@ -169,11 +169,11 @@ mcp_resources_emit_error() {
 	local code="$2"
 	local message="$3"
 	local payload
-	payload="$(jq -n --arg sub "${subscription_id}" --argjson code "${code}" --arg msg "${message}" '{
+	payload="$(jq -n -c --arg sub "${subscription_id}" --argjson code "${code}" --arg msg "${message}" '{
 		subscriptionId: $sub,
 		error: {code: $code, message: $msg}
 	}')"
-	rpc_send_line_direct "$(jq -n --argjson params "${payload}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
+	rpc_send_line_direct "$(jq -n -c --argjson params "${payload}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
 }
 
 mcp_resources_poll_subscriptions() {
@@ -440,7 +440,7 @@ mcp_resources_scan() {
 			fi
 
 			if [ -z "${uri}" ]; then
-				continue
+            continue
 			fi
 
 			if [ -z "${provider}" ]; then
@@ -751,7 +751,7 @@ mcp_resources_read() {
 		return 1
 	fi
 	local result
-	result="$(jq -n --arg uri "${uri}" --arg mime "${mime}" --arg content "${content}" '{
+	result="$(jq -n -c --arg uri "${uri}" --arg mime "${mime}" --arg content "${content}" '{
 		uri: $uri,
 		mimeType: $mime,
 		base64: false,
