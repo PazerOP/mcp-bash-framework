@@ -312,6 +312,15 @@ mcp_tools_scan() {
 			local dir_name
 			dir_name="$(dirname "${path}")"
 			local meta_json="${dir_name}/${base_name}.meta.json"
+			if [ ! -f "${meta_json}" ]; then
+				local stem="${base_name%.*}"
+				if [ -n "${stem}" ] && [ "${stem}" != "${base_name}" ]; then
+					local alt_meta="${dir_name}/${stem}.meta.json"
+					if [ -f "${alt_meta}" ]; then
+						meta_json="${alt_meta}"
+					fi
+				fi
+			fi
 			local description=""
 			local arguments="{}"
 			local timeout=""
@@ -479,7 +488,7 @@ mcp_tools_list() {
 	local result_json
 	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" '
 		{
-			tools: .items[$offset:$offset+$limit],
+			items: .items[$offset:$offset+$limit],
 			total: .total
 		}
 	')"
@@ -492,7 +501,7 @@ mcp_tools_list() {
 		cursor_payload="$(jq -n --arg ver "1" --arg col "tools" --argjson off "$next_offset" --arg hash "${MCP_TOOLS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
 		local encoded
 		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | jq --arg next "${encoded}" '.nextCursor = $next')"
+		result_json="$(echo "${result_json}" | jq -c --arg next "${encoded}" '.nextCursor = $next')"
 	fi
 
 	printf '%s' "${result_json}"
@@ -692,7 +701,10 @@ mcp_tools_call() {
 		if $has_json == "true" and ($stdout | length > 0) then
 			try (
 				($stdout | fromjson) as $json |
-				$base | .content += [{type: "json", json: $json}] | .structuredContent = $json
+				$base
+				| .content += [{type: "json", json: $json}]
+				| .content += [{type: "text", text: $stdout}]
+				| .structuredContent = $json
 			) catch (
 				$base | .content += [{type: "text", text: $stdout}]
 			)

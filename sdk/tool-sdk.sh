@@ -36,7 +36,7 @@ __mcp_sdk_payload_from_env() {
 }
 
 mcp_args_raw() {
-	__mcp_sdk_payload_from_env "${MCP_TOOL_ARGS_JSON:-{}}" "${MCP_TOOL_ARGS_FILE:-}"
+	__mcp_sdk_payload_from_env "${MCP_TOOL_ARGS_JSON:-"{}"}" "${MCP_TOOL_ARGS_FILE:-}"
 }
 
 mcp_args_get() {

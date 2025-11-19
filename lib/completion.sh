@@ -389,7 +389,7 @@ mcp_completion_lookup_manual() {
 mcp_completion_args_hash() {
 	local args_json="$1"
 	local normalized
-	if ! normalized="$(printf '%s' "${args_json:-{}}" | jq -S -c '.' 2>/dev/null)"; then
+	if ! normalized="$(printf '%s' "${args_json:-"{}"}" | jq -S -c '.' 2>/dev/null)"; then
 		normalized="{}"
 	fi
 	mcp_completion_hash_string "${normalized}"
@@ -607,31 +607,34 @@ mcp_completion_normalize_output() {
 
 mcp_completion_builtin_generate() {
 	local name="$1"
-	local args_json="$2"
+	local query_value="$2"
 	local limit="${3:-5}"
 	local offset="${4:-0}"
-	local parsed_args
-	if ! parsed_args="$(printf '%s' "${args_json:-{}}" | jq -c '.' 2>/dev/null)"; then
-		parsed_args="{}"
+	local trimmed_query trimmed_name base_candidate base
+
+	trimmed_query="$(printf '%s' "${query_value}" | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+	trimmed_name="$(printf '%s' "${name}" | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+	if [ -n "${trimmed_query}" ]; then
+		base_candidate="${trimmed_query}"
+	else
+		base_candidate="${trimmed_name}"
 	fi
+	if [ -z "${base_candidate}" ]; then
+		base_candidate="suggestion"
+	fi
+	base="${base_candidate}"
+
 	printf '%s' "$(
 		jq -n -c \
-			--arg name "${name}" \
-			--argjson args "${parsed_args}" \
+			--arg base "${base}" \
+			--arg base_snippet "${base} snippet" \
+			--arg base_example "${base} example" \
 			--argjson limit "${limit}" \
 			--argjson offset "${offset}" '
-				def trim($s):
-					$s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";"");
-
-				($args.query // $args.prefix // "") as $query
-				| (trim($query | tostring)) as $trimmed_query
-				| (trim($name | tostring)) as $trimmed_name
-				| ($trimmed_query | if . == "" then $trimmed_name else . end) as $base_candidate
-				| ($base_candidate | if . == "" then "suggestion" else . end) as $base
-				| [
+				[
 					{type: "text", text: $base},
-					{type: "text", text: ($base + " snippet")},
-					{type: "text", text: ($base + " example")}
+					{type: "text", text: $base_snippet},
+					{type: "text", text: $base_example}
 				] as $candidates
 				| ($candidates[$offset:$offset+$limit]) as $limited
 				| ($limited | length) as $count
@@ -648,9 +651,10 @@ mcp_completion_builtin_generate() {
 mcp_completion_run_provider() {
 	local name="$1"
 	local args_json="$2"
-	local limit="$3"
-	local offset="$4"
-	local args_hash="$5"
+	local query_value="$3"
+	local limit="$4"
+	local offset="$5"
+	local args_hash="$6"
 
 	MCP_COMPLETION_PROVIDER_RESULT_SUGGESTIONS="[]"
 	MCP_COMPLETION_PROVIDER_RESULT_HAS_MORE="false"
@@ -662,7 +666,7 @@ mcp_completion_run_provider() {
 
 	case "${MCP_COMPLETION_PROVIDER_TYPE}" in
 	builtin)
-		if ! normalized="$(mcp_completion_builtin_generate "${name}" "${args_json}" "${limit}" "${offset}")"; then
+		if ! normalized="$(mcp_completion_builtin_generate "${name}" "${query_value}" "${limit}" "${offset}")"; then
 			MCP_COMPLETION_PROVIDER_RESULT_ERROR="Builtin completion generator failed"
 			return 1
 		fi
@@ -841,7 +845,7 @@ mcp_completion_add_json() {
 		mcp_completion_has_more=true
 		return 1
 	fi
-	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | jq -c --argjson payload "${json_payload:-{}}" '. + [$payload]' 2>/dev/null)"; then
+	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | jq -c --argjson payload "${json_payload:-"{}"}" '. + [$payload]' 2>/dev/null)"; then
 		mcp_completion_suggestions="[]"
 		return 1
 	fi
@@ -855,7 +859,7 @@ mcp_completion_finalize() {
 	fi
 	local cursor="${mcp_completion_cursor}"
 	printf '%s' "$(
-		jq -n \
+		jq -n -c \
 			--argjson suggestions "${mcp_completion_suggestions}" \
 			--argjson has_more "${has_more_json}" \
 			--arg cursor "${cursor}" '

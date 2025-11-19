@@ -407,6 +407,15 @@ mcp_resources_scan() {
 			local dir_name
 			dir_name="$(dirname "${path}")"
 			local meta_json="${dir_name}/${base_name}.meta.json"
+			if [ ! -f "${meta_json}" ]; then
+				local stem="${base_name%.*}"
+				if [ -n "${stem}" ] && [ "${stem}" != "${base_name}" ]; then
+					local alt_meta="${dir_name}/${stem}.meta.json"
+					if [ -f "${alt_meta}" ]; then
+						meta_json="${alt_meta}"
+					fi
+				fi
+			fi
 			local description=""
 			local uri=""
 			local mime="text/plain"
@@ -560,7 +569,7 @@ mcp_resources_list() {
 		cursor_payload="$(jq -n --arg ver "1" --arg col "resources" --argjson off "$next_offset" --arg hash "${MCP_RESOURCES_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
 		local encoded
 		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | jq --arg next "${encoded}" '.nextCursor = $next')"
+		result_json="$(echo "${result_json}" | jq -c --arg next "${encoded}" '.nextCursor = $next')"
 	fi
 
 	printf '%s' "${result_json}"

@@ -259,8 +259,12 @@ run_subscription_test() {
 
 	echo '{"jsonrpc":"2.0","id":"shutdown","method":"shutdown"}' >&3
 	echo '{"jsonrpc":"2.0","id":"exit","method":"exit"}' >&3
-
-	wait "$server_pid"
+	exec 3>&-
+	while read -r -u 4 _line; do
+		:
+	done
+	exec 4<&-
+	wait "$server_pid" 2>/dev/null || true
 	rm -f "$pipe_in" "$pipe_out"
 }
 

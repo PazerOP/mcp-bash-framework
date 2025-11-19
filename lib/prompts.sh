@@ -311,6 +311,15 @@ mcp_prompts_scan() {
 			local dir_name
 			dir_name="$(dirname "${path}")"
 			local meta_json="${dir_name}/${base_name}.meta.json"
+			if [ ! -f "${meta_json}" ]; then
+				local stem="${base_name%.*}"
+				if [ -n "${stem}" ] && [ "${stem}" != "${base_name}" ]; then
+					local alt_meta="${dir_name}/${stem}.meta.json"
+					if [ -f "${alt_meta}" ]; then
+						meta_json="${alt_meta}"
+					fi
+				fi
+			fi
 			local description=""
 			local role="user"
 			local arguments='{"type": "object", "properties": {}}'
@@ -443,7 +452,7 @@ mcp_prompts_list() {
 		cursor_payload="$(jq -n --arg ver "1" --arg col "prompts" --argjson off "$next_offset" --arg hash "${MCP_PROMPTS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
 		local encoded
 		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | jq --arg next "${encoded}" '.nextCursor = $next')"
+		result_json="$(echo "${result_json}" | jq -c --arg next "${encoded}" '.nextCursor = $next')"
 	fi
 
 	printf '%s' "${result_json}"
@@ -480,22 +489,56 @@ mcp_prompts_render() {
 		return 0
 	fi
 
-	local text
-	# Use a subshell to isolate exported variables
-	if ! text="$(
-		set -a
-		# Parse args_json and export variables. Only alphanumeric keys are safe for envsubst.
-		# We filter keys to simple identifiers.
-		eval "$(printf '%s' "${args_json}" | jq -r '
-			to_entries | map(select(.key | test("^[a-zA-Z_][a-zA-Z0-9_]*$"))) |
-			.[] | "export \(.key)=\(@sh \(.value))"' 2>/dev/null)"
-		set +a
-		envsubst <"${full_path}"
+	local normalized_args="${args_json}"
+	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | jq empty >/dev/null 2>&1; then
+		normalized_args="{}"
+	fi
+
+	local export_pairs=""
+	if ! export_pairs="$(
+		printf '%s' "${normalized_args}" | jq -r '
+			def allowed($key; $val):
+				($key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+				and ((["string","number","boolean"] | index($val|type)) != null);
+			def value_string($val):
+				if ($val | type) == "boolean" then
+					(if $val then "true" else "false" end)
+				elif ($val | type) == "number" then
+					($val | tostring)
+				else
+					($val | tostring)
+				end;
+			if type == "object" then
+				to_entries
+				| map(select(allowed(.key; .value)))
+				| .[]
+				| [ .key, value_string(.value) ]
+				| @tsv
+			else
+				empty
+			end
+		'
 	)"; then
+		export_pairs=""
+	fi
+
+	local env_cmd=("env" "-i" "PATH=${PATH}")
+	while IFS=$'\t' read -r export_key export_value; do
+		[ -z "${export_key}" ] && continue
+		case "${export_value}" in
+		*$'\n'*)
+			continue
+			;;
+		esac
+		env_cmd+=("${export_key}=${export_value}")
+	done <<<"${export_pairs}"
+
+	local text
+	if ! text="$("${env_cmd[@]}" envsubst <"${full_path}")"; then
 		return 1
 	fi
 
-	mcp_prompts_emit_render_result "${text}" "${args_json}" "${role}" "${description}" "${metadata_value}"
+	mcp_prompts_emit_render_result "${text}" "${normalized_args}" "${role}" "${description}" "${metadata_value}"
 }
 
 mcp_prompts_emit_render_result() {
@@ -505,12 +548,21 @@ mcp_prompts_emit_render_result() {
 	local description="$4"
 	local metadata_value="$5"
 
+	local normalized_args="${args_json}"
+	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | jq empty >/dev/null 2>&1; then
+		normalized_args="{}"
+	fi
+	local normalized_meta="${metadata_value:-null}"
+	if [ -z "${normalized_meta}" ]; then
+		normalized_meta="null"
+	fi
+
 	jq -n -c \
 		--arg text "${text}" \
-		--argjson args "${args_json:-{}}" \
 		--arg role "${role}" \
 		--arg desc "${description}" \
-		--argjson meta "${metadata_value}" \
+		--argjson args "${normalized_args}" \
+		--argjson meta "${normalized_meta}" \
 		'{
 			text: $text,
 			arguments: $args,

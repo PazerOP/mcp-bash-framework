@@ -843,6 +843,23 @@ mcp_json_extract_completion_arguments() {
 	esac
 }
 
+mcp_json_extract_completion_query() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.arguments.query? // .params.arguments.prefix? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
 mcp_json_extract_prompt_name() {
 	local json="$1"
 	if mcp_runtime_is_minimal_mode; then

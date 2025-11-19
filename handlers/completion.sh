@@ -43,11 +43,12 @@ mcp_handle_completion() {
 		if [ "${limit}" -gt 100 ]; then
 			limit=100
 		fi
-		local args_json args_hash
+		local args_json args_hash query_value
 		args_json="$(mcp_json_extract_completion_arguments "${json_payload}")"
 		if [ -z "${args_json}" ]; then
 			args_json="{}"
 		fi
+		query_value="$(mcp_json_extract_completion_query "${json_payload}")"
 		if ! args_hash="$(mcp_completion_args_hash "${args_json}")" || [ -z "${args_hash}" ]; then
 			local message
 			message=$(mcp_completion_quote "Completion requires JSON tooling")
@@ -80,7 +81,7 @@ mcp_handle_completion() {
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
 			return 0
 		fi
-		if ! mcp_completion_run_provider "${name}" "${args_json}" "${limit}" "${start_offset}" "${args_hash}"; then
+		if ! mcp_completion_run_provider "${name}" "${args_json}" "${query_value}" "${limit}" "${start_offset}" "${args_hash}"; then
 			local message
 			message=$(mcp_completion_quote "${MCP_COMPLETION_PROVIDER_RESULT_ERROR:-Unable to complete request}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":%s}}' "${id}" "${message}"

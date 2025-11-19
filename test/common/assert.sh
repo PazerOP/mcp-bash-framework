@@ -46,3 +46,11 @@ assert_json_lines() {
 		fi
 	done <"${path}"
 }
+
+# Backwards compatibility wrappers for older test helpers.
+test_assert_eq() {
+	local actual="$1"
+	local expected="$2"
+	local message="${3:-expected ${expected}, got ${actual}}"
+	assert_eq "${expected}" "${actual}" "${message}"
+}

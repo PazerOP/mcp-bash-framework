@@ -47,6 +47,9 @@ mcp_handle_prompts() {
 			return 0
 		fi
 		args_json="$(mcp_json_extract_prompt_arguments "${json_payload}")"
+		if [ -z "${args_json}" ]; then
+			args_json="{}"
+		fi
 		mcp_prompts_refresh_registry || {
 			local message
 			message=$(mcp_prompts_quote "Unable to load prompts registry")

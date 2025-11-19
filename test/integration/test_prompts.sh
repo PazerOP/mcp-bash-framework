@@ -71,9 +71,11 @@ if ! jq -e '
 fi
 
 if ! jq -e '
+	def trimstr($s):
+		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "auto-get") |
-	(.result.text | trim == "Hello World!") and
-	(.result.messages[0].content[0].text | trim == "Hello World!") and
+	(trimstr(.result.text) == "Hello World!") and
+	(trimstr(.result.messages[0].content[0].text) == "Hello World!") and
 	(.result.arguments == {name: "World"})
 ' "${AUTO_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ auto-get response invalid\n' >&2
@@ -141,9 +143,11 @@ if ! jq -e '
 fi
 
 if ! jq -e '
+	def trimstr($s):
+		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "manual-get") |
-	(.result.text | trim == "Goodbye Ada, see you soon.") and
-	(.result.messages[0].content[0].text | trim == "Goodbye Ada, see you soon.")
+	(trimstr(.result.text) == "Goodbye Ada, see you soon.") and
+	(trimstr(.result.messages[0].content[0].text) == "Goodbye Ada, see you soon.")
 ' "${MANUAL_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ manual-get response invalid\n' >&2
 	exit 1
@@ -164,110 +168,120 @@ cat <<'EOF_META' >"${POLL_ROOT}/prompts/live.meta.json"
 EOF_META
 
 export POLL_ROOT
+pipe_in="${POLL_ROOT}/prompts_pipe_in"
+pipe_out="${POLL_ROOT}/prompts_pipe_out"
+rm -f "${pipe_in}" "${pipe_out}"
+mkfifo "${pipe_in}" "${pipe_out}"
 (
 	cd "${POLL_ROOT}" || exit 1
 	export MCP_PROMPTS_TTL="1"
+	./bin/mcp-bash <"${pipe_in}" >"${pipe_out}" &
+	echo $! >"${POLL_ROOT}/server.pid"
+) || true
+exec 3>"${pipe_in}"
+exec 4<"${pipe_out}"
 
-	# Start server in background
-	coproc SERVER { ./bin/mcp-bash; }
+send() {
+	printf '%s\n' "$1" >&3
+}
 
-	# Helper to send JSON-RPC
-	send() {
-		printf '%s\n' "$1" >&"${SERVER[1]}"
-	}
-
-	# Helper to read JSON-RPC response
-	read_response() {
-		local line
-		if read -r -u "${SERVER[0]}" line; then
-			printf '%s' "${line}"
-		else
-			return 1
-		fi
-	}
-
-	# Helper to wait for a specific message ID or method
-	wait_for() {
-		local match_key="$1"
-		local match_val="$2"
-		local timeout="${3:-10}"
-		local end_time=$(($(date +%s) + timeout))
-
-		while [ "$(date +%s)" -lt "${end_time}" ]; do
-			local response
-			if ! response="$(read_response)"; then
-				return 1
-			fi
-			if [ -z "${response}" ]; then continue; fi
-
-			local val
-			val="$(printf '%s' "${response}" | jq -r ".${match_key} // empty")"
-			if [ "${val}" = "${match_val}" ]; then
-				return 0
-			fi
-		done
+read_response() {
+	local line
+	if read -r -u 4 line; then
+		printf '%s' "${line}"
+	else
 		return 1
-	}
+	fi
+}
 
-	# Initialize
-	send '{"jsonrpc": "2.0", "id": "init", "method": "initialize", "params": {}}'
-	wait_for "id" "init" || {
-		printf 'Init timeout\n' >&2
-		exit 1
-	}
-
-	send '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
-
-	# Initial list
-	send '{"jsonrpc": "2.0", "id": "list", "method": "prompts/list", "params": {}}'
-	wait_for "id" "list" || {
-		printf 'List timeout\n' >&2
-		exit 1
-	}
-
-	# Modify prompt
-	printf 'Live version 2\n' >"prompts/live.txt"
-
-	# Wait for update notification
-	sleep 1.2
-	send '{"jsonrpc": "2.0", "id": "ping", "method": "ping"}'
-
-	# We expect a ping response AND a list_changed notification
-	seen_update=false
-	seen_ping=false
-	end_time=$(($(date +%s) + 10))
+wait_for() {
+	local match_key="$1"
+	local match_val="$2"
+	local timeout="${3:-10}"
+	local end_time=$(($(date +%s) + timeout))
 
 	while [ "$(date +%s)" -lt "${end_time}" ]; do
-		if [ "${seen_update}" = "true" ] && [ "${seen_ping}" = "true" ]; then
-			break
+		local response
+		if ! response="$(read_response)"; then
+			return 1
 		fi
-		response="$(read_response)" || break
-		if [ -z "${response}" ]; then continue; fi
-
-		id="$(printf '%s' "${response}" | jq -r '.id // empty')"
-		method="$(printf '%s' "${response}" | jq -r '.method // empty')"
-
-		if [ "${id}" = "ping" ]; then
-			seen_ping=true
+		if [ -z "${response}" ]; then
+			continue
 		fi
-		if [ "${method}" = "notifications/prompts/list_changed" ]; then
-			seen_update=true
+
+		local val
+		val="$(printf '%s' "${response}" | jq -r ".${match_key} // empty")"
+		if [ "${val}" = "${match_val}" ]; then
+			return 0
 		fi
 	done
+	return 1
+}
 
-	if [ "${seen_update}" != "true" ]; then
-		printf 'Missing prompts/list_changed notification\n' >&2
-		kill "${SERVER_PID}" 2>/dev/null || true
-		exit 1
+# Initialize
+send  '{"jsonrpc": "2.0", "id": "init", "method": "initialize", "params": {}}'
+wait_for  "id" "init" || {
+	printf 'Init timeout\n' >&2
+	exit 1
+}
+
+send  '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
+
+# Initial list
+send  '{"jsonrpc": "2.0", "id": "list", "method": "prompts/list", "params": {}}'
+wait_for  "id" "list" || {
+	printf 'List timeout\n' >&2
+	exit 1
+}
+
+# Modify prompt
+printf 'Live version 2\n' >"${POLL_ROOT}/prompts/live.txt"
+
+# Wait for update notification
+sleep  1.2
+send  '{"jsonrpc": "2.0", "id": "ping", "method": "ping"}'
+
+# We expect a ping response AND a list_changed notification
+seen_update=false
+seen_ping=false
+end_time=$(($( date +%s) + 10))
+
+while  [ "$(date +%s)" -lt "${end_time}" ]; do
+	if [ "${seen_update}" = "true" ] && [ "${seen_ping}" = "true" ]; then
+		break
 	fi
+	response="$(read_response)" || break
+	if [ -z "${response}" ]; then continue; fi
 
-	send '{"jsonrpc": "2.0", "id": "shutdown", "method": "shutdown"}'
-	wait_for "id" "shutdown" || {
-		kill "${SERVER_PID}" 2>/dev/null || true
-		exit 1
-	}
+	id="$(printf '%s' "${response}" | jq -r '.id // empty')"
+	method="$(printf '%s' "${response}" | jq -r '.method // empty')"
 
-	send '{"jsonrpc": "2.0", "id": "exit", "method": "exit"}'
-	# Wait for exit? Or just kill.
-	wait "${SERVER_PID}" 2>/dev/null || true
-)
+	if [ "${id}" = "ping" ]; then
+		seen_ping=true
+	fi
+	if [ "${method}" = "notifications/prompts/list_changed" ]; then
+		seen_update=true
+	fi
+done
+
+if  [ "${seen_update}" != "true" ]; then
+	printf 'Missing prompts/list_changed notification\n' >&2
+	result=1
+else
+	result=0
+fi
+
+send '{"jsonrpc": "2.0", "id": "shutdown", "method": "shutdown"}'
+wait_for "id" "shutdown" || result=1
+send '{"jsonrpc": "2.0", "id": "exit", "method": "exit"}'
+exec 3>&-
+while read_response >/dev/null; do
+	:
+done
+exec 4<&-
+if [ -f "${POLL_ROOT}/server.pid" ]; then
+	server_pid="$(cat "${POLL_ROOT}/server.pid")"
+	wait "${server_pid}" 2>/dev/null || true
+fi
+rm -f "${pipe_in}" "${pipe_out}"
+[ "${result:-0}" -eq 0 ] || exit 1
