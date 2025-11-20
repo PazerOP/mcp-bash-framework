@@ -22,7 +22,7 @@ start_time="${4:-}"
 duration="${5:-}"
 
 FFMPEG_STUDIO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=../lib/fs_guard.sh
+# shellcheck source=../lib/fs_guard.sh disable=SC1091
 source "${FFMPEG_STUDIO_ROOT}/lib/fs_guard.sh"
 
 if ! mcp_ffmpeg_guard_init "${FFMPEG_STUDIO_ROOT}"; then
