@@ -6,7 +6,7 @@ This example demonstrates a high-value, complex MCP server that acts as a media 
 
 *   **Structured Inspection**: Instead of parsing raw text output, `inspect_media` returns clean JSON metadata about video files.
 *   **Progress Bars**: The `transcode` tool uses `ffmpeg`'s progress pipe to send real-time percentage updates to the MCP client (real-time updates).
-*   **Sandboxing**: All file operations are strictly limited to the `media/` subdirectory to prevent unauthorized system access.
+*   **Sandboxing**: File operations are confined to an allowlist of media roots (default `./media/`) so ffmpeg never escapes your chosen directories.
 *   **Presets**: Simplifies complex `ffmpeg` command flags into semantic choices (e.g., "1080p", "gif").
 
 ## Prerequisites
@@ -23,12 +23,30 @@ sudo apt-get install ffmpeg
 
 ## Usage
 
-1.  Place a test video file (e.g., `test.mp4`) into the `media/` directory.
+1.  Place a test video file (e.g., `test.mp4`) into one of the configured media roots (defaults to the bundled `media/` directory).
 2.  Run the server:
     ```bash
     ./run 04-ffmpeg-studio
     ```
 3.  Use an MCP client (like Claude Desktop or Inspector) to interact with the tools.
+
+## Configuring Media Roots
+
+Media access is controlled by `config/media_roots.json`. Each entry defines a `path` (absolute or relative to this example directory) and an optional `mode`:
+
+```json
+{
+  "roots": [
+    { "path": "./media", "mode": "rw" },
+    { "path": "/Volumes/samples", "mode": "ro" }
+  ]
+}
+```
+
+* `mode: "rw"` allows tools to read and write; `"ro"` permits read-only operations.
+* Paths are normalized and any request that resolves outside the allowlist is rejected with `Access denied`.
+* When a relative path is supplied to a tool, it is resolved against the first matching root; use absolute paths to target a specific directory when multiple roots exist.
+* Directories listed here must exist before launching the server—`check-env` still creates the default `media/` directory for convenience.
 
 ### Example Prompts
 
@@ -45,4 +63,3 @@ The `transcode.sh` script demonstrates how to handle long-running CLI processes.
 ### Cancellation
 
 If the user cancels the operation in the client, `mcp-bash` sends a signal which the script handles to clean up partial output files.
-

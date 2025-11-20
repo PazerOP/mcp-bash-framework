@@ -6,7 +6,7 @@
     "properties": {
       "input": {
         "type": "string",
-        "description": "Input video filename."
+        "description": "Input path that must resolve inside an allowed media root (config/media_roots.json)."
       },
       "time": {
         "type": "string",
@@ -14,11 +14,10 @@
       },
       "output": {
         "type": "string",
-        "description": "Output image filename (e.g. \"frame.png\")."
+        "description": "Output path (relative or absolute) constrained to allowed writable media roots."
       }
     },
     "required": ["input", "time", "output"]
   }
 }
-
 

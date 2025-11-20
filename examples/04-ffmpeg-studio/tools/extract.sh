@@ -14,29 +14,26 @@ if [ $# -ne 3 ]; then
 	exit 1
 fi
 
-# Cross-platform realpath shim
-realpath_m() {
-	if command -v realpath >/dev/null 2>&1; then
-		realpath -m "$1"
-	else
-		local dir base
-		dir="$(dirname "$1")"
-		base="$(basename "$1")"
-		(cd "$dir" 2>/dev/null && pwd -P | sed "s|$|/$base|") || echo "$1"
-	fi
-}
+FFMPEG_STUDIO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=../lib/fs_guard.sh
+source "${FFMPEG_STUDIO_ROOT}/lib/fs_guard.sh"
+
+if ! mcp_ffmpeg_guard_init "${FFMPEG_STUDIO_ROOT}"; then
+	mcp_tool_error -32603 "Media guard initialization failed"
+	exit 1
+fi
 
 input_path="$1"
 timestamp="$2"
 output_path="$3"
 
-media_dir="$(cd "$(dirname "$0")/../media" && pwd)"
-full_input="$(realpath_m "$(cd "$(dirname "$0")/../media" && pwd)/${input_path}")"
-full_output="$(realpath_m "$(cd "$(dirname "$0")/../media" && pwd)/${output_path}")"
+if ! full_input="$(mcp_ffmpeg_guard_read_path "${input_path}")"; then
+	mcp_tool_error -32602 "Access denied: ${input_path} is outside configured media roots"
+	exit 1
+fi
 
-# Validation
-if [[ "${full_input}" != "${media_dir}"* ]] || [[ "${full_output}" != "${media_dir}"* ]]; then
-	mcp_tool_error -32602 "Access denied: Paths must be within media directory"
+if ! full_output="$(mcp_ffmpeg_guard_write_path "${output_path}")"; then
+	mcp_tool_error -32602 "Access denied: ${output_path} is outside configured media roots"
 	exit 1
 fi
 

@@ -6,10 +6,9 @@
     "properties": {
       "path": {
         "type": "string",
-        "description": "The relative path to the media file within the media directory."
+        "description": "Absolute or relative path that must resolve inside an allowed media root (configure via config/media_roots.json)."
       }
     },
     "required": ["path"]
   }
 }
-

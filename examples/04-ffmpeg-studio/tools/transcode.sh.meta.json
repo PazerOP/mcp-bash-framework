@@ -6,11 +6,11 @@
     "properties": {
       "input": {
         "type": "string",
-        "description": "Input filename (relative to media directory)."
+        "description": "Input path (absolute or relative) that must stay within a configured media root."
       },
       "output": {
         "type": "string",
-        "description": "Output filename (relative to media directory)."
+        "description": "Output path constrained to writable media roots."
       },
       "preset": {
         "type": "string",
@@ -29,4 +29,3 @@
     "required": ["input", "output", "preset"]
   }
 }
-

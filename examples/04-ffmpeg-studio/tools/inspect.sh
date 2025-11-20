@@ -15,27 +15,19 @@ if [ $# -ne 1 ]; then
 	exit 1
 fi
 
-# Cross-platform realpath shim
-realpath_m() {
-	if command -v realpath >/dev/null 2>&1; then
-		realpath -m "$1"
-	else
-		# Fallback for macOS/BSD without coreutils
-		local dir base
-		dir="$(dirname "$1")"
-		base="$(basename "$1")"
-		# Best effort normalization
-		(cd "$dir" 2>/dev/null && pwd -P | sed "s|$|/$base|") || echo "$1"
-	fi
-}
+FFMPEG_STUDIO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=../lib/fs_guard.sh
+source "${FFMPEG_STUDIO_ROOT}/lib/fs_guard.sh"
+
+if ! mcp_ffmpeg_guard_init "${FFMPEG_STUDIO_ROOT}"; then
+	mcp_tool_error -32603 "Media guard initialization failed"
+	exit 1
+fi
 
 path="$1"
-media_dir="$(cd "$(dirname "$0")/../media" && pwd)"
-full_path="$(realpath_m "$(cd "$(dirname "$0")/../media" && pwd)/${path}")"
 
-# Validation: Sandbox check
-if [[ "${full_path}" != "${media_dir}"* ]]; then
-	mcp_tool_error -32602 "Access denied: Path must be within media directory"
+if ! full_path="$(mcp_ffmpeg_guard_read_path "${path}")"; then
+	mcp_tool_error -32602 "Access denied: ${path} is outside configured media roots"
 	exit 1
 fi
 
