@@ -6,7 +6,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue)](https://spec.modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#runtime-requirements)
 
-**mcp-bash** is a professional-grade Model Context Protocol (MCP) server framework written in pure Bash. It allows you to instantly expose shell scripts, binaries, and system commands as secure, AI-ready tools.
+**mcp-bash** is a fully compliant Model Context Protocol (MCP) server framework written in pure Bash. It allows you to instantly expose shell scripts, binaries, and system commands as secure, AI-ready tools.
 
 - **Zero-Dependency Core**: Runs on standard Bash 3.2+ (macOS default) without heavy runtimes.
 - **Production Ready**: Supports concurrency, timeouts, structured logging, and cancellation out of the box.

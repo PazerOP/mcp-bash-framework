@@ -31,6 +31,8 @@ export WORKSPACE
 # Bash implementation of inspector test
 (
 	cd "${WORKSPACE}"
+	# Point project root at the staged workspace so the server can start.
+	export MCPBASH_PROJECT_ROOT="${WORKSPACE}"
 
 	# Use a named pipe or coproc. coproc is bash 4+.
 	# Let's use a simple FIFO approach which works on older bash too if needed, but coproc is cleaner.
