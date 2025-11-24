@@ -63,7 +63,7 @@ JSON
 )
 
 # Use jq -s instead of --slurpfile for better gojq compatibility on Windows
-cat "${AUTO_ROOT}/responses.ndjson" | jq -s '
+jq -s '
 	def error(msg): error(msg);
 	
 	(map(select(.id == "auto-list"))[0].result) as $list |
@@ -75,7 +75,7 @@ cat "${AUTO_ROOT}/responses.ndjson" | jq -s '
 	
 	if $read.mimeType != "text/plain" then error("unexpected mimeType") else null end,
 	if $read.content != "alpha" then error("resource content mismatch") else null end
-' >/dev/null
+' <"${AUTO_ROOT}/responses.ndjson" >/dev/null
 
 # --- Manual registration overrides ---
 MANUAL_ROOT="${TEST_TMPDIR}/manual"
@@ -126,7 +126,7 @@ JSON
 )
 
 # Use jq -s instead of --slurpfile for better gojq compatibility on Windows
-cat "${MANUAL_ROOT}/responses.ndjson" | jq -s '
+jq -s '
 	def error(msg): error(msg);
 	
 	(map(select(.id == "manual-list"))[0].result) as $list |
@@ -136,7 +136,7 @@ cat "${MANUAL_ROOT}/responses.ndjson" | jq -s '
 	if ($list.items[] | .name | IN("manual.left", "manual.right") | not) then error("unexpected resource discovered in manual registry") else null end,
 	
 	if $read.content != "right" then error("manual resource content mismatch: " + ($read.content|tostring)) else null end
-' >/dev/null
+' <"${MANUAL_ROOT}/responses.ndjson" >/dev/null
 
 # --- Subscription updates ---
 SUB_ROOT="${TEST_TMPDIR}/subscribe"
