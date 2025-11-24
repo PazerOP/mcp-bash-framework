@@ -41,22 +41,7 @@ This creates `tools/check-disk/tool.sh` and `tools/check-disk/tool.meta.json` in
 
 ### 4. Configure Your MCP Client
 
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "my-server": {
-      "command": "/Users/you/mcp-bash/bin/mcp-bash",
-      "env": {
-        "MCPBASH_PROJECT_ROOT": "/Users/you/my-mcp-server"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. Your tool is now available!
+Set `MCPBASH_PROJECT_ROOT=/path/to/your/project` and point your MCP client at `/path/to/mcp-bash/bin/mcp-bash`. See [Client Recipes](#client-recipes) for one-line configs for Claude Desktop/CLI/Code, Cursor, Windsurf, LibreChat, and OpenAI Agents SDK.
 
 ## Client Recipes
 
