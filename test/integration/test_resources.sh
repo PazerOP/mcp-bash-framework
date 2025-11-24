@@ -29,7 +29,8 @@ stage_workspace() {
 # --- Auto-discovery and pagination ---
 AUTO_ROOT="${TEST_TMPDIR}/auto"
 stage_workspace "${AUTO_ROOT}"
-chmod -x "${AUTO_ROOT}/server.d/register.sh"
+# Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
+rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/resources"
 
 echo "  • Auto-discovery workspace: ${AUTO_ROOT}"
@@ -141,7 +142,8 @@ jq -s '
 # --- Subscription updates ---
 SUB_ROOT="${TEST_TMPDIR}/subscribe"
 stage_workspace "${SUB_ROOT}"
-chmod -x "${SUB_ROOT}/server.d/register.sh"
+# Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
+rm -f "${SUB_ROOT}/server.d/register.sh"
 mkdir -p "${SUB_ROOT}/resources"
 
 echo "  • Subscription workspace: ${SUB_ROOT}"

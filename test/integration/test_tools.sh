@@ -37,7 +37,8 @@ run_server() {
 # --- Auto-discovery pagination and structured output ---
 AUTO_ROOT="${TEST_TMPDIR}/auto"
 stage_workspace "${AUTO_ROOT}"
-chmod -x "${AUTO_ROOT}/server.d/register.sh"
+# Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
+rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/tools"
 cp -a "${MCPBASH_ROOT}/examples/00-hello-tool/tools/." "${AUTO_ROOT}/tools/"
 

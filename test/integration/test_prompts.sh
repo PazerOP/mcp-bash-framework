@@ -27,7 +27,8 @@ stage_workspace() {
 # --- Auto-discovery prompts ---
 AUTO_ROOT="${TEST_TMPDIR}/auto"
 stage_workspace "${AUTO_ROOT}"
-chmod -x "${AUTO_ROOT}/server.d/register.sh"
+# Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
+rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/prompts"
 
 cat <<'EOF_PROMPT' >"${AUTO_ROOT}/prompts/alpha.txt"
@@ -154,7 +155,8 @@ fi
 # --- TTL-driven list_changed notifications ---
 POLL_ROOT="${TEST_TMPDIR}/poll"
 stage_workspace "${POLL_ROOT}"
-chmod -x "${POLL_ROOT}/server.d/register.sh"
+# Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
+rm -f "${POLL_ROOT}/server.d/register.sh"
 mkdir -p "${POLL_ROOT}/prompts"
 
 cat <<'EOF_PROMPT' >"${POLL_ROOT}/prompts/live.txt"
