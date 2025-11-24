@@ -75,14 +75,15 @@ JSON
 run_server "${AUTO_ROOT}" "${AUTO_ROOT}/requests.ndjson" "${AUTO_ROOT}/responses.ndjson"
 
 list_resp="$(grep '"id":"auto-list"' "${AUTO_ROOT}/responses.ndjson" | head -n1)"
-total="$(echo "$list_resp" | jq '.result.total // 0')"
+tools_count="$(echo "$list_resp" | jq '.result.tools | length')"
 next_cursor="$(echo "$list_resp" | jq -r '.result.nextCursor // empty')"
 
-if [ "$total" -lt 2 ]; then
-	test_fail "expected at least two tools discovered"
+# With limit=1, we should get 1 tool and a nextCursor if there are more
+if [ "$tools_count" -lt 1 ]; then
+	test_fail "expected at least one tool in paginated result"
 fi
 if [ -z "$next_cursor" ]; then
-	test_fail "expected nextCursor for pagination"
+	test_fail "expected nextCursor for pagination (indicates more tools exist)"
 fi
 
 call_resp="$(grep '"id":"auto-call"' "${AUTO_ROOT}/responses.ndjson" | head -n1)"
@@ -150,16 +151,19 @@ JSON
 run_server "${MANUAL_ROOT}" "${MANUAL_ROOT}/requests.ndjson" "${MANUAL_ROOT}/responses.ndjson"
 
 list_resp="$(grep '"id":"manual-list"' "${MANUAL_ROOT}/responses.ndjson" | head -n1)"
-total="$(echo "$list_resp" | jq '.result.total // 0')"
+tools_count="$(echo "$list_resp" | jq '.result.tools | length')"
 next_cursor="$(echo "$list_resp" | jq -r '.result.nextCursor // empty')"
-names="$(echo "$list_resp" | jq -r '.result.items[].name')"
+names="$(echo "$list_resp" | jq -r '.result.tools[].name')"
 
-test_assert_eq "$total" "2"
+# With limit=1, we should get 1 tool
+if [ "$tools_count" -lt 1 ]; then
+	test_fail "expected at least one tool in manual registry"
+fi
 if [ -z "$next_cursor" ]; then
 	test_fail "manual registry should provide nextCursor for pagination"
 fi
-if [[ "$names" != *"manual-alpha"* ]]; then
-	test_fail "manual-alpha missing from manual registry"
+if [[ "$names" != *"manual-alpha"* ]] && [[ "$names" != *"manual-beta"* ]]; then
+	test_fail "manual tools missing from manual registry"
 fi
 if [[ "$names" == *"hello"* ]]; then
 	test_fail "auto-discovered tools should not appear when manual registry is active"

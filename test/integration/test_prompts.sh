@@ -61,10 +61,9 @@ JSON
 # Verify auto-discovery responses with jq
 if ! jq -e '
 	select(.id == "auto-list") |
-	(.result.total == 2) and
-	(.result.items | length == 1) and
+	(.result.prompts | length == 1) and
 	(.result.nextCursor != null) and
-	(.result.items[0].name != null)
+	(.result.prompts[0].name != null)
 ' "${AUTO_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ auto-list response invalid\n' >&2
 	exit 1
@@ -134,9 +133,8 @@ JSON
 # Verify manual prompt responses
 if ! jq -e '
 	select(.id == "manual-list") |
-	(.result.total == 2) and
-	(.result.items | length == 2) and
-	(.result.items | map(.name) | sort == ["manual.farewell", "manual.greet"])
+	(.result.prompts | length == 2) and
+	(.result.prompts | map(.name) | sort == ["manual.farewell", "manual.greet"])
 ' "${MANUAL_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ manual-list response invalid\n' >&2
 	exit 1
