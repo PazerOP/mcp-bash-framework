@@ -38,12 +38,12 @@ test_create_tmpdir() {
 	local dir
 	dir="$(mktemp -d "${TMPDIR%/}/mcpbash.test.XXXXXX")"
 	TEST_TMPDIR="${dir}"
-	trap 'rm -rf "${TEST_TMPDIR:-}"' EXIT INT TERM
+	trap 'test_cleanup_tmpdir' EXIT INT TERM
 }
 
 test_cleanup_tmpdir() {
 	if [ -n "${TEST_TMPDIR:-}" ] && [ -d "${TEST_TMPDIR}" ]; then
-		rm -rf "${TEST_TMPDIR}"
+		rm -rf "${TEST_TMPDIR}" 2>/dev/null || true
 	fi
 }
 
