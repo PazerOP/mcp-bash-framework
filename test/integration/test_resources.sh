@@ -181,8 +181,9 @@ run_subscription_test() {
 	# Send init
 	echo '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}' >&3
 
-	# Read init
-	while read -r line <&4; do
+	# Read init (with timeout)
+	local init_timeout=10
+	while read -t "$init_timeout" -r line <&4; do
 		local id
 		id="$(echo "$line" | jq -r '.id // empty')"
 		if [ "$id" = "init" ]; then
@@ -197,8 +198,9 @@ run_subscription_test() {
 
 	local sub_id=""
 	local initial_content=""
+	local sub_timeout=10
 
-	while read -r line <&4; do
+	while read -t "$sub_timeout" -r line <&4; do
 		local id method
 		id="$(echo "$line" | jq -r '.id // empty')"
 		method="$(echo "$line" | jq -r '.method // empty')"
@@ -264,7 +266,8 @@ run_subscription_test() {
 	echo '{"jsonrpc":"2.0","id":"shutdown","method":"shutdown"}' >&3
 	echo '{"jsonrpc":"2.0","id":"exit","method":"exit"}' >&3
 	exec 3>&-
-	while read -r -u 4 _line; do
+	# Drain output with timeout to avoid hanging
+	while read -t 2 -r -u 4 _line; do
 		:
 	done
 	exec 4<&-
