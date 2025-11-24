@@ -36,7 +36,7 @@ mcp_resources_manual_finalize() {
 	fi
 
 	local registry_json
-	if ! registry_json="$(printf '%s' "${MCP_RESOURCES_MANUAL_BUFFER}" | awk -v RS='\036' '{if ($0 != "") print $0}' | jq -s '
+	if ! registry_json="$(printf '%s' "${MCP_RESOURCES_MANUAL_BUFFER}" | awk -v RS='\036' '{if ($0 != "") print $0}' | "${MCPBASH_JSON_TOOL_BIN}" -s '
 		map(select(.name and .uri)) |
 		unique_by(.name) |
 		map({
@@ -66,14 +66,14 @@ mcp_resources_manual_finalize() {
 	fi
 
 	local items_json
-	items_json="$(echo "${registry_json}" | jq -c '.items')"
+	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	hash="$(mcp_resources_hash_payload "${items_json}")"
 	local total
-	total="$(echo "${registry_json}" | jq '.total')"
+	total="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	# Update hash
-	registry_json="$(echo "${registry_json}" | jq --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local previous_hash="${MCP_RESOURCES_REGISTRY_HASH}"
 	MCP_RESOURCES_REGISTRY_JSON="${registry_json}"
@@ -158,9 +158,10 @@ mcp_resources_emit_update() {
 	local subscription_id="$1"
 	local payload="$2"
 	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Emit update subscription=${subscription_id}"
-	local enriched
-	enriched="$(echo "${payload}" | jq -c --arg sub "${subscription_id}" '. + {subscriptionId: $sub}')"
-	rpc_send_line_direct "$(jq -n -c --argjson params "${enriched}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
+	# Extract uri from payload contents for the notification
+	local uri
+	uri="$(echo "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.contents[0].uri // ""')"
+	rpc_send_line_direct "$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg uri "${uri}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{uri: $uri}}')"
 }
 
 mcp_resources_emit_error() {
@@ -168,11 +169,10 @@ mcp_resources_emit_error() {
 	local code="$2"
 	local message="$3"
 	local payload
-	payload="$(jq -n -c --arg sub "${subscription_id}" --argjson code "${code}" --arg msg "${message}" '{
-		subscriptionId: $sub,
+	payload="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --argjson code "${code}" --arg msg "${message}" '{
 		error: {code: $code, message: $msg}
 	}')"
-	rpc_send_line_direct "$(jq -n -c --argjson params "${payload}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
+	rpc_send_line_direct "$("${MCPBASH_JSON_TOOL_BIN}" -n -c --argjson params "${payload}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
 }
 
 mcp_resources_poll_subscriptions() {
@@ -258,7 +258,7 @@ mcp_resources_apply_manual_json() {
 	local registry_json
 
 	# Basic validation of input structure
-	if ! echo "${manual_json}" | jq -e '.resources | type == "array"' >/dev/null 2>&1; then
+	if ! echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.resources | type == "array"' >/dev/null 2>&1; then
 		# If not present or not array, treat as empty
 		manual_json='{"resources":[]}'
 	fi
@@ -267,7 +267,7 @@ mcp_resources_apply_manual_json() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 	# Construct registry structure
-	registry_json="$(echo "${manual_json}" | jq --arg ts "${timestamp}" '{
+	registry_json="$(echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg ts "${timestamp}" '{
 		version: 1,
 		generatedAt: $ts,
 		items: .resources,
@@ -276,12 +276,12 @@ mcp_resources_apply_manual_json() {
 
 	# Calculate hash of items
 	local items_json
-	items_json="$(echo "${registry_json}" | jq -c '.items')"
+	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	hash="$(mcp_resources_hash_payload "${items_json}")"
 
 	# Add hash to registry
-	registry_json="$(echo "${registry_json}" | jq --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local new_hash="${hash}"
 	if [ "${new_hash}" != "${MCP_RESOURCES_REGISTRY_HASH}" ]; then
@@ -289,7 +289,7 @@ mcp_resources_apply_manual_json() {
 	fi
 	MCP_RESOURCES_REGISTRY_JSON="${registry_json}"
 	MCP_RESOURCES_REGISTRY_HASH="${new_hash}"
-	MCP_RESOURCES_TOTAL="$(echo "${registry_json}" | jq '.total')"
+	MCP_RESOURCES_TOTAL="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	if ! mcp_resources_enforce_registry_limits "${MCP_RESOURCES_TOTAL}" "${registry_json}"; then
 		return 1
@@ -364,10 +364,10 @@ mcp_resources_refresh_registry() {
 	if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ] && [ -f "${MCP_RESOURCES_REGISTRY_PATH}" ]; then
 		local tmp_json=""
 		if tmp_json="$(cat "${MCP_RESOURCES_REGISTRY_PATH}")"; then
-			if echo "${tmp_json}" | jq . >/dev/null 2>&1; then
+			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
 				MCP_RESOURCES_REGISTRY_JSON="${tmp_json}"
-				MCP_RESOURCES_REGISTRY_HASH="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | jq -r '.hash // empty')"
-				MCP_RESOURCES_TOTAL="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | jq '.total // 0')"
+				MCP_RESOURCES_REGISTRY_HASH="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+				MCP_RESOURCES_TOTAL="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
 				if ! mcp_resources_enforce_registry_limits "${MCP_RESOURCES_TOTAL}" "${MCP_RESOURCES_REGISTRY_JSON}"; then
 					return 1
 				fi
@@ -425,12 +425,12 @@ mcp_resources_scan() {
 				local meta
 				meta="$(cat "${meta_json}")"
 				local j_name
-				j_name="$(printf '%s' "${meta}" | jq -r '.name // empty' 2>/dev/null)"
+				j_name="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 				[ -n "${j_name}" ] && name="${j_name}"
-				description="$(printf '%s' "${meta}" | jq -r '.description // empty' 2>/dev/null)"
-				uri="$(printf '%s' "${meta}" | jq -r '.uri // empty' 2>/dev/null)"
-				mime="$(printf '%s' "${meta}" | jq -r '.mimeType // "text/plain"' 2>/dev/null)"
-				provider="$(printf '%s' "${meta}" | jq -r '.provider // empty' 2>/dev/null)"
+				description="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
+				uri="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.uri // empty' 2>/dev/null)"
+				mime="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mimeType // "text/plain"' 2>/dev/null)"
+				provider="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // empty' 2>/dev/null)"
 			fi
 
 			if [ -z "${uri}" ]; then
@@ -442,13 +442,13 @@ mcp_resources_scan() {
 					local json_payload
 					json_payload="${mcp_line#*mcp:}"
 					local h_name
-					h_name="$(echo "${json_payload}" | jq -r '.name // empty' 2>/dev/null)"
+					h_name="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 					[ -n "${h_name}" ] && name="${h_name}"
 					local h_uri
-					h_uri="$(echo "${json_payload}" | jq -r '.uri // empty' 2>/dev/null)"
+					h_uri="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.uri // empty' 2>/dev/null)"
 					[ -n "${h_uri}" ] && uri="${h_uri}"
 					local h_desc
-					h_desc="$(echo "${json_payload}" | jq -r '.description // empty' 2>/dev/null)"
+					h_desc="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
 					[ -n "${h_desc}" ] && description="${h_desc}"
 				fi
 			fi
@@ -465,7 +465,7 @@ mcp_resources_scan() {
 				esac
 			fi
 
-			jq -n \
+			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
 				--arg path "$rel_path" \
@@ -480,16 +480,16 @@ mcp_resources_scan() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$(jq -s '.' "${items_file}")"
+		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
 	fi
 	rm -f "${items_file}"
 
 	local hash
 	hash="$(mcp_resources_hash_payload "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
-	MCP_RESOURCES_REGISTRY_JSON="$(jq -n \
+	MCP_RESOURCES_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
 		--arg ts "${timestamp}" \
 		--arg hash "${hash}" \
@@ -602,7 +602,7 @@ mcp_resources_metadata_for_name() {
 	local name="$1"
 	mcp_resources_refresh_registry || return 1
 	local metadata
-	if ! metadata="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | jq -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
+	if ! metadata="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
 		return 1
 	fi
 	if [ -z "${metadata}" ]; then
@@ -728,9 +728,9 @@ mcp_resources_read() {
 	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Metadata resolved for name=${name:-<direct>} uri=${explicit_uri}"
 
 	local uri provider mime
-	uri="$(echo "${metadata}" | jq -r --arg explicit "${explicit_uri}" 'if $explicit != "" then $explicit else .uri // "" end')"
-	provider="$(echo "${metadata}" | jq -r '.provider // "file"')"
-	mime="$(echo "${metadata}" | jq -r '.mimeType // "text/plain"')"
+	uri="$(echo "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r --arg explicit "${explicit_uri}" 'if $explicit != "" then $explicit else .uri // "" end')"
+	provider="$(echo "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // "file"')"
+	mime="$(echo "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mimeType // "text/plain"')"
 
 	if [ -z "${uri}" ]; then
 		mcp_resources_error -32602 "Resource URI missing"
@@ -763,11 +763,14 @@ mcp_resources_read() {
 		return 1
 	fi
 	local result
-	result="$(jq -n -c --arg uri "${uri}" --arg mime "${mime}" --arg content "${content}" '{
-		uri: $uri,
-		mimeType: $mime,
-		base64: false,
-		content: $content
+	result="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg uri "${uri}" --arg mime "${mime}" --arg content "${content}" '{
+		contents: [
+			{
+				uri: $uri,
+				mimeType: $mime,
+				text: $content
+			}
+		]
 	}')"
 	printf '%s' "${result}"
 }

@@ -93,7 +93,7 @@ mcp_handle_resources() {
 			printf '%s %s\n' "subscribe-read-ok" "${subscription_id}" >>"${MCPBASH_STATE_DIR}/resources.debug.log"
 		fi
 		local effective_uri
-		effective_uri="$(printf '%s' "${result_json}" | jq -r '.uri // ""')" || effective_uri=""
+		effective_uri="$(printf '%s' "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.contents[0].uri // ""')" || effective_uri=""
 		if [ -z "${effective_uri}" ]; then
 			effective_uri="${uri}"
 		fi

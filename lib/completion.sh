@@ -62,7 +62,7 @@ mcp_completion_hash_string() {
 mcp_completion_hash_json() {
 	local json_payload="$1"
 	local compact
-	if ! compact="$(printf '%s' "${json_payload}" | jq -c '.' 2>/dev/null)"; then
+	if ! compact="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.' 2>/dev/null)"; then
 		compact="{}"
 	fi
 	mcp_completion_hash_string "${compact}"
@@ -182,7 +182,7 @@ mcp_completion_apply_manual_json() {
 	local error=""
 
 	local completion_entries
-	if ! completion_entries="$(printf '%s' "${manual_json}" | jq -c '.completions // [] | .[]' 2>/dev/null)"; then
+	if ! completion_entries="$(printf '%s' "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.completions // [] | .[]' 2>/dev/null)"; then
 		rm -f "${tmp_file}"
 		return 1
 	fi
@@ -190,7 +190,7 @@ mcp_completion_apply_manual_json() {
 	while IFS= read -r entry || [ -n "${entry}" ]; do
 		[ -z "${entry}" ] && continue
 		local name path timeout rel_path
-		if ! name="$(printf '%s' "${entry}" | jq -r '.name // ""' 2>/dev/null)"; then
+		if ! name="$(printf '%s' "${entry}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // ""' 2>/dev/null)"; then
 			error="Completion entry missing name"
 			break
 		fi
@@ -205,7 +205,7 @@ mcp_completion_apply_manual_json() {
 			error="Duplicate completion name ${name}"
 			break
 		fi
-		if ! path="$(printf '%s' "${entry}" | jq -r '.path // ""' 2>/dev/null)"; then
+		if ! path="$(printf '%s' "${entry}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"; then
 			error="Completion ${name} missing path"
 			break
 		fi
@@ -213,14 +213,14 @@ mcp_completion_apply_manual_json() {
 			error="Completion path ${path} invalid or outside server root"
 			break
 		fi
-		timeout="$(printf '%s' "${entry}" | jq -r '.timeoutSecs // ""' 2>/dev/null || printf '')"
+		timeout="$(printf '%s' "${entry}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' 2>/dev/null || printf '')"
 		local timeout_arg=""
 		if [ -n "${timeout}" ] && [[ "${timeout}" =~ ^-?[0-9]+$ ]]; then
 			timeout_arg="true"
 		else
 			timeout=""
 		fi
-		if ! jq -n \
+		if ! "${MCPBASH_JSON_TOOL_BIN}" -n \
 			--arg name "${name}" \
 			--arg path "${rel_path}" \
 			--arg timeout "${timeout}" \
@@ -245,7 +245,7 @@ ${name}"
 	fi
 
 	local items_json
-	items_json="$(jq -s 'sort_by(.name)' "${tmp_file}")" || {
+	items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${tmp_file}")" || {
 		rm -f "${tmp_file}"
 		return 1
 	}
@@ -254,9 +254,9 @@ ${name}"
 	local timestamp hash total
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	hash="$(mcp_completion_hash_string "${items_json}")"
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
-	MCP_COMPLETION_MANUAL_REGISTRY_JSON="$(jq -n \
+	MCP_COMPLETION_MANUAL_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ts "${timestamp}" \
 		--arg hash "${hash}" \
 		--argjson items "${items_json}" \
@@ -276,7 +276,7 @@ mcp_completion_manual_finalize() {
 	else
 		local manual_entries
 		manual_entries="$(printf '%s' "${MCP_COMPLETION_MANUAL_BUFFER}" | tr "${MCP_COMPLETION_MANUAL_DELIM}" '\n')"
-		if ! manual_json="$(printf '%s' "${manual_entries}" | jq -s '{completions: .}' 2>/dev/null)"; then
+		if ! manual_json="$(printf '%s' "${manual_entries}" | "${MCPBASH_JSON_TOOL_BIN}" -s '{completions: .}' 2>/dev/null)"; then
 			mcp_completion_manual_abort
 			return 1
 		fi
@@ -378,7 +378,7 @@ mcp_completion_lookup_manual() {
 		return 1
 	fi
 	local entry
-	if ! entry="$(printf '%s' "${MCP_COMPLETION_MANUAL_REGISTRY_JSON}" | jq -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
+	if ! entry="$(printf '%s' "${MCP_COMPLETION_MANUAL_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
 		return 1
 	fi
 	[ -z "${entry}" ] && return 1
@@ -389,7 +389,7 @@ mcp_completion_lookup_manual() {
 mcp_completion_args_hash() {
 	local args_json="$1"
 	local normalized
-	if ! normalized="$(printf '%s' "${args_json:-"{}"}" | jq -S -c '.' 2>/dev/null)"; then
+	if ! normalized="$(printf '%s' "${args_json:-"{}"}" | "${MCPBASH_JSON_TOOL_BIN}" -S -c '.' 2>/dev/null)"; then
 		normalized="{}"
 	fi
 	mcp_completion_hash_string "${normalized}"
@@ -405,7 +405,7 @@ mcp_completion_encode_cursor() {
 	'' | *[!0-9]*) offset_value=0 ;;
 	esac
 	local payload
-	if ! payload="$(jq -n \
+	if ! payload="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg name "${name}" \
 		--arg hash "${args_hash}" \
 		--argjson offset "${offset_value}" \
@@ -424,22 +424,22 @@ mcp_completion_decode_cursor() {
 	if ! decoded="$(mcp_completion_base64_urldecode "${cursor}")"; then
 		return 1
 	fi
-	if ! payload="$(printf '%s' "${decoded}" | jq -c '.' 2>/dev/null)"; then
+	if ! payload="$(printf '%s' "${decoded}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.' 2>/dev/null)"; then
 		return 1
 	fi
-	name="$(printf '%s' "${payload}" | jq -r '.name // empty')" || return 1
-	hash="$(printf '%s' "${payload}" | jq -r '.args // empty')" || return 1
+	name="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty')" || return 1
+	hash="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.args // empty')" || return 1
 	if [ -z "${name}" ] || [ "${name}" != "${expected_name}" ]; then
 		return 1
 	fi
 	if [ -n "${expected_hash}" ] && [ "${hash}" != "${expected_hash}" ]; then
 		return 1
 	fi
-	offset="$(printf '%s' "${payload}" | jq -r '.offset // 0')" || return 1
+	offset="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.offset // 0')" || return 1
 	if ! [[ "${offset}" =~ ^[0-9]+$ ]]; then
 		return 1
 	fi
-	script="$(printf '%s' "${payload}" | jq -r '.script // ""')" || script=""
+	script="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.script // ""')" || script=""
 	# shellcheck disable=SC2034
 	MCP_COMPLETION_CURSOR_OFFSET="${offset}"
 	# shellcheck disable=SC2034
@@ -468,7 +468,7 @@ mcp_completion_candidates_for_path() {
 mcp_completion_prompt_script() {
 	local metadata="$1"
 	local rel_path
-	if ! rel_path="$(printf '%s' "${metadata}" | jq -r '.path // ""' 2>/dev/null)"; then
+	if ! rel_path="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"; then
 		return 1
 	fi
 	local candidate
@@ -485,7 +485,7 @@ mcp_completion_prompt_script() {
 mcp_completion_resource_script() {
 	local metadata="$1"
 	local rel_path
-	if ! rel_path="$(printf '%s' "${metadata}" | jq -r '.path // ""' 2>/dev/null)"; then
+	if ! rel_path="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"; then
 		return 1
 	fi
 	local candidate
@@ -518,14 +518,14 @@ mcp_completion_select_provider() {
 	local entry metadata script_rel
 
 	if entry="$(mcp_completion_lookup_manual "${name}")"; then
-		if ! script_rel="$(printf '%s' "${entry}" | jq -r '.path // ""' 2>/dev/null)"; then
+		if ! script_rel="$(printf '%s' "${entry}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"; then
 			return 1
 		fi
 		[ -z "${script_rel}" ] && return 1
 		MCP_COMPLETION_PROVIDER_TYPE="manual"
 		MCP_COMPLETION_PROVIDER_SCRIPT="${script_rel}"
 		MCP_COMPLETION_PROVIDER_SCRIPT_KEY="manual:${script_rel}"
-		MCP_COMPLETION_PROVIDER_TIMEOUT="$(printf '%s' "${entry}" | jq -r '.timeoutSecs // ""' 2>/dev/null)"
+		MCP_COMPLETION_PROVIDER_TIMEOUT="$(printf '%s' "${entry}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' 2>/dev/null)"
 		return 0
 	fi
 
@@ -534,7 +534,7 @@ mcp_completion_select_provider() {
 			MCP_COMPLETION_PROVIDER_TYPE="prompt"
 			MCP_COMPLETION_PROVIDER_METADATA="${metadata}"
 			MCP_COMPLETION_PROVIDER_SCRIPT="${script_rel}"
-			MCP_COMPLETION_PROVIDER_PROMPT_TEMPLATE="$(printf '%s' "${metadata}" | jq -r '.path // ""' 2>/dev/null)"
+			MCP_COMPLETION_PROVIDER_PROMPT_TEMPLATE="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"
 			MCP_COMPLETION_PROVIDER_SCRIPT_KEY="prompt:${script_rel}"
 			return 0
 		fi
@@ -545,9 +545,9 @@ mcp_completion_select_provider() {
 			MCP_COMPLETION_PROVIDER_TYPE="resource"
 			MCP_COMPLETION_PROVIDER_METADATA="${metadata}"
 			MCP_COMPLETION_PROVIDER_SCRIPT="${script_rel}"
-			MCP_COMPLETION_PROVIDER_RESOURCE_PATH="$(printf '%s' "${metadata}" | jq -r '.path // ""' 2>/dev/null)"
-			MCP_COMPLETION_PROVIDER_RESOURCE_URI="$(printf '%s' "${metadata}" | jq -r '.uri // ""' 2>/dev/null)"
-			MCP_COMPLETION_PROVIDER_RESOURCE_PROVIDER="$(printf '%s' "${metadata}" | jq -r '.provider // ""' 2>/dev/null)"
+			MCP_COMPLETION_PROVIDER_RESOURCE_PATH="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null)"
+			MCP_COMPLETION_PROVIDER_RESOURCE_URI="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.uri // ""' 2>/dev/null)"
+			MCP_COMPLETION_PROVIDER_RESOURCE_PROVIDER="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // ""' 2>/dev/null)"
 			MCP_COMPLETION_PROVIDER_SCRIPT_KEY="resource:${script_rel}"
 			return 0
 		fi
@@ -564,7 +564,7 @@ mcp_completion_normalize_output() {
 	local limit="${2:-5}"
 	local start="${3:-0}"
 	printf '%s' "$(
-		jq -n -c \
+		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg raw "${script_output}" \
 			--argjson limit "${limit}" \
 			--argjson start "${start}" '
@@ -625,7 +625,7 @@ mcp_completion_builtin_generate() {
 	base="${base_candidate}"
 
 	printf '%s' "$(
-		jq -n -c \
+		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg base "${base}" \
 			--arg base_snippet "${base} snippet" \
 			--arg base_example "${base} example" \
@@ -780,20 +780,20 @@ mcp_completion_run_provider() {
 	esac
 
 	local suggestions_json has_more_flag next_index cursor_value
-	if ! suggestions_json="$(printf '%s' "${normalized}" | jq -c '.suggestions // []' 2>/dev/null)"; then
+	if ! suggestions_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.suggestions // []' 2>/dev/null)"; then
 		# shellcheck disable=SC2034
 		MCP_COMPLETION_PROVIDER_RESULT_ERROR="Unable to parse completion suggestions"
 		return 1
 	fi
-	if ! has_more_flag="$(printf '%s' "${normalized}" | jq -r '.hasMore // false' 2>/dev/null)"; then
+	if ! has_more_flag="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hasMore // false' 2>/dev/null)"; then
 		# shellcheck disable=SC2034
 		MCP_COMPLETION_PROVIDER_RESULT_ERROR="Unable to parse completion hasMore flag"
 		return 1
 	fi
-	if ! next_index="$(printf '%s' "${normalized}" | jq -r '.next // ""' 2>/dev/null)"; then
+	if ! next_index="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.next // ""' 2>/dev/null)"; then
 		next_index=""
 	fi
-	if ! cursor_value="$(printf '%s' "${normalized}" | jq -r '.cursor // ""' 2>/dev/null)"; then
+	if ! cursor_value="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.cursor // ""' 2>/dev/null)"; then
 		cursor_value=""
 	fi
 
@@ -816,7 +816,7 @@ mcp_completion_reset() {
 
 mcp_completion_suggestions_count() {
 	local count
-	if ! count="$(printf '%s' "${mcp_completion_suggestions}" | jq 'length' 2>/dev/null)"; then
+	if ! count="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)"; then
 		count=0
 	fi
 	printf '%s' "${count}"
@@ -830,7 +830,7 @@ mcp_completion_add_text() {
 		mcp_completion_has_more=true
 		return 1
 	fi
-	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | jq -c --arg text "${text}" '. + [{type: "text", text: $text}]' 2>/dev/null)"; then
+	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg text "${text}" '. + [{type: "text", text: $text}]' 2>/dev/null)"; then
 		mcp_completion_suggestions="[]"
 		return 1
 	fi
@@ -845,7 +845,7 @@ mcp_completion_add_json() {
 		mcp_completion_has_more=true
 		return 1
 	fi
-	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | jq -c --argjson payload "${json_payload:-"{}"}" '. + [$payload]' 2>/dev/null)"; then
+	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson payload "${json_payload:-"{}"}" '. + [$payload]' 2>/dev/null)"; then
 		mcp_completion_suggestions="[]"
 		return 1
 	fi
@@ -859,7 +859,7 @@ mcp_completion_finalize() {
 	fi
 	local cursor="${mcp_completion_cursor}"
 	printf '%s' "$(
-		jq -n -c \
+		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--argjson suggestions "${mcp_completion_suggestions}" \
 			--argjson has_more "${has_more_json}" \
 			--arg cursor "${cursor}" '

@@ -52,7 +52,7 @@ mcp_tools_manual_finalize() {
 	fi
 
 	local registry_json
-	if ! registry_json="$(printf '%s' "${MCP_TOOLS_MANUAL_BUFFER}" | awk -v RS='\036' '{if ($0 != "") print $0}' | jq -s '
+	if ! registry_json="$(printf '%s' "${MCP_TOOLS_MANUAL_BUFFER}" | awk -v RS='\036' '{if ($0 != "") print $0}' | "${MCPBASH_JSON_TOOL_BIN}" -s '
 		map(select(.name and .path)) |
 		unique_by(.name) |
 		map({
@@ -79,7 +79,7 @@ mcp_tools_manual_finalize() {
 		return 1
 	fi
 
-	registry_json="$(printf '%s' "${registry_json}" | jq -c '
+	registry_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '
 		def ensure_schema:
 			if (type == "object") then
 				(if ((.type // "") | length) > 0 then . else . + {type: "object"} end)
@@ -91,7 +91,7 @@ mcp_tools_manual_finalize() {
 	')"
 
 	local items_json
-	items_json="$(echo "${registry_json}" | jq -c '.items')"
+	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	if command -v sha256sum >/dev/null 2>&1; then
 		hash="$(printf '%s' "${items_json}" | sha256sum | awk '{print $1}')"
@@ -101,12 +101,12 @@ mcp_tools_manual_finalize() {
 		hash="$(printf '%s' "${items_json}" | cksum | awk '{print $1}')"
 	fi
 
-	registry_json="$(echo "${registry_json}" | jq --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local previous_hash="${MCP_TOOLS_REGISTRY_HASH}"
 	MCP_TOOLS_REGISTRY_JSON="${registry_json}"
 	MCP_TOOLS_REGISTRY_HASH="${hash}"
-	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | jq '.total')"
+	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${registry_json}"; then
 		mcp_tools_manual_abort
@@ -127,7 +127,7 @@ mcp_tools_manual_finalize() {
 mcp_tools_normalize_schema() {
 	local raw="$1"
 	local normalized
-	if ! normalized="$({ printf '%s' "${raw}"; } | jq -c '
+	if ! normalized="$({ printf '%s' "${raw}"; } | "${MCPBASH_JSON_TOOL_BIN}" -c '
 		def ensure_schema:
 			if (type == "object") then
 				(if ((.type // "") | length) > 0 then . else . + {type: "object"} end)
@@ -183,14 +183,14 @@ mcp_tools_apply_manual_json() {
 	local manual_json="$1"
 	local registry_json
 
-	if ! echo "${manual_json}" | jq -e '.tools | type == "array"' >/dev/null 2>&1; then
+	if ! echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.tools | type == "array"' >/dev/null 2>&1; then
 		manual_json='{"tools":[]}'
 	fi
 
 	local timestamp
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-	registry_json="$(echo "${manual_json}" | jq --arg ts "${timestamp}" '{
+	registry_json="$(echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg ts "${timestamp}" '{
 		version: 1,
 		generatedAt: $ts,
 		items: .tools,
@@ -198,7 +198,7 @@ mcp_tools_apply_manual_json() {
 	}')"
 
 	local items_json
-	items_json="$(echo "${registry_json}" | jq -c '.items')"
+	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	if command -v sha256sum >/dev/null 2>&1; then
 		hash="$(printf '%s' "${items_json}" | sha256sum | awk '{print $1}')"
@@ -208,7 +208,7 @@ mcp_tools_apply_manual_json() {
 		hash="$(printf '%s' "${items_json}" | cksum | awk '{print $1}')"
 	fi
 
-	registry_json="$(echo "${registry_json}" | jq --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local new_hash="${hash}"
 	if [ "${new_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
@@ -216,7 +216,7 @@ mcp_tools_apply_manual_json() {
 	fi
 	MCP_TOOLS_REGISTRY_JSON="${registry_json}"
 	MCP_TOOLS_REGISTRY_HASH="${new_hash}"
-	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | jq '.total')"
+	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${registry_json}"; then
 		return 1
@@ -300,10 +300,10 @@ mcp_tools_refresh_registry() {
 	if [ -z "${MCP_TOOLS_REGISTRY_JSON}" ] && [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
 		local tmp_json=""
 		if tmp_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}")"; then
-			if echo "${tmp_json}" | jq . >/dev/null 2>&1; then
+			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
 				MCP_TOOLS_REGISTRY_JSON="${tmp_json}"
-				MCP_TOOLS_REGISTRY_HASH="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq -r '.hash // empty')"
-				MCP_TOOLS_TOTAL="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq '.total // 0')"
+				MCP_TOOLS_REGISTRY_HASH="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+				MCP_TOOLS_TOTAL="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
 				if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${MCP_TOOLS_REGISTRY_JSON}"; then
 					return 1
 				fi
@@ -363,12 +363,12 @@ mcp_tools_scan() {
 				local meta
 				meta="$(cat "${meta_json}")"
 				local j_name
-				j_name="$(printf '%s' "${meta}" | jq -r '.name // empty' 2>/dev/null)"
+				j_name="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 				[ -n "${j_name}" ] && name="${j_name}"
-				description="$(printf '%s' "${meta}" | jq -r '.description // empty' 2>/dev/null)"
-				arguments="$(printf '%s' "${meta}" | jq -c '.inputSchema // .arguments // {type: "object", properties: {}}' 2>/dev/null)"
-				timeout="$(printf '%s' "${meta}" | jq -r '.timeoutSecs // empty' 2>/dev/null)"
-				output_schema="$(printf '%s' "${meta}" | jq -c '.outputSchema // null' 2>/dev/null)"
+				description="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
+				arguments="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.inputSchema // .arguments // {type: "object", properties: {}}' 2>/dev/null)"
+				timeout="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
+				output_schema="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
 			fi
 
 			if [ "${arguments}" = "{}" ]; then
@@ -380,21 +380,21 @@ mcp_tools_scan() {
 					local json_payload
 					json_payload="${mcp_line#*mcp:}"
 					local h_name
-					h_name="$(echo "${json_payload}" | jq -r '.name // empty' 2>/dev/null)"
+					h_name="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 					[ -n "${h_name}" ] && name="${h_name}"
 					local h_desc
-					h_desc="$(echo "${json_payload}" | jq -r '.description // empty' 2>/dev/null)"
+					h_desc="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
 					[ -n "${h_desc}" ] && description="${h_desc}"
-					arguments="$(echo "${json_payload}" | jq -c '.arguments // {type: "object", properties: {}}' 2>/dev/null)"
-					timeout="$(echo "${json_payload}" | jq -r '.timeoutSecs // empty' 2>/dev/null)"
-					output_schema="$(echo "${json_payload}" | jq -c '.outputSchema // null' 2>/dev/null)"
+					arguments="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.arguments // {type: "object", properties: {}}' 2>/dev/null)"
+					timeout="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
+					output_schema="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
 				fi
 			fi
 
 			arguments="$(mcp_tools_normalize_schema "${arguments}")"
 
 			# Construct item object
-			jq -n \
+			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
 				--arg path "$rel_path" \
@@ -416,7 +416,7 @@ mcp_tools_scan() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$(jq -s '.' "${items_file}")"
+		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
 	fi
 	rm -f "${items_file}"
 
@@ -430,9 +430,9 @@ mcp_tools_scan() {
 	fi
 
 	local total
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
-	MCP_TOOLS_REGISTRY_JSON="$(jq -n \
+	MCP_TOOLS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
 		--arg ts "${timestamp}" \
 		--arg hash "${hash}" \
@@ -521,24 +521,20 @@ mcp_tools_list() {
 	fi
 
 	local result_json
-	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" '
-		.items[$offset:$offset+$limit] as $page
-		| {
-			items: $page,
-			tools: $page,
-			total: .total
+	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" '
+		{
+			tools: .items[$offset:$offset+$limit]
 		}
 	')"
 
-	local total
-	total="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq '.total')"
+	local total="${MCP_TOOLS_TOTAL}"
 	if [ $((offset + numeric_limit)) -lt "${total}" ]; then
 		local next_offset=$((offset + numeric_limit))
 		local cursor_payload
-		cursor_payload="$(jq -n --arg ver "1" --arg col "tools" --argjson off "$next_offset" --arg hash "${MCP_TOOLS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
+		cursor_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n --arg ver "1" --arg col "tools" --argjson off "$next_offset" --arg hash "${MCP_TOOLS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
 		local encoded
 		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | jq -c --arg next "${encoded}" '.nextCursor = $next')"
+		result_json="$(echo "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg next "${encoded}" '.nextCursor = $next')"
 	fi
 
 	printf '%s' "${result_json}"
@@ -548,7 +544,7 @@ mcp_tools_metadata_for_name() {
 	local name="$1"
 	mcp_tools_refresh_registry || return 1
 	local metadata
-	if ! metadata="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | jq -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
+	if ! metadata="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
 		return 1
 	fi
 	if [ -z "${metadata}" ]; then
@@ -573,10 +569,10 @@ mcp_tools_call() {
 	fi
 
 	local info_json
-	info_json="$(echo "${metadata}" | jq -c '{path, outputSchema, timeoutSecs}')"
+	info_json="$(echo "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -c '{path, outputSchema, timeoutSecs}')"
 
 	local tool_path
-	tool_path="$(echo "${info_json}" | jq -r '.path // empty')"
+	tool_path="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // empty')"
 
 	if [ -z "${tool_path}" ]; then
 		mcp_tools_error -32601 "Tool path unavailable"
@@ -612,10 +608,10 @@ mcp_tools_call() {
 	fi
 
 	local metadata_timeout
-	metadata_timeout="$(echo "${info_json}" | jq -r '.timeoutSecs // empty')"
+	metadata_timeout="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty')"
 
 	local output_schema
-	output_schema="$(echo "${info_json}" | jq -c '.outputSchema // null')"
+	output_schema="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null')"
 
 	local effective_timeout="${timeout_override}"
 	if [ -z "${effective_timeout}" ] && [ -n "${metadata_timeout}" ]; then
@@ -718,7 +714,7 @@ mcp_tools_call() {
 
 	local result_json
 	result_json="$(
-		jq -n -c \
+		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg name "${name}" \
 			--rawfile stdout "${stdout_content}" \
 			--rawfile stderr "${stderr_content}" \

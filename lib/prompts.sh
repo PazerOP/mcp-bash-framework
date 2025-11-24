@@ -72,7 +72,7 @@ mcp_prompts_manual_finalize() {
 	fi
 
 	local items_json
-	if ! items_json="$(printf '%s' "${manual_entries}" | jq -s '
+	if ! items_json="$(printf '%s' "${manual_entries}" | "${MCPBASH_JSON_TOOL_BIN}" -s '
 		map(select(.name and .path)) |
 		unique_by(.name) |
 		map({
@@ -93,9 +93,9 @@ mcp_prompts_manual_finalize() {
 	local hash
 	hash="$(mcp_prompts_hash_string "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
-	MCP_PROMPTS_REGISTRY_JSON="$(jq -n \
+	MCP_PROMPTS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg hash "${hash}" \
 		--argjson items "${items_json}" \
 		--argjson total "${total}" \
@@ -216,17 +216,17 @@ mcp_prompts_init() {
 mcp_prompts_apply_manual_json() {
 	local manual_json="$1"
 	local items_json
-	if ! items_json="$(printf '%s' "${manual_json}" | jq -c '.prompts // []')"; then
+	if ! items_json="$(printf '%s' "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.prompts // []')"; then
 		return 1
 	fi
 
 	local hash
 	hash="$(mcp_prompts_hash_string "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
 	local registry_json
-	registry_json="$(jq -n \
+	registry_json="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg hash "${hash}" \
 		--argjson items "${items_json}" \
 		--argjson total "${total}" \
@@ -270,10 +270,10 @@ mcp_prompts_refresh_registry() {
 	if [ -z "${MCP_PROMPTS_REGISTRY_JSON}" ] && [ -f "${MCP_PROMPTS_REGISTRY_PATH}" ]; then
 		local tmp_json=""
 		if tmp_json="$(cat "${MCP_PROMPTS_REGISTRY_PATH}")"; then
-			if echo "${tmp_json}" | jq . >/dev/null 2>&1; then
+			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
 				MCP_PROMPTS_REGISTRY_JSON="${tmp_json}"
-				MCP_PROMPTS_REGISTRY_HASH="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | jq -r '.hash // empty')"
-				MCP_PROMPTS_TOTAL="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | jq '.total // 0')"
+				MCP_PROMPTS_REGISTRY_HASH="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+				MCP_PROMPTS_TOTAL="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
 				if ! mcp_prompts_enforce_registry_limits "${MCP_PROMPTS_TOTAL}" "${MCP_PROMPTS_REGISTRY_JSON}"; then
 					return 1
 				fi
@@ -329,19 +329,19 @@ mcp_prompts_scan() {
 				local meta
 				meta="$(cat "${meta_json}")"
 				local j_name
-				j_name="$(printf '%s' "${meta}" | jq -r '.name // empty' 2>/dev/null)"
+				j_name="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 				[ -n "${j_name}" ] && name="${j_name}"
-				description="$(printf '%s' "${meta}" | jq -r '.description // empty' 2>/dev/null)"
-				role="$(printf '%s' "${meta}" | jq -r '.role // "user"' 2>/dev/null)"
-				if printf '%s' "${meta}" | jq -e '.arguments' >/dev/null 2>&1; then
-					arguments="$(printf '%s' "${meta}" | jq -c '.arguments')"
+				description="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
+				role="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.role // "user"' 2>/dev/null)"
+				if printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.arguments' >/dev/null 2>&1; then
+					arguments="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.arguments')"
 				fi
-				if printf '%s' "${meta}" | jq -e '.metadata' >/dev/null 2>&1; then
-					metadata="$(printf '%s' "${meta}" | jq -c '.metadata')"
+				if printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.metadata' >/dev/null 2>&1; then
+					metadata="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.metadata')"
 				fi
 			fi
 
-			jq -n \
+			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
 				--arg path "$rel_path" \
@@ -363,16 +363,16 @@ mcp_prompts_scan() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$(jq -s 'sort_by(.name)' "${items_file}")"
+		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"
 	fi
 	rm -f "${items_file}"
 
 	local hash
 	hash="$(mcp_prompts_hash_string "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | jq 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
 
-	MCP_PROMPTS_REGISTRY_JSON="$(jq -n \
+	MCP_PROMPTS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
 		--arg ts "${timestamp}" \
 		--arg hash "${hash}" \
@@ -436,23 +436,21 @@ mcp_prompts_list() {
 	fi
 
 	local result_json
-	result_json="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | jq -c --argjson offset "$offset" --argjson limit "$numeric_limit" '
+	result_json="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" '
 		{
-			items: .items[$offset:$offset+$limit],
-			total: .total
+			prompts: .items[$offset:$offset+$limit]
 		}
 	')"
 
 	# Check if we have a next cursor
-	local total
-	total="$(echo "${result_json}" | jq '.total')"
+	local total="${MCP_PROMPTS_TOTAL}"
 	if [ $((offset + numeric_limit)) -lt "${total}" ]; then
 		local next_offset=$((offset + numeric_limit))
 		local cursor_payload
-		cursor_payload="$(jq -n --arg ver "1" --arg col "prompts" --argjson off "$next_offset" --arg hash "${MCP_PROMPTS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
+		cursor_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n --arg ver "1" --arg col "prompts" --argjson off "$next_offset" --arg hash "${MCP_PROMPTS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
 		local encoded
 		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | jq -c --arg next "${encoded}" '.nextCursor = $next')"
+		result_json="$(echo "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg next "${encoded}" '.nextCursor = $next')"
 	fi
 
 	printf '%s' "${result_json}"
@@ -462,7 +460,7 @@ mcp_prompts_metadata_for_name() {
 	local name="$1"
 	mcp_prompts_refresh_registry || return 1
 	local metadata
-	if ! metadata="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | jq -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
+	if ! metadata="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
 		return 1
 	fi
 	[ -z "${metadata}" ] && return 1
@@ -473,10 +471,10 @@ mcp_prompts_render() {
 	local metadata="$1"
 	local args_json="$2"
 	local path description role metadata_value
-	path="$(printf '%s' "${metadata}" | jq -r '.path // empty')"
-	description="$(printf '%s' "${metadata}" | jq -r '.description // ""')"
-	role="$(printf '%s' "${metadata}" | jq -r '.role // "system"')"
-	metadata_value="$(printf '%s' "${metadata}" | jq -c '.metadata // null')"
+	path="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // empty')"
+	description="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // ""')"
+	role="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.role // "system"')"
+	metadata_value="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.metadata // null')"
 
 	if [ -z "${path}" ]; then
 		mcp_prompts_emit_render_result "" "${args_json}" "${role}" "${description}" "${metadata_value}"
@@ -490,13 +488,13 @@ mcp_prompts_render() {
 	fi
 
 	local normalized_args="${args_json}"
-	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | jq empty >/dev/null 2>&1; then
+	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | "${MCPBASH_JSON_TOOL_BIN}" empty >/dev/null 2>&1; then
 		normalized_args="{}"
 	fi
 
 	local export_pairs=""
 	if ! export_pairs="$(
-		printf '%s' "${normalized_args}" | jq -r '
+		printf '%s' "${normalized_args}" | "${MCPBASH_JSON_TOOL_BIN}" -r '
 			def allowed($key; $val):
 				($key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
 				and ((["string","number","boolean"] | index($val|type)) != null);
@@ -549,7 +547,7 @@ mcp_prompts_emit_render_result() {
 	local metadata_value="$5"
 
 	local normalized_args="${args_json}"
-	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | jq empty >/dev/null 2>&1; then
+	if [ -z "${normalized_args}" ] || ! printf '%s' "${normalized_args}" | "${MCPBASH_JSON_TOOL_BIN}" empty >/dev/null 2>&1; then
 		normalized_args="{}"
 	fi
 	local normalized_meta="${metadata_value:-null}"
@@ -557,7 +555,7 @@ mcp_prompts_emit_render_result() {
 		normalized_meta="null"
 	fi
 
-	jq -n -c \
+	"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 		--arg text "${text}" \
 		--arg role "${role}" \
 		--arg desc "${description}" \

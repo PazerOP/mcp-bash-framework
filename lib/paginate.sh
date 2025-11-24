@@ -42,7 +42,7 @@ mcp_paginate_encode() {
 	local timestamp="${4:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 	local payload encoded
 
-	payload="$(jq -n \
+	payload="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg collection "${collection}" \
 		--argjson offset "${offset:-0}" \
 		--arg hash "${hash}" \
@@ -65,15 +65,15 @@ mcp_paginate_decode() {
 	decoded="$(mcp_paginate_base64_urldecode "${cursor}")" || return 1
 
 	local offset collection hash
-	collection="$(printf '%s' "${decoded}" | jq -r '.collection // empty')" || return 1
+	collection="$(printf '%s' "${decoded}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.collection // empty')" || return 1
 	if [ "${collection}" != "${expected_collection}" ] || [ -z "${collection}" ]; then
 		return 1
 	fi
-	hash="$(printf '%s' "${decoded}" | jq -r '.hash // empty')" || return 1
+	hash="$(printf '%s' "${decoded}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')" || return 1
 	if [ -n "${expected_hash}" ] && [ "${hash}" != "${expected_hash}" ]; then
 		return 2
 	fi
-	offset="$(printf '%s' "${decoded}" | jq -r '.offset // 0')" || return 1
+	offset="$(printf '%s' "${decoded}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.offset // 0')" || return 1
 	if ! [[ "${offset}" =~ ^[0-9]+$ ]]; then
 		return 1
 	fi
