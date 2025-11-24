@@ -22,18 +22,26 @@ trap cleanup EXIT INT TERM
 
 printf 'Detected JSON tooling: %s\n' "${MCPBASH_JSON_TOOL:-unknown}" >&2
 
+# Copy framework files
 cp -a "${SCRIPT_DIR}/../bin" "${TMPDIR}/"
 cp -a "${SCRIPT_DIR}/../lib" "${TMPDIR}/"
 cp -a "${SCRIPT_DIR}/../handlers" "${TMPDIR}/"
 cp -a "${SCRIPT_DIR}/../providers" "${TMPDIR}/"
 cp -a "${SCRIPT_DIR}/../sdk" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../resources" "${TMPDIR}/" 2>/dev/null || true
-cp -a "${SCRIPT_DIR}/../tools" "${TMPDIR}/" 2>/dev/null || true
-cp -a "${SCRIPT_DIR}/../prompts" "${TMPDIR}/" 2>/dev/null || true
+cp -a "${SCRIPT_DIR}/../scaffold" "${TMPDIR}/" 2>/dev/null || true
+
+# Create project directories
+mkdir -p "${TMPDIR}/tools"
+mkdir -p "${TMPDIR}/resources"
+mkdir -p "${TMPDIR}/prompts"
+mkdir -p "${TMPDIR}/server.d"
+
+# Copy example content into project directories
 cp -a "${EXAMPLE_DIR}/"* "${TMPDIR}/" 2>/dev/null || true
 
 # Debug: List tools dir
 ls -la "${TMPDIR}/tools" >&2
 
 cd "${TMPDIR}" || exit 1
+export MCPBASH_PROJECT_ROOT="${TMPDIR}"
 exec "${TMPDIR}/bin/mcp-bash"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Target Runtime Environment: JSON tooling detection, minimal-mode controls, and compatibility flags.
+# Path resolution for framework/project separation.
 
 # shellcheck disable=SC2034
 MCPBASH_JSON_TOOL=""
@@ -13,11 +14,52 @@ MCPBASH_STATE_SEED=""
 MCPBASH_CLEANUP_REGISTERED="false"
 MCPBASH_JOB_CONTROL_ENABLED="false"
 MCPBASH_PROCESS_GROUP_WARNED="false"
+
+# Content directory variables (set by mcp_runtime_init_paths)
 MCPBASH_REGISTRY_DIR=""
 MCPBASH_TOOLS_DIR=""
-MCPBASH_REGISTER_SCRIPT=""
+MCPBASH_RESOURCES_DIR=""
+MCPBASH_PROMPTS_DIR=""
+MCPBASH_SERVER_DIR=""
+
+# Validate that MCPBASH_PROJECT_ROOT is set and exists.
+# Called early in startup; exits with helpful error if not configured.
+mcp_runtime_require_project_root() {
+	if [ -z "${MCPBASH_PROJECT_ROOT:-}" ]; then
+		cat >&2 <<'EOF'
+mcp-bash: MCPBASH_PROJECT_ROOT is not set.
+
+mcp-bash requires a project directory separate from the framework.
+Set MCPBASH_PROJECT_ROOT to your project directory containing tools/, prompts/, resources/.
+
+Example (Claude Desktop config):
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/Users/you/mcp-bash/bin/mcp-bash",
+      "env": {
+        "MCPBASH_PROJECT_ROOT": "/path/to/my-project"
+      }
+    }
+  }
+}
+
+See: https://github.com/yaniv-golan/mcp-bash#quick-start
+EOF
+		exit 1
+	fi
+
+	if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
+		printf 'mcp-bash: MCPBASH_PROJECT_ROOT directory does not exist: %s\n' "${MCPBASH_PROJECT_ROOT}" >&2
+		exit 1
+	fi
+}
 
 mcp_runtime_init_paths() {
+	# Require MCPBASH_PROJECT_ROOT to be set
+	mcp_runtime_require_project_root
+
+	# Temporary/state directories
 	if [ -z "${MCPBASH_TMP_ROOT}" ]; then
 		local tmp="${TMPDIR:-/tmp}"
 		tmp="${tmp%/}"
@@ -42,19 +84,54 @@ mcp_runtime_init_paths() {
 		MCPBASH_STATE_DIR="${MCPBASH_TMP_ROOT}/mcpbash.state.${PPID}.${pid_component}.${MCPBASH_STATE_SEED}"
 	fi
 
+	# Content directories: explicit override → project default
+	# Registry: hidden .registry in project for cache files
 	if [ -z "${MCPBASH_REGISTRY_DIR}" ]; then
-		MCPBASH_REGISTRY_DIR="${MCPBASH_ROOT}/registry"
+		MCPBASH_REGISTRY_DIR="${MCPBASH_PROJECT_ROOT}/.registry"
 	fi
 	mkdir -p "${MCPBASH_REGISTRY_DIR}"
 
+	# Tools directory
 	if [ -z "${MCPBASH_TOOLS_DIR}" ]; then
-		MCPBASH_TOOLS_DIR="${MCPBASH_ROOT}/tools"
+		MCPBASH_TOOLS_DIR="${MCPBASH_PROJECT_ROOT}/tools"
 	fi
-
 	mkdir -p "${MCPBASH_TOOLS_DIR}" >/dev/null 2>&1 || true
 
-	if [ -z "${MCPBASH_REGISTER_SCRIPT}" ]; then
-		MCPBASH_REGISTER_SCRIPT="${MCPBASH_ROOT}/server.d/register.sh"
+	# Resources directory
+	if [ -z "${MCPBASH_RESOURCES_DIR}" ]; then
+		MCPBASH_RESOURCES_DIR="${MCPBASH_PROJECT_ROOT}/resources"
+	fi
+	mkdir -p "${MCPBASH_RESOURCES_DIR}" >/dev/null 2>&1 || true
+
+	# Prompts directory
+	if [ -z "${MCPBASH_PROMPTS_DIR}" ]; then
+		MCPBASH_PROMPTS_DIR="${MCPBASH_PROJECT_ROOT}/prompts"
+	fi
+	mkdir -p "${MCPBASH_PROMPTS_DIR}" >/dev/null 2>&1 || true
+
+	# Server hooks directory
+	if [ -z "${MCPBASH_SERVER_DIR}" ]; then
+		MCPBASH_SERVER_DIR="${MCPBASH_PROJECT_ROOT}/server.d"
+	fi
+	mkdir -p "${MCPBASH_SERVER_DIR}" >/dev/null 2>&1 || true
+
+	# Debug: log resolved paths
+	mcp_runtime_log_resolved_paths
+}
+
+# Log all resolved paths when MCPBASH_LOG_LEVEL=debug
+mcp_runtime_log_resolved_paths() {
+	if [ "${MCPBASH_LOG_LEVEL:-info}" = "debug" ]; then
+		cat >&2 <<EOF
+mcp-bash: Resolved paths:
+  MCPBASH_HOME=${MCPBASH_HOME}
+  MCPBASH_PROJECT_ROOT=${MCPBASH_PROJECT_ROOT}
+  MCPBASH_TOOLS_DIR=${MCPBASH_TOOLS_DIR}
+  MCPBASH_RESOURCES_DIR=${MCPBASH_RESOURCES_DIR}
+  MCPBASH_PROMPTS_DIR=${MCPBASH_PROMPTS_DIR}
+  MCPBASH_SERVER_DIR=${MCPBASH_SERVER_DIR}
+  MCPBASH_REGISTRY_DIR=${MCPBASH_REGISTRY_DIR}
+EOF
 	fi
 }
 

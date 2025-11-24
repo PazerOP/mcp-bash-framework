@@ -17,11 +17,18 @@ trap cleanup EXIT
 stage_workspace() {
 	local dest="$1"
 	mkdir -p "${dest}"
+	# Copy framework files
 	cp -a "${REPO_ROOT}/bin" "${dest}/"
 	cp -a "${REPO_ROOT}/lib" "${dest}/"
 	cp -a "${REPO_ROOT}/handlers" "${dest}/"
 	cp -a "${REPO_ROOT}/providers" "${dest}/"
 	cp -a "${REPO_ROOT}/sdk" "${dest}/"
+	cp -a "${REPO_ROOT}/scaffold" "${dest}/" 2>/dev/null || true
+	# Create project directories
+	mkdir -p "${dest}/tools"
+	mkdir -p "${dest}/resources"
+	mkdir -p "${dest}/prompts"
+	mkdir -p "${dest}/server.d"
 }
 
 WORKSPACE="${TMP_ROOT}/workspace"
@@ -42,6 +49,7 @@ printf 'Enable payload logging via MCPBASH_DEBUG_PAYLOADS=true for stdout traces
 
 (
 	cd "${WORKSPACE}" || exit 1
+	export MCPBASH_PROJECT_ROOT="${WORKSPACE}"
 
 	# Start server
 	coproc SERVER { ./bin/mcp-bash; }

@@ -128,7 +128,7 @@ mcp_prompts_manual_finalize() {
 }
 
 mcp_prompts_run_manual_script() {
-	if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		return 1
 	fi
 
@@ -140,7 +140,7 @@ mcp_prompts_run_manual_script() {
 
 	set +e
 	# shellcheck disable=SC1090
-	. "${MCPBASH_REGISTER_SCRIPT}" >"${script_output_file}" 2>&1
+	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
 	script_status=$?
 	set -e
 
@@ -210,7 +210,7 @@ mcp_prompts_init() {
 		MCP_PROMPTS_REGISTRY_PATH="${MCPBASH_REGISTRY_DIR}/prompts.json"
 	fi
 	mkdir -p "${MCPBASH_REGISTRY_DIR}"
-	mkdir -p "${MCPBASH_ROOT}/prompts" >/dev/null 2>&1 || true
+	mkdir -p "${MCPBASH_PROMPTS_DIR}" >/dev/null 2>&1 || true
 }
 
 mcp_prompts_apply_manual_json() {
@@ -257,7 +257,7 @@ mcp_prompts_apply_manual_json() {
 
 mcp_prompts_refresh_registry() {
 	mcp_prompts_init
-	if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		if mcp_prompts_run_manual_script; then
 			return 0
 		fi
@@ -298,13 +298,13 @@ mcp_prompts_refresh_registry() {
 }
 
 mcp_prompts_scan() {
-	local prompts_dir="${MCPBASH_ROOT}/prompts"
+	local prompts_dir="${MCPBASH_PROMPTS_DIR}"
 	local items_file
 	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-prompts-items.XXXXXX")"
 
 	if [ -d "${prompts_dir}" ]; then
 		find "${prompts_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
-			local rel_path="${path#"${MCPBASH_ROOT}"/}"
+			local rel_path="${path#"${MCPBASH_PROMPTS_DIR}"/}"
 			local base_name
 			base_name="$(basename "${path}")"
 			local name="${base_name%.*}"
@@ -481,7 +481,7 @@ mcp_prompts_render() {
 		return 0
 	fi
 
-	local full_path="${MCPBASH_ROOT}/${path}"
+	local full_path="${MCPBASH_PROMPTS_DIR}/${path}"
 	if [ ! -f "${full_path}" ]; then
 		mcp_prompts_emit_render_result "" "${args_json}" "${role}" "${description}" "${metadata_value}"
 		return 0

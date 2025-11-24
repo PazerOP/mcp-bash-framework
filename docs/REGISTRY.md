@@ -1,6 +1,6 @@
 # Registry JSON Contracts
 
-The registries are generated automatically at runtime and cached under `registry/*.json` to accelerate pagination and reactive notifications. Each registry shares a common envelope and differs only in the shape of the `items` array.
+The registries are generated automatically at runtime and cached under `$MCPBASH_PROJECT_ROOT/.registry/*.json` to accelerate pagination and reactive notifications. Each registry shares a common envelope and differs only in the shape of the `items` array.
 
 ## Common Envelope
 
@@ -27,9 +27,9 @@ Guardrails are enforced for all registries:
 - When `total > 500`, the server logs a warning suggesting manual registration.
 - If the serialised registry exceeds `MCPBASH_REGISTRY_MAX_BYTES` (default 100 MB), the scan aborts with `-32603`.
 
-## `registry/tools.json`
+## `.registry/tools.json`
 
-Each entry describes an executable tool.
+Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DIR`.
 
 ```json
 {
@@ -39,7 +39,7 @@ Each entry describes an executable tool.
     {
       "name": "example.hello",
       "description": "Return a friendly greeting",
-      "path": "examples/00-hello-tool/tools/hello.sh",
+      "path": "hello/hello.sh",
       "arguments": {
         "type": "object",
         "properties": {}
@@ -64,9 +64,9 @@ Metadata precedence order:
 2. Inline `# mcp:` annotations (JSON payload)
 3. Defaults (empty `arguments`, no `outputSchema`)
 
-## `registry/resources.json`
+## `.registry/resources.json`
 
-Entries describe resource templates and providers.
+Entries describe resource templates and providers. Paths are relative to `MCPBASH_RESOURCES_DIR`.
 
 ```json
 {
@@ -76,7 +76,7 @@ Entries describe resource templates and providers.
     {
       "name": "file.readme",
       "description": "Serve README fragments",
-      "path": "resources/readme.sh",
+      "path": "readme/readme.sh",
       "arguments": {
         "type": "object",
         "properties": {
@@ -85,7 +85,7 @@ Entries describe resource templates and providers.
           }
         }
       },
-      "uri": "file:///${MCPBASH_ROOT}/README.md",
+      "uri": "file:///path/to/project/resources/readme/README.md",
       "mimeType": "text/markdown"
     }
   ],
@@ -97,9 +97,9 @@ Entries describe resource templates and providers.
 - Metadata that cannot be parsed (missing `uri`, unsupported `provider`, non-object `arguments`, unreadable `.meta.json`) is skipped and logged as a warning through the structured logging subsystem.
 - When no `provider` is specified, the scanner infers one from the URI scheme (`file://`, `git://`, `https://`); unrecognised schemes default to `file` and are rejected if the provider script is unavailable.
 
-## `registry/prompts.json`
+## `.registry/prompts.json`
 
-Entries reference prompt templates and metadata.
+Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_PROMPTS_DIR`.
 
 ```json
 {
@@ -109,7 +109,7 @@ Entries reference prompt templates and metadata.
     {
       "name": "summarise.notes",
       "description": "Summarise meeting notes",
-      "path": "prompts/summarise.txt",
+      "path": "summarise/summarise.txt",
       "arguments": {
         "type": "object",
         "required": ["notes"],

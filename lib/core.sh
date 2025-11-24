@@ -35,13 +35,13 @@ mcp_core_run() {
 }
 
 mcp_core_require_handlers() {
-	. "${MCPBASH_ROOT}/handlers/lifecycle.sh"
-	. "${MCPBASH_ROOT}/handlers/ping.sh"
-	. "${MCPBASH_ROOT}/handlers/logging.sh"
-	. "${MCPBASH_ROOT}/handlers/tools.sh"
-	. "${MCPBASH_ROOT}/handlers/resources.sh"
-	. "${MCPBASH_ROOT}/handlers/prompts.sh"
-	. "${MCPBASH_ROOT}/handlers/completion.sh"
+	. "${MCPBASH_HOME}/handlers/lifecycle.sh"
+	. "${MCPBASH_HOME}/handlers/ping.sh"
+	. "${MCPBASH_HOME}/handlers/logging.sh"
+	. "${MCPBASH_HOME}/handlers/tools.sh"
+	. "${MCPBASH_HOME}/handlers/resources.sh"
+	. "${MCPBASH_HOME}/handlers/prompts.sh"
+	. "${MCPBASH_HOME}/handlers/completion.sh"
 }
 
 mcp_core_bootstrap_state() {
@@ -53,7 +53,7 @@ mcp_core_bootstrap_state() {
 	mcp_lock_init
 	mcp_io_init
 	mcp_runtime_enable_job_control
-	. "${MCPBASH_ROOT}/lib/timeout.sh"
+	. "${MCPBASH_HOME}/lib/timeout.sh"
 	MCPBASH_MAIN_PGID="$(mcp_runtime_lookup_pgid "$$")"
 	MCPBASH_MAX_CONCURRENT_REQUESTS="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
 	MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"

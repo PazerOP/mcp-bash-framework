@@ -18,20 +18,27 @@ test_stage_example() {
 		test_fail "example id required"
 	fi
 	test_create_tmpdir
-	EXAMPLE_DIR="${MCPBASH_ROOT}/examples/${example_id}"
+	EXAMPLE_DIR="${MCPBASH_HOME}/examples/${example_id}"
 	if [ ! -d "${EXAMPLE_DIR}" ]; then
 		test_fail "example ${example_id} not found"
 	fi
 	TMP_WORKDIR="$(mktemp -d "${TEST_TMPDIR}/example.XXXXXX")"
-	cp -a "${MCPBASH_ROOT}/bin" "${TMP_WORKDIR}/"
-	cp -a "${MCPBASH_ROOT}/lib" "${TMP_WORKDIR}/"
-	cp -a "${MCPBASH_ROOT}/handlers" "${TMP_WORKDIR}/"
-	cp -a "${MCPBASH_ROOT}/providers" "${TMP_WORKDIR}/"
-	cp -a "${MCPBASH_ROOT}/sdk" "${TMP_WORKDIR}/"
-	cp -a "${MCPBASH_ROOT}/resources" "${TMP_WORKDIR}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/tools" "${TMP_WORKDIR}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/prompts" "${TMP_WORKDIR}/" 2>/dev/null || true
+	# Copy framework files
+	cp -a "${MCPBASH_HOME}/bin" "${TMP_WORKDIR}/"
+	cp -a "${MCPBASH_HOME}/lib" "${TMP_WORKDIR}/"
+	cp -a "${MCPBASH_HOME}/handlers" "${TMP_WORKDIR}/"
+	cp -a "${MCPBASH_HOME}/providers" "${TMP_WORKDIR}/"
+	cp -a "${MCPBASH_HOME}/sdk" "${TMP_WORKDIR}/"
+	cp -a "${MCPBASH_HOME}/scaffold" "${TMP_WORKDIR}/" 2>/dev/null || true
+	# Create project directories
+	mkdir -p "${TMP_WORKDIR}/tools"
+	mkdir -p "${TMP_WORKDIR}/resources"
+	mkdir -p "${TMP_WORKDIR}/prompts"
+	mkdir -p "${TMP_WORKDIR}/server.d"
+	# Copy example content into project directories
 	cp -a "${EXAMPLE_DIR}/"* "${TMP_WORKDIR}/" 2>/dev/null || true
 	# shellcheck disable=SC2034
 	MCP_TEST_WORKDIR="${TMP_WORKDIR}"
+	# Export MCPBASH_PROJECT_ROOT for the test
+	export MCPBASH_PROJECT_ROOT="${TMP_WORKDIR}"
 }

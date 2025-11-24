@@ -14,14 +14,18 @@ test_create_tmpdir
 stage_workspace() {
 	local dest="$1"
 	mkdir -p "${dest}"
-	cp -a "${MCPBASH_ROOT}/bin" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/lib" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/handlers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/providers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/sdk" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/resources" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/prompts" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/server.d" "${dest}/"
+	# Copy framework files
+	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
+	cp -a "${MCPBASH_HOME}/lib" "${dest}/"
+	cp -a "${MCPBASH_HOME}/handlers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/providers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/sdk" "${dest}/"
+	cp -a "${MCPBASH_HOME}/scaffold" "${dest}/" 2>/dev/null || true
+	# Create project directories
+	mkdir -p "${dest}/tools"
+	mkdir -p "${dest}/resources"
+	mkdir -p "${dest}/prompts"
+	mkdir -p "${dest}/server.d"
 }
 
 run_server() {
@@ -30,7 +34,7 @@ run_server() {
 	local response_file="$3"
 	(
 		cd "${workdir}" || exit 1
-		./bin/mcp-bash <"${request_file}" >"${response_file}"
+		MCPBASH_PROJECT_ROOT="${workdir}" ./bin/mcp-bash <"${request_file}" >"${response_file}"
 	)
 }
 
@@ -40,7 +44,7 @@ stage_workspace "${AUTO_ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/tools"
-cp -a "${MCPBASH_ROOT}/examples/00-hello-tool/tools/." "${AUTO_ROOT}/tools/"
+cp -a "${MCPBASH_HOME}/examples/00-hello-tool/tools/." "${AUTO_ROOT}/tools/"
 
 cat <<'METADATA' >"${AUTO_ROOT}/tools/world.meta.json"
 {
@@ -119,10 +123,11 @@ cat <<'SCRIPT' >"${MANUAL_ROOT}/server.d/register.sh"
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Paths are relative to MCPBASH_TOOLS_DIR (not MCPBASH_PROJECT_ROOT)
 mcp_register_tool '{
   "name": "manual-alpha",
   "description": "Manual alpha tool",
-  "path": "tools/manual/alpha.sh",
+  "path": "manual/alpha.sh",
   "arguments": {"type": "object", "properties": {}},
   "outputSchema": {
     "type": "object",
@@ -134,7 +139,7 @@ mcp_register_tool '{
 mcp_register_tool '{
   "name": "manual-beta",
   "description": "Manual beta tool",
-  "path": "tools/manual/beta.sh",
+  "path": "manual/beta.sh",
   "arguments": {"type": "object", "properties": {}}
 }'
 

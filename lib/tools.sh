@@ -226,7 +226,7 @@ mcp_tools_apply_manual_json() {
 }
 
 mcp_tools_run_manual_script() {
-	if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		return 1
 	fi
 
@@ -243,7 +243,7 @@ mcp_tools_run_manual_script() {
 
 	set +e
 	# shellcheck disable=SC1090
-	. "${MCPBASH_REGISTER_SCRIPT}" >"${script_output_file}" 2>&1
+	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
 	script_status=$?
 	set -e
 
@@ -288,7 +288,7 @@ mcp_tools_run_manual_script() {
 
 mcp_tools_refresh_registry() {
 	mcp_tools_init
-	if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		if mcp_tools_run_manual_script; then
 			return 0
 		fi
@@ -338,7 +338,7 @@ mcp_tools_scan() {
 					continue
 				fi
 			fi
-			local rel_path="${path#"${MCPBASH_ROOT}"/}"
+			local rel_path="${path#"${MCPBASH_TOOLS_DIR}"/}"
 			local base_name
 			base_name="$(basename "${path}")"
 			local name="${base_name%.*}"
@@ -579,7 +579,7 @@ mcp_tools_call() {
 		return 1
 	fi
 
-	local absolute_path="${MCPBASH_ROOT}/${tool_path}"
+	local absolute_path="${MCPBASH_TOOLS_DIR}/${tool_path}"
 	if [ ! -x "${absolute_path}" ]; then
 		mcp_tools_error -32601 "Tool executable missing"
 		return 1
@@ -629,8 +629,8 @@ mcp_tools_call() {
 
 	local exit_code
 	(
-		cd "${MCPBASH_ROOT}" || exit 1
-		MCP_SDK="${MCPBASH_ROOT}/sdk"
+		cd "${MCPBASH_PROJECT_ROOT}" || exit 1
+		MCP_SDK="${MCPBASH_HOME}/sdk"
 		MCP_TOOL_NAME="${name}"
 		MCP_TOOL_PATH="${absolute_path}"
 		MCP_TOOL_ARGS_JSON="${args_env_value}"

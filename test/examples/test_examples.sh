@@ -18,7 +18,7 @@ test_require_command python3 || test_require_command python
 
 discover_examples() {
 	local entry
-	for entry in "${MCPBASH_ROOT}/examples/"[0-9][0-9]-*; do
+	for entry in "${MCPBASH_HOME}/examples/"[0-9][0-9]-*; do
 		[ -d "${entry}" ] || continue
 		basename "${entry}"
 	done
@@ -34,9 +34,9 @@ run_example_suite() {
 	local tool_name=""
 	local py_meta
 	py_meta="$(command -v python3 2>/dev/null || command -v python)"
-	if [ -n "${py_meta}" ] && [ -d "${MCPBASH_ROOT}/examples/${example_id}/tools" ]; then
+	if [ -n "${py_meta}" ] && [ -d "${MCPBASH_HOME}/examples/${example_id}/tools" ]; then
 		if ! tool_name="$(
-			"${py_meta}" - "${MCPBASH_ROOT}/examples/${example_id}/tools" <<'PY'
+			"${py_meta}" - "${MCPBASH_HOME}/examples/${example_id}/tools" <<'PY'
 import json, os, sys
 tools_dir = sys.argv[1]
 for entry in sorted(os.listdir(tools_dir)):
@@ -114,7 +114,7 @@ while IFS= read -r entry; do
 done < <(discover_examples)
 
 if [ "${#examples[@]}" -eq 0 ]; then
-	printf 'No examples discovered under %s\n' "${MCPBASH_ROOT}/examples" >&2
+	printf 'No examples discovered under %s\n' "${MCPBASH_HOME}/examples" >&2
 	exit 1
 fi
 

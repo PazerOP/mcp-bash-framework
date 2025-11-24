@@ -76,19 +76,61 @@ PY
 	mcp_url_encode "file://${abs_path}"
 }
 
+# Require MCPBASH_PROJECT_ROOT for scaffolding commands
+mcp_scaffold_require_project_root() {
+	if [ -z "${MCPBASH_PROJECT_ROOT:-}" ]; then
+		cat >&2 <<'EOF'
+mcp-bash scaffold: MCPBASH_PROJECT_ROOT is not set.
+
+Scaffolding requires a project directory. Set MCPBASH_PROJECT_ROOT first:
+
+  export MCPBASH_PROJECT_ROOT=/path/to/my-project
+  mcp-bash scaffold tool my-tool
+
+See: https://github.com/yaniv-golan/mcp-bash#quick-start
+EOF
+		exit 1
+	fi
+
+	if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
+		printf 'mcp-bash scaffold: MCPBASH_PROJECT_ROOT directory does not exist: %s\n' "${MCPBASH_PROJECT_ROOT}" >&2
+		printf 'Create it first: mkdir -p %s\n' "${MCPBASH_PROJECT_ROOT}" >&2
+		exit 1
+	fi
+}
+
+# Initialize paths for scaffolding (lighter than full runtime init)
+initialize_scaffold_paths() {
+	local script_dir=""
+	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
+
+	# Set content directory paths based on MCPBASH_PROJECT_ROOT
+	if [ -z "${MCPBASH_TOOLS_DIR:-}" ]; then
+		MCPBASH_TOOLS_DIR="${MCPBASH_PROJECT_ROOT}/tools"
+	fi
+	if [ -z "${MCPBASH_RESOURCES_DIR:-}" ]; then
+		MCPBASH_RESOURCES_DIR="${MCPBASH_PROJECT_ROOT}/resources"
+	fi
+	if [ -z "${MCPBASH_PROMPTS_DIR:-}" ]; then
+		MCPBASH_PROMPTS_DIR="${MCPBASH_PROJECT_ROOT}/prompts"
+	fi
+}
+
 mcp_scaffold_tool() {
 	local name="$1"
 	if [ -z "${name}" ]; then
 		printf 'Tool name required\n' >&2
 		exit 1
 	fi
-	initialize_runtime_paths
-	local scaffold_dir="${MCPBASH_ROOT}/scaffold/tool"
+	mcp_scaffold_require_project_root
+	initialize_scaffold_paths
+	local scaffold_dir="${MCPBASH_HOME}/scaffold/tool"
 	if [ ! -d "${scaffold_dir}" ]; then
 		printf 'Scaffold templates missing at %s\n' "${scaffold_dir}" >&2
 		exit 1
 	fi
-	local target_dir="tools/${name}"
+	local target_dir="${MCPBASH_TOOLS_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
 		printf 'Target %s already exists\n' "${target_dir}" >&2
 		exit 1
@@ -108,13 +150,14 @@ mcp_scaffold_prompt() {
 		printf 'Prompt name required\n' >&2
 		exit 1
 	fi
-	initialize_runtime_paths
-	local scaffold_dir="${MCPBASH_ROOT}/scaffold/prompt"
+	mcp_scaffold_require_project_root
+	initialize_scaffold_paths
+	local scaffold_dir="${MCPBASH_HOME}/scaffold/prompt"
 	if [ ! -d "${scaffold_dir}" ]; then
 		printf 'Scaffold templates missing at %s\n' "${scaffold_dir}" >&2
 		exit 1
 	fi
-	local target_dir="prompts/${name}"
+	local target_dir="${MCPBASH_PROMPTS_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
 		printf 'Target %s already exists\n' "${target_dir}" >&2
 		exit 1
@@ -133,20 +176,21 @@ mcp_scaffold_resource() {
 		printf 'Resource name required\n' >&2
 		exit 1
 	fi
-	initialize_runtime_paths
-	local scaffold_dir="${MCPBASH_ROOT}/scaffold/resource"
+	mcp_scaffold_require_project_root
+	initialize_scaffold_paths
+	local scaffold_dir="${MCPBASH_HOME}/scaffold/resource"
 	if [ ! -d "${scaffold_dir}" ]; then
 		printf 'Scaffold templates missing at %s\n' "${scaffold_dir}" >&2
 		exit 1
 	fi
-	local target_dir="resources/${name}"
+	local target_dir="${MCPBASH_RESOURCES_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
 		printf 'Target %s already exists\n' "${target_dir}" >&2
 		exit 1
 	fi
 	mkdir -p "${target_dir}"
 	mcp_template_render "${scaffold_dir}/resource.txt" "${target_dir}/${name}.txt" "__NAME__=${name}"
-	local resource_abs_path="${MCPBASH_ROOT}/resources/${name}/${name}.txt"
+	local resource_abs_path="${target_dir}/${name}.txt"
 	local resource_uri=""
 
 	if [ -f "${resource_abs_path}" ]; then
@@ -174,7 +218,7 @@ MCPBASH_SERVER_TITLE="MCP Bash Server"
 MCPBASH_SERVER_VERSION="0.1.0"
 MCPBASH_PROTOCOL_VERSION="2025-06-18"
 MCPBASH_NEGOTIATED_PROTOCOL_VERSION="${MCPBASH_PROTOCOL_VERSION}"
-MCPBASH_ROOT=""
+MCPBASH_HOME=""
 
 require_bash_runtime() {
 	if [ -z "${BASH_VERSION-}" ]; then
@@ -196,46 +240,46 @@ initialize_runtime_paths() {
 	local script_dir=""
 
 	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	MCPBASH_ROOT="$(cd "${script_dir}/.." && pwd)"
+	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
 
 	local required_libs="runtime json ids lock io paginate logging spec tools resources prompts completion rpc core"
 	local lib
 
 	for lib in ${required_libs}; do
-		if [ ! -r "${MCPBASH_ROOT}/lib/${lib}.sh" ]; then
-			printf '%s\n' "Missing required library at ${MCPBASH_ROOT}/lib/${lib}.sh (bootstrap prerequisites)." >&2
+		if [ ! -r "${MCPBASH_HOME}/lib/${lib}.sh" ]; then
+			printf '%s\n' "Missing required library at ${MCPBASH_HOME}/lib/${lib}.sh (bootstrap prerequisites)." >&2
 			exit 1
 		fi
 	done
 
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/runtime.sh"
+	. "${MCPBASH_HOME}/lib/runtime.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/json.sh"
+	. "${MCPBASH_HOME}/lib/json.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/ids.sh"
+	. "${MCPBASH_HOME}/lib/ids.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/lock.sh"
+	. "${MCPBASH_HOME}/lib/lock.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/io.sh"
+	. "${MCPBASH_HOME}/lib/io.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/paginate.sh"
+	. "${MCPBASH_HOME}/lib/paginate.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/logging.sh"
+	. "${MCPBASH_HOME}/lib/logging.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/spec.sh"
+	. "${MCPBASH_HOME}/lib/spec.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/tools.sh"
+	. "${MCPBASH_HOME}/lib/tools.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/resources.sh"
+	. "${MCPBASH_HOME}/lib/resources.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/prompts.sh"
+	. "${MCPBASH_HOME}/lib/prompts.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/completion.sh"
+	. "${MCPBASH_HOME}/lib/completion.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/rpc.sh"
+	. "${MCPBASH_HOME}/lib/rpc.sh"
 	# shellcheck disable=SC1090
-	. "${MCPBASH_ROOT}/lib/core.sh"
+	. "${MCPBASH_HOME}/lib/core.sh"
 }
 
 mcp_verify_stdout_target() {

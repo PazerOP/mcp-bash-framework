@@ -18,7 +18,7 @@ cat <<'JSON' >"${TMP}/requests.ndjson"
 {"jsonrpc":"2.0","id":"2","method":"tools/list"}
 JSON
 
-"${MCPBASH_ROOT}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
+"${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
 
 if ! grep -q '"id":"2"' "${TMP}/responses.ndjson"; then
 	test_fail "tools/list response missing"

@@ -2,12 +2,13 @@
 
 ## Overview
 
-`mcp-bash` follows a strict **framework/project separation** model. The framework is an immutable engine installed once (e.g., in `/opt/mcp-bash` or as a Docker base image), while your server code lives in a separate **project directory**.
+`mcp-bash` follows a strict **framework/project separation** model. The framework is an immutable engine installed once (e.g., `~/mcp-bash` or as a Docker base image), while your server code lives in a separate **project directory**.
 
 ## The Model
 
 ```
-Framework (Read-Only)                 Project (Your Code)
+MCPBASH_HOME (Read-Only)              MCPBASH_PROJECT_ROOT (Your Code)
+~/mcp-bash/                           ~/my-mcp-server/
 ├── bin/mcp-bash          ────────>   ├── tools/
 ├── lib/                               │   └── my-tool/
 ├── handlers/                          │       ├── tool.sh
@@ -29,7 +30,7 @@ You **must** set the `MCPBASH_PROJECT_ROOT` environment variable to point to you
 {
   "mcpServers": {
     "my-server": {
-      "command": "/opt/mcp-bash/bin/mcp-bash",
+      "command": "/Users/me/.mcp-bash/bin/mcp-bash",
       "env": {
         "MCPBASH_PROJECT_ROOT": "/Users/me/my-mcp-server"
       }
@@ -43,15 +44,15 @@ You **must** set the `MCPBASH_PROJECT_ROOT` environment variable to point to you
 ```dockerfile
 FROM debian:bookworm-slim
 
-# Install framework (read-only)
-COPY mcp-bash/ /opt/mcp-bash/
+# Install framework (read-only layer)
+COPY mcp-bash/ /mcp-bash/
 
-# Copy project
+# Copy project (writable layer)
 COPY my-server/ /app/
 
 ENV MCPBASH_PROJECT_ROOT=/app
 
-CMD ["/opt/mcp-bash/bin/mcp-bash"]
+CMD ["/mcp-bash/bin/mcp-bash"]
 ```
 
 ## Path Resolution
@@ -92,7 +93,7 @@ To create this structure:
 ```bash
 mkdir -p my-server/tools
 export MCPBASH_PROJECT_ROOT=$(pwd)/my-server
-/opt/mcp-bash/bin/mcp-bash scaffold tool hello
+~/mcp-bash/bin/mcp-bash scaffold tool hello
 ```
 
 ### Full-Featured Project
@@ -135,13 +136,13 @@ Configure each environment separately:
 {
   "mcpServers": {
     "dev": {
-      "command": "/opt/mcp-bash/bin/mcp-bash",
+      "command": "/Users/me/.mcp-bash/bin/mcp-bash",
       "env": {
         "MCPBASH_PROJECT_ROOT": "/projects/company-mcp-servers/dev"
       }
     },
     "production": {
-      "command": "/opt/mcp-bash/bin/mcp-bash",
+      "command": "/Users/me/.mcp-bash/bin/mcp-bash",
       "env": {
         "MCPBASH_PROJECT_ROOT": "/projects/company-mcp-servers/production"
       }
@@ -174,11 +175,11 @@ Upgrades are simple:
 
 ```bash
 # Upgrade framework
-cd /opt/mcp-bash
+cd ~/mcp-bash
 git pull
 
 # Your project is unaffected
-cd /projects/my-server
+cd ~/my-server
 git status  # Clean
 ```
 
@@ -190,7 +191,7 @@ Set `MCPBASH_LOG_LEVEL=debug` to see resolved paths at startup:
 {
   "mcpServers": {
     "my-server": {
-      "command": "/opt/mcp-bash/bin/mcp-bash",
+      "command": "/Users/me/.mcp-bash/bin/mcp-bash",
       "env": {
         "MCPBASH_PROJECT_ROOT": "/Users/me/my-server",
         "MCPBASH_LOG_LEVEL": "debug"
@@ -204,7 +205,7 @@ You'll see output like:
 
 ```
 Resolved paths:
-  MCPBASH_ROOT=/opt/mcp-bash
+  MCPBASH_HOME=/Users/me/.mcp-bash
   MCPBASH_PROJECT_ROOT=/Users/me/my-server
   MCPBASH_TOOLS_DIR=/Users/me/my-server/tools
   MCPBASH_RESOURCES_DIR=/Users/me/my-server/resources

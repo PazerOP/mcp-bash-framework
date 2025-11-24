@@ -14,14 +14,18 @@ test_create_tmpdir
 stage_workspace() {
 	local dest="$1"
 	mkdir -p "${dest}"
-	cp -a "${MCPBASH_ROOT}/bin" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/lib" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/handlers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/providers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/sdk" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/resources" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/prompts" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/server.d" "${dest}/"
+	# Copy framework files
+	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
+	cp -a "${MCPBASH_HOME}/lib" "${dest}/"
+	cp -a "${MCPBASH_HOME}/handlers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/providers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/sdk" "${dest}/"
+	cp -a "${MCPBASH_HOME}/scaffold" "${dest}/" 2>/dev/null || true
+	# Create project directories
+	mkdir -p "${dest}/tools"
+	mkdir -p "${dest}/resources"
+	mkdir -p "${dest}/prompts"
+	mkdir -p "${dest}/server.d"
 }
 
 # --- Auto-discovery prompts ---
@@ -56,7 +60,7 @@ JSON
 
 (
 	cd "${AUTO_ROOT}" || exit 1
-	./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
+	MCPBASH_PROJECT_ROOT="${AUTO_ROOT}" ./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
 )
 
 # Verify auto-discovery responses with jq
@@ -99,10 +103,11 @@ cat <<'EOF_SCRIPT' >"${MANUAL_ROOT}/server.d/register.sh"
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Paths are relative to MCPBASH_PROMPTS_DIR (not MCPBASH_PROJECT_ROOT)
 mcp_register_prompt '{
   "name": "manual.greet",
   "description": "Manual greet prompt",
-  "path": "prompts/manual/greet.txt",
+  "path": "manual/greet.txt",
   "arguments": {"type": "object", "properties": {"name": {"type": "string"}}},
   "role": "system"
 }'
@@ -110,7 +115,7 @@ mcp_register_prompt '{
 mcp_register_prompt '{
   "name": "manual.farewell",
   "description": "Manual farewell prompt",
-  "path": "prompts/manual/farewell.txt",
+  "path": "manual/farewell.txt",
   "arguments": {"type": "object", "properties": {"name": {"type": "string"}}},
   "role": "system"
 }'
@@ -128,7 +133,7 @@ JSON
 
 (
 	cd "${MANUAL_ROOT}" || exit 1
-	./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
+	MCPBASH_PROJECT_ROOT="${MANUAL_ROOT}" ./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
 )
 
 # Verify manual prompt responses
@@ -175,6 +180,7 @@ mkfifo "${pipe_in}" "${pipe_out}"
 (
 	cd "${POLL_ROOT}" || exit 1
 	export MCP_PROMPTS_TTL="1"
+	export MCPBASH_PROJECT_ROOT="${POLL_ROOT}"
 	./bin/mcp-bash <"${pipe_in}" >"${pipe_out}" &
 	echo $! >"${POLL_ROOT}/server.pid"
 ) || true

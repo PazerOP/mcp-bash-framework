@@ -70,7 +70,7 @@ mcp_completion_hash_json() {
 
 mcp_completion_resolve_script_path() {
 	local raw_path="$1"
-	local root="${MCPBASH_ROOT%/}"
+	local root="${MCPBASH_PROJECT_ROOT%/}"
 	local candidate=""
 	if [ -z "${raw_path}" ]; then
 		return 1
@@ -291,7 +291,7 @@ mcp_completion_manual_finalize() {
 }
 
 mcp_completion_run_manual_script() {
-	if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		return 1
 	fi
 
@@ -306,7 +306,7 @@ mcp_completion_run_manual_script() {
 	(
 		set -euo pipefail
 		# shellcheck disable=SC1090
-		. "${MCPBASH_REGISTER_SCRIPT}"
+		. "${MCPBASH_SERVER_DIR}/register.sh"
 	) >"${script_output_file}" 2>&1 &
 	local script_pid=$!
 	local script_status=0
@@ -359,7 +359,7 @@ mcp_completion_refresh_manual() {
 	if [ "${MCP_COMPLETION_MANUAL_LOADED}" = true ]; then
 		return 0
 	fi
-	if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		if mcp_completion_run_manual_script; then
 			MCP_COMPLETION_MANUAL_LOADED=true
 			return 0
@@ -474,7 +474,7 @@ mcp_completion_prompt_script() {
 	local candidate
 	while IFS= read -r candidate; do
 		[ -z "${candidate}" ] && continue
-		if [ -x "${MCPBASH_ROOT}/${candidate}" ]; then
+		if [ -x "${MCPBASH_PROMPTS_DIR}/${candidate}" ]; then
 			printf '%s' "${candidate}"
 			return 0
 		fi
@@ -491,7 +491,7 @@ mcp_completion_resource_script() {
 	local candidate
 	while IFS= read -r candidate; do
 		[ -z "${candidate}" ] && continue
-		if [ -x "${MCPBASH_ROOT}/${candidate}" ]; then
+		if [ -x "${MCPBASH_RESOURCES_DIR}/${candidate}" ]; then
 			printf '%s' "${candidate}"
 			return 0
 		fi
@@ -677,7 +677,15 @@ mcp_completion_run_provider() {
 			MCP_COMPLETION_PROVIDER_RESULT_ERROR="Completion script not defined"
 			return 1
 		fi
-		abs_script="${MCPBASH_ROOT}/${abs_script}"
+		# Resolve absolute path based on provider type:
+		# - manual: paths are relative to PROJECT_ROOT
+		# - prompt: paths are relative to PROMPTS_DIR
+		# - resource: paths are relative to RESOURCES_DIR
+		case "${MCP_COMPLETION_PROVIDER_TYPE}" in
+		manual)   abs_script="${MCPBASH_PROJECT_ROOT}/${abs_script}" ;;
+		prompt)   abs_script="${MCPBASH_PROMPTS_DIR}/${abs_script}" ;;
+		resource) abs_script="${MCPBASH_RESOURCES_DIR}/${abs_script}" ;;
+		esac
 		if [ ! -f "${abs_script}" ]; then
 			MCP_COMPLETION_PROVIDER_RESULT_ERROR="Completion script not found"
 			return 1
@@ -694,11 +702,11 @@ mcp_completion_run_provider() {
 			local prompt_rel="${MCP_COMPLETION_PROVIDER_PROMPT_TEMPLATE}"
 			local prompt_abs=""
 			if [ -n "${prompt_rel}" ]; then
-				prompt_abs="${MCPBASH_ROOT}/${prompt_rel}"
+				prompt_abs="${MCPBASH_PROMPTS_DIR}/${prompt_rel}"
 			fi
 			# shellcheck disable=SC2030,SC2031
 			(
-				cd "${MCPBASH_ROOT}" || exit 1
+				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
 				export \
 					MCP_COMPLETION_NAME="${name}" \
 					MCP_COMPLETION_ARGS_JSON="${args_json}" \
@@ -718,11 +726,11 @@ mcp_completion_run_provider() {
 			local res_rel="${MCP_COMPLETION_PROVIDER_RESOURCE_PATH}"
 			local res_abs=""
 			if [ -n "${res_rel}" ]; then
-				res_abs="${MCPBASH_ROOT}/${res_rel}"
+				res_abs="${MCPBASH_RESOURCES_DIR}/${res_rel}"
 			fi
 			# shellcheck disable=SC2030,SC2031
 			(
-				cd "${MCPBASH_ROOT}" || exit 1
+				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
 				export \
 					MCP_COMPLETION_NAME="${name}" \
 					MCP_COMPLETION_ARGS_JSON="${args_json}" \
@@ -743,7 +751,7 @@ mcp_completion_run_provider() {
 		else
 			# shellcheck disable=SC2030,SC2031
 			(
-				cd "${MCPBASH_ROOT}" || exit 1
+				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
 				export \
 					MCP_COMPLETION_NAME="${name}" \
 					MCP_COMPLETION_ARGS_JSON="${args_json}" \

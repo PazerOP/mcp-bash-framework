@@ -42,7 +42,7 @@ normalize_path() {
 }
 
 path="$(normalize_path "${path}")"
-roots_input="${MCP_RESOURCES_ROOTS:-${MCPBASH_ROOT}}"
+roots_input="${MCP_RESOURCES_ROOTS:-${MCPBASH_RESOURCES_DIR:-${MCPBASH_PROJECT_ROOT:-}}}"
 allowed=false
 while IFS= read -r root; do
 	[ -z "${root}" ] && continue

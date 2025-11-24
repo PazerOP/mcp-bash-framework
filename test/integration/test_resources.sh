@@ -16,14 +16,28 @@ echo "Resources integration temp root: ${TEST_TMPDIR}"
 stage_workspace() {
 	local dest="$1"
 	mkdir -p "${dest}"
-	cp -a "${MCPBASH_ROOT}/bin" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/lib" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/handlers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/providers" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/sdk" "${dest}/"
-	cp -a "${MCPBASH_ROOT}/resources" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/prompts" "${dest}/" 2>/dev/null || true
-	cp -a "${MCPBASH_ROOT}/server.d" "${dest}/"
+	# Copy framework files
+	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
+	cp -a "${MCPBASH_HOME}/lib" "${dest}/"
+	cp -a "${MCPBASH_HOME}/handlers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/providers" "${dest}/"
+	cp -a "${MCPBASH_HOME}/sdk" "${dest}/"
+	cp -a "${MCPBASH_HOME}/scaffold" "${dest}/" 2>/dev/null || true
+	# Create project directories
+	mkdir -p "${dest}/tools"
+	mkdir -p "${dest}/resources"
+	mkdir -p "${dest}/prompts"
+	mkdir -p "${dest}/server.d"
+}
+
+run_server() {
+	local workdir="$1"
+	local request_file="$2"
+	local response_file="$3"
+	(
+		cd "${workdir}" || exit 1
+		MCPBASH_PROJECT_ROOT="${workdir}" ./bin/mcp-bash <"${request_file}" >"${response_file}"
+	)
 }
 
 # --- Auto-discovery and pagination ---
@@ -60,7 +74,7 @@ JSON
 
 (
 	cd "${AUTO_ROOT}" || exit 1
-	./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
+	MCPBASH_PROJECT_ROOT="${AUTO_ROOT}" ./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
 )
 
 # Use jq -s instead of --slurpfile for better gojq compatibility on Windows
@@ -123,7 +137,7 @@ JSON
 
 (
 	cd "${MANUAL_ROOT}" || exit 1
-	./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
+	MCPBASH_PROJECT_ROOT="${MANUAL_ROOT}" ./bin/mcp-bash <"requests.ndjson" >"responses.ndjson"
 )
 
 # Use jq -s instead of --slurpfile for better gojq compatibility on Windows
@@ -166,7 +180,7 @@ run_subscription_test() {
 
 	(
 		cd "$sub_root" || exit 1
-		./bin/mcp-bash <"$pipe_in" >"$pipe_out" &
+		MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash <"$pipe_in" >"$pipe_out" &
 		echo $! >"${sub_root}/server.pid"
 	)
 

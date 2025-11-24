@@ -8,11 +8,12 @@ set -euo pipefail
 . handlers/tools.sh # Source handler
 
 # Setup minimal environment
-MCPBASH_ROOT="$(pwd)"
-export MCPBASH_ROOT
+MCPBASH_HOME="$(pwd)"
+export MCPBASH_HOME
 MCPBASH_TMP_ROOT="$(mktemp -d)"
 export MCPBASH_TMP_ROOT
-export MCPBASH_REGISTRY_DIR="${MCPBASH_TMP_ROOT}/registry"
+export MCPBASH_PROJECT_ROOT="${MCPBASH_TMP_ROOT}"
+export MCPBASH_REGISTRY_DIR="${MCPBASH_TMP_ROOT}/.registry"
 export MCPBASH_TOOLS_DIR="${MCPBASH_TMP_ROOT}/tools"
 mkdir -p "${MCPBASH_REGISTRY_DIR}"
 mkdir -p "${MCPBASH_TOOLS_DIR}"
@@ -25,7 +26,7 @@ mcp_json_quote_text() { printf '"%s"' "$1"; }
 mcp_lock_acquire() { :; }
 mcp_lock_release() { :; }
 
-# Create dummy tool
+# Create dummy tool in project
 TOOL_PATH="${MCPBASH_TOOLS_DIR}/smoke.sh"
 cat <<'EOF' >"${TOOL_PATH}"
 #!/bin/bash
@@ -33,10 +34,7 @@ echo "Hello from smoke tool"
 EOF
 chmod +x "${TOOL_PATH}"
 
-mkdir -p tools
-ln -sf "${TOOL_PATH}" tools/smoke.sh
-
-MCP_TOOLS_REGISTRY_JSON=$(jq -n --arg path "tools/smoke.sh" '{
+MCP_TOOLS_REGISTRY_JSON=$(jq -n --arg path "smoke.sh" '{
     version: 1,
     items: [{
         name: "smoke.echo",
@@ -60,4 +58,3 @@ mcp_handle_tools "tools/call" "${PAYLOAD}"
 
 # Cleanup
 rm -rf "${MCPBASH_TMP_ROOT}"
-rm -f tools/smoke.sh

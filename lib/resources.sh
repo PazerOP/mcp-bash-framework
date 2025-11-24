@@ -250,7 +250,7 @@ mcp_resources_init() {
 		MCP_RESOURCES_REGISTRY_PATH="${MCPBASH_REGISTRY_DIR}/resources.json"
 	fi
 	mkdir -p "${MCPBASH_REGISTRY_DIR}"
-	mkdir -p "${MCPBASH_ROOT}/resources" >/dev/null 2>&1 || true
+	mkdir -p "${MCPBASH_RESOURCES_DIR}" >/dev/null 2>&1 || true
 }
 
 mcp_resources_apply_manual_json() {
@@ -299,7 +299,7 @@ mcp_resources_apply_manual_json() {
 }
 
 mcp_resources_run_manual_script() {
-	if [ ! -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		return 1
 	fi
 
@@ -311,7 +311,7 @@ mcp_resources_run_manual_script() {
 
 	set +e
 	# shellcheck disable=SC1090
-	. "${MCPBASH_REGISTER_SCRIPT}" >"${script_output_file}" 2>&1
+	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
 	script_status=$?
 	set -e
 
@@ -348,8 +348,8 @@ mcp_resources_run_manual_script() {
 
 mcp_resources_refresh_registry() {
 	mcp_resources_init
-	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh start register=${MCPBASH_REGISTER_SCRIPT} exists=$([[ -x ${MCPBASH_REGISTER_SCRIPT} ]] && echo yes || echo no) ttl=${MCP_RESOURCES_TTL:-5}"
-	if [ -x "${MCPBASH_REGISTER_SCRIPT}" ]; then
+	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh start register=${MCPBASH_SERVER_DIR}/register.sh exists=$([[ -x ${MCPBASH_SERVER_DIR}/register.sh ]] && echo yes || echo no) ttl=${MCP_RESOURCES_TTL:-5}"
+	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
 		mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Invoking manual registration script"
 		if mcp_resources_run_manual_script; then
 			mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh satisfied by manual script"
@@ -394,13 +394,13 @@ mcp_resources_refresh_registry() {
 }
 
 mcp_resources_scan() {
-	local resources_dir="${MCPBASH_ROOT}/resources"
+	local resources_dir="${MCPBASH_RESOURCES_DIR}"
 	local items_file
 	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resources-items.XXXXXX")"
 
 	if [ -d "${resources_dir}" ]; then
 		find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
-			local rel_path="${path#"${MCPBASH_ROOT}"/}"
+			local rel_path="${path#"${MCPBASH_RESOURCES_DIR}"/}"
 			local base_name
 			base_name="$(basename "${path}")"
 			local name="${base_name%.*}"
@@ -623,14 +623,14 @@ mcp_resources_provider_from_uri() {
 
 mcp_resources_read_file() {
 	local uri="$1"
-	local script="${MCPBASH_ROOT}/providers/file.sh"
+	local script="${MCPBASH_HOME}/providers/file.sh"
 	local tmp_err
 	tmp_err="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-file.XXXXXX")"
 	local output status
 	if output="$(
 		env \
-			MCPBASH_ROOT="${MCPBASH_ROOT}" \
-			MCP_RESOURCES_ROOTS="${MCP_RESOURCES_ROOTS:-${MCPBASH_ROOT}}" \
+			MCPBASH_HOME="${MCPBASH_HOME}" \
+			MCP_RESOURCES_ROOTS="${MCP_RESOURCES_ROOTS:-${MCPBASH_RESOURCES_DIR}}" \
 			"${script}" "${uri}" 2>"${tmp_err}"
 	)"; then
 		rm -f "${tmp_err}"
@@ -658,15 +658,15 @@ mcp_resources_read_file() {
 mcp_resources_read_via_provider() {
 	local provider="$1"
 	local uri="$2"
-	local script="${MCPBASH_ROOT}/providers/${provider}.sh"
+	local script="${MCPBASH_HOME}/providers/${provider}.sh"
 	if [ -x "${script}" ]; then
 		local tmp_err
 		tmp_err="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-provider.XXXXXX")"
 		local output status
 		if output="$(
 			env \
-				MCPBASH_ROOT="${MCPBASH_ROOT}" \
-				MCP_RESOURCES_ROOTS="${MCP_RESOURCES_ROOTS:-${MCPBASH_ROOT}}" \
+				MCPBASH_HOME="${MCPBASH_HOME}" \
+				MCP_RESOURCES_ROOTS="${MCP_RESOURCES_ROOTS:-${MCPBASH_RESOURCES_DIR}}" \
 				"${script}" "${uri}" 2>"${tmp_err}"
 		)"; then
 			rm -f "${tmp_err}"

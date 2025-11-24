@@ -17,10 +17,8 @@
 
 ### 1. Install the Framework
 
-Clone or install `mcp-bash` to a permanent location (it's the engine, not your code):
-
 ```bash
-git clone https://github.com/yaniv-golan/mcp-bash.git /opt/mcp-bash
+git clone https://github.com/yaniv-golan/mcp-bash.git ~/mcp-bash
 ```
 
 ### 2. Create Your Project
@@ -36,7 +34,7 @@ export MCPBASH_PROJECT_ROOT=$(pwd)
 ### 3. Scaffold Your First Tool
 
 ```bash
-/opt/mcp-bash/bin/mcp-bash scaffold tool check-disk
+~/mcp-bash/bin/mcp-bash scaffold tool check-disk
 ```
 
 This creates `tools/check-disk/tool.sh` and `tools/check-disk/tool.meta.json` in your project. Edit the script to add your logic.
@@ -49,7 +47,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "my-server": {
-      "command": "/opt/mcp-bash/bin/mcp-bash",
+      "command": "/Users/you/mcp-bash/bin/mcp-bash",
       "env": {
         "MCPBASH_PROJECT_ROOT": "/Users/you/my-mcp-server"
       }
@@ -64,7 +62,7 @@ Restart Claude Desktop. Your tool is now available!
 
 ```
 Framework (Install Once)          Your Project (Version Control This)
-/opt/mcp-bash/                    ~/my-mcp-server/
+~/mcp-bash/                       ~/my-mcp-server/
 ├── bin/mcp-bash                  ├── tools/
 ├── lib/                          │   └── check-disk/
 ├── handlers/                     │       ├── tool.sh
