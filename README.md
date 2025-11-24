@@ -58,6 +58,45 @@ Add to your `claude_desktop_config.json`:
 
 Restart Claude Desktop. Your tool is now available!
 
+## Client Recipes
+
+All clients follow the same pattern: set `MCPBASH_PROJECT_ROOT=/path/to/your/project` and point the command to your framework install (`/path/to/mcp-bash/bin/mcp-bash`).
+
+- **Claude Desktop**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows) and add:
+  ```jsonc
+  "mcpServers": {
+    "mcp-bash": {
+      "command": "/Users/you/mcp-bash/bin/mcp-bash",
+      "env": {"MCPBASH_PROJECT_ROOT": "/Users/you/my-mcp-server"}
+    }
+  }
+  ```
+- **Claude CLI/Claude Code**: Run once:
+  ```bash
+  claude mcp add --transport stdio mcp-bash \
+    --env MCPBASH_PROJECT_ROOT="$HOME/my-mcp-server" \
+    -- "$HOME/mcp-bash/bin/mcp-bash"
+  ```
+- **Cursor**: Create `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project) with the same `mcpServers` JSON as above.
+- **Windsurf (Cascade)**: Edit `~/.codeium/windsurf/mcp_config.json` via Settings → Advanced → Cascade, and add the same `mcpServers` entry.
+- **LibreChat**: In `librechat.yaml` add:
+  ```yaml
+  mcpServers:
+    mcp-bash:
+      type: stdio
+      command: /Users/you/mcp-bash/bin/mcp-bash
+      env:
+        MCPBASH_PROJECT_ROOT: /Users/you/my-mcp-server
+  ```
+- **OpenAI Agents SDK (Python)**: In your code:
+  ```python
+  os.environ["MCPBASH_PROJECT_ROOT"] = "/Users/you/my-mcp-server"
+  async with MCPServerStdio(name="mcp-bash",
+                            params={"command": "/Users/you/mcp-bash/bin/mcp-bash"}) as server:
+      ...
+  ```
+- **Windows note**: Use Git Bash or WSL so `/usr/bin/env bash` and your paths resolve; adjust paths to `C:\Users\you\...` as needed.
+
 ## Project Structure
 
 ```
