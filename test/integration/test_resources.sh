@@ -69,12 +69,12 @@ jq -s '
 	(map(select(.id == "auto-list"))[0].result) as $list |
 	(map(select(.id == "auto-read"))[0].result) as $read |
 	
-	if $list.total != 2 then error("expected two resources discovered") else null end,
+	if ($list.resources | length) != 1 then error("expected one resource in paginated result") else null end,
 	if ($list | has("nextCursor") | not) then error("nextCursor missing for paginated resources") else null end,
-	if ($list.items[0].name | IN("file.alpha", "file.beta") | not) then error("unexpected resource name") else null end,
+	if ($list.resources[0].name | IN("file.alpha", "file.beta") | not) then error("unexpected resource name") else null end,
 	
-	if $read.mimeType != "text/plain" then error("unexpected mimeType") else null end,
-	if $read.content != "alpha" then error("resource content mismatch") else null end
+	if $read.contents[0].mimeType != "text/plain" then error("unexpected mimeType") else null end,
+	if $read.contents[0].text != "alpha" then error("resource content mismatch") else null end
 ' <"${AUTO_ROOT}/responses.ndjson" >/dev/null
 
 # --- Manual registration overrides ---
@@ -132,10 +132,10 @@ jq -s '
 	(map(select(.id == "manual-list"))[0].result) as $list |
 	(map(select(.id == "manual-read"))[0].result) as $read |
 	
-	if $list.total != 2 then error("manual registry should contain two resources") else null end,
-	if ($list.items[] | .name | IN("manual.left", "manual.right") | not) then error("unexpected resource discovered in manual registry") else null end,
+	if ($list.resources | length) != 2 then error("manual registry should contain two resources") else null end,
+	if ($list.resources[] | .name | IN("manual.left", "manual.right") | not) then error("unexpected resource discovered in manual registry") else null end,
 	
-	if $read.content != "right" then error("manual resource content mismatch: " + ($read.content|tostring)) else null end
+	if $read.contents[0].text != "right" then error("manual resource content mismatch: " + ($read.contents[0].text|tostring)) else null end
 ' <"${MANUAL_ROOT}/responses.ndjson" >/dev/null
 
 # --- Subscription updates ---
