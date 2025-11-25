@@ -19,6 +19,9 @@ printf '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId
 ```
 Watch for `notifications/progress` and the tool’s final cancellation outcome.
 
+## SDK Helpers
+`examples/run` configures `MCP_SDK` automatically so `tools/slow.sh` can load `sdk/tool-sdk.sh`. When running the script manually, export `MCP_SDK` first (see [SDK Discovery](../../README.md#sdk-discovery)).
+
 ## Tips
 - Remove the cancellation request to see the tool finish and respond with text.
 - Adjust `timeoutSecs` in `slow.meta.json` to exercise watchdog behaviour.

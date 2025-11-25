@@ -75,6 +75,10 @@ export MCPBASH_TOOLS_DIR=/app/tools-v2      # Override tools location
 export MCPBASH_PROMPTS_DIR=/shared/prompts  # Shared prompts
 ```
 
+## Tool SDK Discovery
+
+Before a tool script runs, `lib/tools.sh` exports `MCP_SDK` pointing at the framework's `sdk/` directory so your script can source `${MCP_SDK}/tool-sdk.sh`. The templates checked into this repository also fall back to resolving `sdk/` relative to the script when you execute them directly during development. When copying tools into a different project tree, set `MCP_SDK` yourself (see [SDK Discovery](../README.md#sdk-discovery)) so the helpers can be located consistently.
+
 ## Example Project Layouts
 
 ### Minimal Project
@@ -220,4 +224,3 @@ Resolved paths:
 3. **Read-Only Installs**: Framework can live in `/opt`, Docker layers, or NFS mounts
 4. **Multi-Project**: Run multiple servers from one framework installation
 5. **Security**: Framework and project can have different permissions
-

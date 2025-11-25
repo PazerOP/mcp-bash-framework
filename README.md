@@ -98,6 +98,22 @@ Framework (Install Once)          Your Project (Version Control This)
 
 See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layouts, Docker deployment, and multi-environment setups.
 
+## SDK Discovery
+
+Every tool sources shared helpers from `sdk/tool-sdk.sh`. When `mcp-bash` launches a tool it exports `MCP_SDK=/path/to/framework/sdk`, so tool scripts can reliably run:
+
+```bash
+source "${MCP_SDK}/tool-sdk.sh"
+```
+
+When you run the bundled examples or scaffolded scripts directly, they automatically fall back to locating `sdk/` relative to their location so you can prototype without additional setup. If you copy a tool out of this repository (or build your own project layout), set `MCP_SDK` before executing the script:
+
+```bash
+export MCP_SDK=/path/to/mcp-bash/sdk
+```
+
+If neither the environment variable nor the relative fallback resolves the SDK, the script exits with a helpful error so you can fix your configuration.
+
 ## Learn by Example
 
 We provide a comprehensive suite of examples in the [`examples/`](examples/) directory to help you master the framework:

@@ -21,6 +21,9 @@ brew install ffmpeg
 sudo apt-get install ffmpeg
 ```
 
+## SDK Helpers
+`examples/run` exports `MCP_SDK` so the `tools/*.sh` scripts can source `sdk/tool-sdk.sh`. If you execute a tool directly (for debugging or integration), set `MCP_SDK` accordingly (see [SDK Discovery](../../README.md#sdk-discovery)).
+
 ## Usage
 
 1.  Place a test video file (e.g., `test.mp4`) into one of the configured media roots (defaults to the bundled `media/` directory).

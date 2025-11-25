@@ -4,6 +4,9 @@
 - Bash 3.2+
 - Optional: jq/gojq for richer JSON tooling
 
+## SDK Helpers
+`examples/run` sets `MCP_SDK` automatically so the tool can source the shared helpers. If you execute `tools/hello.sh` directly, export `MCP_SDK` first (see [SDK Discovery](../../README.md#sdk-discovery)).
+
 ## Run
 ```
 ./examples/run 00-hello-tool
