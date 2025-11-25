@@ -69,9 +69,7 @@ mcp_core_bootstrap_state() {
 	MCP_LOG_STREAM="${MCPBASH_STATE_DIR}/logs.ndjson"
 	: >"${MCP_PROGRESS_STREAM}"
 	: >"${MCP_LOG_STREAM}"
-	if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ]; then
-		mcp_core_start_progress_flusher
-	fi
+	mcp_core_start_progress_flusher
 }
 
 mcp_core_read_loop() {
@@ -86,7 +84,7 @@ mcp_core_wait_for_workers() {
 	local exit_code
 	local pids
 
-	pids="$(jobs -p 2>/dev/null || true)"
+	pids="$(mcp_core_list_worker_pids)"
 	if [ -z "${pids}" ]; then
 		return 0
 	fi
@@ -99,37 +97,51 @@ mcp_core_wait_for_workers() {
 	done
 }
 
-mcp_core_wait_for_one_worker() {
-	local pids pid status first_pid
+mcp_core_list_worker_pids() {
+	local pids filtered pid
 	pids="$(jobs -p 2>/dev/null || true)"
 	if [ -z "${pids}" ]; then
-		sleep 0.01
+		printf ''
 		return 0
 	fi
+	filtered=""
 	for pid in ${pids}; do
-		if ! kill -0 "${pid}" 2>/dev/null; then
-			if ! wait "${pid}"; then
-				status=$?
-				printf '%s\n' "mcp-bash: background worker ${pid} exited with status ${status}" >&2
-			fi
-			return 0
+		if [ -n "${MCPBASH_PROGRESS_FLUSHER_PID:-}" ] && [ "${pid}" = "${MCPBASH_PROGRESS_FLUSHER_PID}" ]; then
+			continue
+		fi
+		if [ -z "${filtered}" ]; then
+			filtered="${pid}"
+		else
+			filtered="${filtered}"$'\n'"${pid}"
 		fi
 	done
-	local first_pid
-	first_pid="$(printf '%s\n' "${pids}" | head -n1)"
-	if [ -n "${first_pid}" ]; then
-		if ! wait "${first_pid}"; then
-			status=$?
-			printf '%s\n' "mcp-bash: background worker ${first_pid} exited with status ${status}" >&2
+	printf '%s' "${filtered}"
+}
+
+mcp_core_wait_for_one_worker() {
+	local pids pid status
+	while :; do
+		pids="$(mcp_core_list_worker_pids)"
+		if [ -z "${pids}" ]; then
+			sleep 0.01
+			return 0
 		fi
-		return 0
-	fi
-	sleep 0.01
+		for pid in ${pids}; do
+			if ! kill -0 "${pid}" 2>/dev/null; then
+				if ! wait "${pid}"; then
+					status=$?
+					printf '%s\n' "mcp-bash: background worker ${pid} exited with status ${status}" >&2
+				fi
+				return 0
+			fi
+		done
+		sleep 0.01
+	done
 }
 
 mcp_core_active_worker_count() {
 	local pids
-	pids="$(jobs -p 2>/dev/null || true)"
+	pids="$(mcp_core_list_worker_pids)"
 	if [ -z "${pids}" ]; then
 		printf '0'
 		return 0
@@ -241,6 +253,8 @@ mcp_core_rate_limit() {
 	local preserved=""
 	local line
 	local count=0
+	local lock_name
+	local result=0
 
 	[ -z "${key}" ] && return 0
 
@@ -256,6 +270,8 @@ mcp_core_rate_limit() {
 	esac
 
 	file="${MCPBASH_STATE_DIR}/rate.${kind}.${key}.log"
+	lock_name="rate.${kind}.${key}"
+	mcp_lock_acquire "${lock_name}"
 	now="$(date +%s)"
 
 	if [ -f "${file}" ]; then
@@ -270,11 +286,14 @@ mcp_core_rate_limit() {
 
 	if [ "${count}" -ge "${limit}" ]; then
 		printf '%s' "${preserved}" >"${file}"
-		return 1
+		result=1
+		mcp_lock_release "${lock_name}"
+		return "${result}"
 	fi
 
 	printf '%s%s\n' "${preserved}" "${now}" >"${file}"
-	return 0
+	mcp_lock_release "${lock_name}"
+	return "${result}"
 }
 
 mcp_core_handle_line() {
@@ -829,7 +848,6 @@ mcp_core_emit_registry_notifications() {
 	if [ -n "${note}" ]; then
 		rpc_send_line "${note}"
 	fi
-	mcp_resources_poll_subscriptions
 }
 
 mcp_core_flush_stream() {
@@ -884,7 +902,10 @@ mcp_core_start_progress_flusher() {
 	fi
 	(
 		while :; do
-			mcp_core_flush_worker_streams_once
+			if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ]; then
+				mcp_core_flush_worker_streams_once
+			fi
+			mcp_resources_poll_subscriptions
 			sleep "${MCPBASH_PROGRESS_FLUSH_INTERVAL:-0.5}"
 		done
 	) &

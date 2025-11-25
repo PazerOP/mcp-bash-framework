@@ -72,11 +72,14 @@ mcp_io_handle_corruption() {
 	local preserved=""
 	local count=0
 	local now line
+	local lock_name
 
 	file="$(mcp_io_corruption_file || true)"
 	if [ -z "${file}" ]; then
 		return 0
 	fi
+	lock_name="corruption"
+	mcp_lock_acquire "${lock_name}"
 
 	case "${threshold}" in
 	'' | *[!0-9]*) threshold=3 ;;
@@ -110,14 +113,17 @@ mcp_io_handle_corruption() {
 	printf '%s%s\n' "${preserved}" "${now}" >"${file}"
 
 	if [ "${allow}" = "true" ]; then
+		mcp_lock_release "${lock_name}"
 		return 0
 	fi
 
 	if [ $((count + 1)) -ge "${threshold}" ]; then
 		printf '%s\n' 'mcp-bash: exiting due to repeated stdout corruption.' >&2
+		mcp_lock_release "${lock_name}"
 		exit 2
 	fi
 
+	mcp_lock_release "${lock_name}"
 	return 0
 }
 

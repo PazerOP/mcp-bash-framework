@@ -242,7 +242,7 @@ initialize_runtime_paths() {
 	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
 
-	local required_libs="runtime json ids lock io paginate logging spec tools resources prompts completion rpc core"
+	local required_libs="runtime json ids lock io paginate logging spec tools resources prompts completion timeout rpc core"
 	local lib
 
 	for lib in ${required_libs}; do
