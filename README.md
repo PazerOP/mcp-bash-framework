@@ -1,6 +1,6 @@
 # mcp-bash
 
-[![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=master&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
+ [![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=main&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
 [![License](https://img.shields.io/github/license/yaniv-golan/mcp-bash-framework)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-%3E%3D3.2-green.svg)](https://www.gnu.org/software/bash/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue)](https://spec.modelcontextprotocol.io/)
