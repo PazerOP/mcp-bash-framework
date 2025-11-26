@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Tools handler implementation.
+# Error responses use JSON-RPC 2.0 codes (for example, -32601 method not found,
+# -32602 invalid params, -32603 internal error).
 
 set -euo pipefail
 

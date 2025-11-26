@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Prompts handler implementation.
+# Error responses use JSON-RPC 2.0 codes (e.g., -32601 method not found,
+# -32602 invalid params, -32603 internal error).
 
 set -euo pipefail
 

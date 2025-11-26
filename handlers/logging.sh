@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Logging handler implementation.
+# Error responses use JSON-RPC 2.0 codes (e.g., -32601 method not found,
+# -32602 invalid params).
 
 set -euo pipefail
 

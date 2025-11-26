@@ -197,6 +197,8 @@ mcp_tools_error() {
 # Emit error JSON to stdout for propagation through command substitution.
 # Usage: _mcp_tools_emit_error <code> <message> [data]
 # The data argument should be valid JSON (object, string, null, etc.)
+# Codes are JSON-RPC 2.0 values; we also emit the reserved server range for
+# tool-specific states (-32001 cancelled, -32004 timed out).
 _mcp_tools_emit_error() {
 	local err_code="$1"
 	local err_message="$2"

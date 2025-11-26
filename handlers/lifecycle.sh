@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Lifecycle handler: initialize/initialized/shutdown workflow.
+# Error responses use JSON-RPC 2.0 codes (e.g., -32600 invalid request,
+# -32601 method not found, -32602 invalid params).
 
 set -euo pipefail
 
