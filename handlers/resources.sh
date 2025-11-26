@@ -58,6 +58,9 @@ mcp_handle_resources() {
 		fi
 		if ! mcp_resources_read "${name}" "${uri}"; then
 			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			case "${code}" in
+			"" | "0") code="-32603" ;;
+			esac
 			local message
 			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to read resource}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
@@ -84,6 +87,9 @@ mcp_handle_resources() {
 		if ! mcp_resources_read "${name}" "${uri}"; then
 			mcp_logging_error "${logger}" "Initial read failed code=${_MCP_RESOURCES_ERR_CODE:-?} msg=${_MCP_RESOURCES_ERR_MESSAGE:-?}"
 			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			case "${code}" in
+			"" | "0") code="-32603" ;;
+			esac
 			local message
 			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to read resource}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"

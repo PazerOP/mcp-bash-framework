@@ -755,6 +755,10 @@ mcp_resources_read() {
 	local explicit_uri="$2"
 	# shellcheck disable=SC2034
 	_MCP_RESOURCES_RESULT=""
+	# shellcheck disable=SC2034
+	_MCP_RESOURCES_ERR_CODE=0
+	# shellcheck disable=SC2034
+	_MCP_RESOURCES_ERR_MESSAGE=""
 	mcp_resources_refresh_registry || {
 		mcp_resources_error -32603 "Unable to load resources registry"
 		return 1

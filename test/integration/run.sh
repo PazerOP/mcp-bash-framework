@@ -15,6 +15,8 @@ TESTS=(
 	"test_tools.sh"
 	"test_prompts.sh"
 	"test_resources.sh"
+	"test_lifecycle_gating.sh"
+	"test_resources_providers.sh"
 )
 
 passed=0
