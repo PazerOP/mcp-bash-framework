@@ -27,7 +27,7 @@ fi
 
 printf ' -> normalize with jq/gojq\n'
 normalized="$(mcp_json_normalize_line $' {\"foo\":1,\n\"bar\":2 }\n')"
-assert_eq '{"foo":1,"bar":2}' "${normalized}" "unexpected normalization result"
+assert_eq '{"bar":2,"foo":1}' "${normalized}" "unexpected normalization result"
 
 printf ' -> detect arrays\n'
 if ! mcp_json_is_array '[]'; then

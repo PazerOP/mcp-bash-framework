@@ -93,7 +93,12 @@ mcp_json_normalize_line() {
 mcp_json_normalize_with_jq() {
 	local line="$1"
 	local compact
-	if ! compact="$(printf '%s' "${line}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.' 2>/dev/null)"; then
+	local -a jq_args=("-c" ".")
+	# gojq always sorts keys; add -S for jq to match ordering across tools.
+	if [ "${MCPBASH_JSON_TOOL}" = "jq" ]; then
+		jq_args=("-cS" ".")
+	fi
+	if ! compact="$(printf '%s' "${line}" | "${MCPBASH_JSON_TOOL_BIN}" "${jq_args[@]}" 2>/dev/null)"; then
 		printf 'JSON normalization failed for: %s using %s\n' "${line}" "${MCPBASH_JSON_TOOL_BIN}" >&2
 		return 1
 	fi

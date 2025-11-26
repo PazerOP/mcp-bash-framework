@@ -774,7 +774,7 @@ mcp_core_build_error_response() {
 
 	if [ -n "${data}" ]; then
 		case "${data}" in
-		"{"*|"["*)
+		"{"* | "["*)
 			data_json="${data}"
 			;;
 		*)

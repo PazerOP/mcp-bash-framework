@@ -41,9 +41,6 @@ assert_json_value "${output}" '.tools.status' 'ok'
 assert_json_value "${output}" '.resources.status' 'ok'
 assert_json_value "${output}" '.prompts.status' 'ok'
 
-# Capture fastpath state file for reuse
-FASTPATH_FILE="$(find "${TMP}" -name 'registry.fastpath.json' | head -n1)"
-
 # Second refresh with no changes should skip rebuild (counts stay the same)
 output2="$("${BIN}" registry refresh --project-root "${TMP}" --no-notify)"
 assert_json_value "${output2}" '.tools.count' '1'
