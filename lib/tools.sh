@@ -816,14 +816,14 @@ mcp_tools_call() {
 			export MCP_TOOL_ERROR_FILE
 		fi
 
-	if [ -n "${effective_timeout}" ]; then
-		if [ "${tool_env_mode}" != "inherit" ]; then
-			with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${absolute_path}"
+		if [ -n "${effective_timeout}" ]; then
+			if [ "${tool_env_mode}" != "inherit" ]; then
+				with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${absolute_path}"
+			else
+				with_timeout "${effective_timeout}" -- "${absolute_path}"
+			fi
 		else
-			with_timeout "${effective_timeout}" -- "${absolute_path}"
-		fi
-	else
-		if [ "${tool_env_mode}" != "inherit" ]; then
+			if [ "${tool_env_mode}" != "inherit" ]; then
 				"${env_exec[@]}" "${absolute_path}"
 			else
 				"${absolute_path}"
