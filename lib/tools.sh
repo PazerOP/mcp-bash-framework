@@ -1015,10 +1015,10 @@ mcp_tools_call() {
 
 	set -e
 
-		if ! mcp_tools_validate_output_schema "${stdout_content}" "${output_schema}" "${has_json_tool}"; then
-			cleanup_tool_temp_files
-			return 1
-		fi
+	if ! mcp_tools_validate_output_schema "${stdout_content}" "${output_schema}" "${has_json_tool}"; then
+		cleanup_tool_temp_files
+		return 1
+	fi
 
 	local result_json
 	result_json="$(
