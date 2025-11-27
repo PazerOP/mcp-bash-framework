@@ -19,7 +19,7 @@ All registries adhere to the same top-level structure:
 - `version`: Schema version (currently `1`).
 - `generatedAt`: UTC timestamp when the scan completed.
 - `items`: Array containing the discovered entities.
-- `hash`: SHA-256 hash of the canonicalised `items` array; changed hashes trigger `notifications/*/listChanged`.
+- `hash`: SHA-256 hash of the canonicalised `items` array; changed hashes trigger `notifications/*/list_changed`.
 - `total`: Count of `items`.
 
 Guardrails are enforced for all registries:
@@ -132,7 +132,7 @@ Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_
 ## TTL and Regeneration
 
 - TTL defaults to five seconds (`MCP_TOOLS_TTL`, etc.).
-- Registry files refresh when TTL expires. Fast-path detection (directory mtime, file count, and file-path hash) skips expensive rebuilds when nothing changed; a detected change triggers a rebuild and listChanged notifications (for clients that negotiated support).
+- Registry files refresh when TTL expires. Fast-path detection (directory mtime, file count, and file-path hash) skips expensive rebuilds when nothing changed; a detected change triggers a rebuild and list_changed notifications (for clients that negotiated support).
 - Manual refresh: `bin/mcp-bash registry refresh [--project-root DIR] [--no-notify] [--filter PATH]` rebuilds `.registry/*.json` and emits a status JSON. `--project-root` runs offline without notifications; `--filter` narrows scanning to a subpath when trees are very large.
 - Manual overrides (`server.d/register.sh`) can replace the auto-discovery results entirely.
 - Cached files are ignored if their size exceeds the configured limit or if JSON parsing fails, forcing a rescan on next access.

@@ -109,6 +109,8 @@ Framework (Install Once)          Your Project (Version Control This)
                                   └── .registry/ (auto-generated)
 ```
 
+The scaffolder creates nested directories per tool (e.g., `tools/check-disk/tool.sh`); the examples stay flat for readability. Both layouts are supported by discovery.
+
 See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layouts, Docker deployment, and multi-environment setups.
 
 ## SDK Discovery
@@ -169,7 +171,12 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_LOG_LEVEL` | `info` | Log level. Falls back to `MCPBASH_LOG_LEVEL_DEFAULT` when unset; use `debug` to see path resolution and discovery traces. |
 | `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Background polling interval for resource subscriptions; set to `0` to disable. |
 | `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
-| `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Ping/Lifecycle only). |
+| `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Lifecycle, ping, and logging only). |
+| `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files once payloads exceed this many bytes. |
+| `MCPBASH_MAX_TOOL_STDERR_SIZE` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum stderr captured from a tool before failing the call. |
+| `MCPBASH_MAX_RESOURCE_BYTES` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum resource payload size accepted before failing fast. |
+| `MCPBASH_CORRUPTION_WINDOW` | `60` | Time window (seconds) for tracking stdout corruption events. |
+| `MCPBASH_CORRUPTION_THRESHOLD` | `3` | Number of stdout corruption events allowed within the window before exit. |
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool environment isolation: `minimal` (default), `inherit`, or `allowlist`. |
 | `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env var names permitted when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
 | `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Optional subpath to limit `registry refresh` scanning scope (defaults to full tools/resources/prompts trees). |
@@ -179,7 +186,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 
 | Mode | Supported surface | Limitations / when it applies |
 |------|-------------------|--------------------------------|
-| Full | Lifecycle, ping, logging/setLevel, tools/resources/prompts (list, call/read/subscribe), completion, pagination, `listChanged` notifications | Requires `jq`/`gojq` available; default mode. |
+| Full | Lifecycle, ping, logging/setLevel, tools/resources/prompts (list, call/read/subscribe), completion, pagination, `list_changed` notifications | Requires `jq`/`gojq` available; default mode. |
 | Minimal | Lifecycle, ping, logging/setLevel | Tools/resources/prompts/completion are disabled and registry notifications are suppressed. Activated when no JSON tool is found or `MCPBASH_FORCE_MINIMAL=true`. |
 
 ### Registry Maintenance

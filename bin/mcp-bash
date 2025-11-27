@@ -265,6 +265,8 @@ mcp_registry_refresh_cli() {
 	if [ "${quiet}" = "true" ]; then
 		MCPBASH_LOG_LEVEL="error"
 		export MCPBASH_LOG_LEVEL
+		MCPBASH_QUIET="true"
+		export MCPBASH_QUIET
 	fi
 	if [ -n "${filter_path}" ]; then
 		export MCPBASH_REGISTRY_REFRESH_PATH="${filter_path}"

@@ -192,23 +192,17 @@ mcp_prompts_run_manual_script() {
 	return 0
 }
 mcp_prompts_registry_max_bytes() {
-	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
-	case "${limit}" in
-	'' | *[!0-9]*) limit=104857600 ;;
-	esac
-	printf '%s' "${limit}"
+	mcp_registry_global_max_bytes
 }
 
 mcp_prompts_enforce_registry_limits() {
 	local total="$1"
 	local json_payload="$2"
-	local limit
-	local size
-	limit="$(mcp_prompts_registry_max_bytes)"
-	size="$(LC_ALL=C printf '%s' "${json_payload}" | wc -c | tr -d ' ')"
-	if [ "${size}" -gt "${limit}" ]; then
+	local limit_or_size
+
+	if ! limit_or_size="$(mcp_registry_check_size "${json_payload}")"; then
 		_MCP_PROMPTS_ERR_CODE=-32603
-		_MCP_PROMPTS_ERR_MESSAGE="Prompts registry exceeds ${limit} byte cap"
+		_MCP_PROMPTS_ERR_MESSAGE="Prompts registry exceeds ${limit_or_size} byte cap"
 		return 1
 	fi
 	if [ "${total}" -gt 500 ]; then
@@ -635,7 +629,7 @@ mcp_prompts_poll() {
 mcp_prompts_consume_notification() {
 	if [ "${MCP_PROMPTS_CHANGED}" = true ]; then
 		MCP_PROMPTS_CHANGED=false
-		printf '{"jsonrpc":"2.0","method":"notifications/prompts/listChanged","params":{}}'
+		printf '{"jsonrpc":"2.0","method":"notifications/prompts/list_changed","params":{}}'
 	else
 		printf ''
 	fi

@@ -35,7 +35,7 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 | Runtime Environment | Tooling detection, minimal-mode fallbacks | `bin/mcp-bash`, `lib/runtime.sh` |
 | Concurrency Model | Worker orchestration, cancellation, locks | `lib/core.sh`, `lib/ids.sh`, `lib/lock.sh` |
 | Timeouts | Watchdogs and cancellation escalations | `lib/timeout.sh`, worker watchdogs |
-| Discovery & Notifications | Registry generation, hash tracking, `listChanged` | `lib/tools.sh`, `lib/resources.sh`, `lib/prompts.sh` |
+| Discovery & Notifications | Registry generation, hash tracking, `list_changed` notifications | `lib/tools.sh`, `lib/resources.sh`, `lib/prompts.sh` |
 | Error Handling | JSON-RPC error codes, stderr propagation | Error responses, SDK stderr propagation |
 | **SDK & Extensions** | | |
 | Tool SDK | Tool SDK, progress and logging wiring | `sdk/tool-sdk.sh` |

@@ -17,45 +17,47 @@ mcp_json_quote_text() {
 	local length=${#input}
 	local i
 	local char
-	local output=""
 	local code
 	local hex
+	local -a parts=()
 	for ((i = 0; i < length; i++)); do
 		char="${input:i:1}"
 		case "${char}" in
 		'"')
-			output+='\"'
+			parts+=('\"')
 			;;
 		'\\')
-			output+='\\\\'
+			parts+=('\\\\')
 			;;
 		$'\b')
-			output+='\\b'
+			parts+=('\\b')
 			;;
 		$'\f')
-			output+='\\f'
+			parts+=('\\f')
 			;;
 		$'\n')
-			output+='\\n'
+			parts+=('\\n')
 			;;
 		$'\r')
-			output+='\\r'
+			parts+=('\\r')
 			;;
 		$'\t')
-			output+='\\t'
+			parts+=('\\t')
 			;;
 		*)
 			LC_ALL=C printf -v code '%d' "'${char}"
 			if [ "${code}" -lt 32 ]; then
 				LC_ALL=C printf -v hex '%02X' "${code}"
-				output+="\\u00${hex}"
+				parts+=("\\u00${hex}")
 			else
-				output+="${char}"
+				parts+=("${char}")
 			fi
 			;;
 		esac
 	done
-	printf '"%s"' "${output}"
+	local joined=""
+	printf -v joined '%s' "${parts[@]}"
+	printf '"%s"' "${joined}"
 }
 
 mcp_json_normalize_line() {

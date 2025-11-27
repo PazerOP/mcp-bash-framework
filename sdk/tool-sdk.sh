@@ -39,6 +39,7 @@ mcp_args_raw() {
 	__mcp_sdk_payload_from_env "${MCP_TOOL_ARGS_JSON:-"{}"}" "${MCP_TOOL_ARGS_FILE:-}"
 }
 
+# Extract a value from the arguments JSON using a jq filter (returns empty string if unavailable).
 mcp_args_get() {
 	local filter="$1"
 	if [ "${MCPBASH_MODE:-full}" = "minimal" ]; then
@@ -70,6 +71,7 @@ mcp_is_cancelled() {
 mcp_progress() {
 	local percent="$1"
 	local message="$2"
+	local total="${3:-}"
 	if [ -z "${MCP_PROGRESS_TOKEN}" ] || [ -z "${MCP_PROGRESS_STREAM}" ]; then
 		return 0
 	fi
@@ -90,7 +92,13 @@ mcp_progress() {
 		token_json="$(__mcp_sdk_json_escape "${MCP_PROGRESS_TOKEN}")"
 	fi
 	message_json="$(__mcp_sdk_json_escape "${message}")"
-	printf '{"jsonrpc":"2.0","method":"notifications/progress","params":{"token":%s,"percent":%s,"message":%s}}\n' "${token_json}" "${percent}" "${message_json}" >>"${MCP_PROGRESS_STREAM}" 2>/dev/null || true
+	local total_json="null"
+	if [ -n "${total}" ]; then
+		if printf '%s' "${total}" | LC_ALL=C grep -Eq '^[0-9]+$'; then
+			total_json="${total}"
+		fi
+	fi
+	printf '{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":%s,"progress":%s,"total":%s,"message":%s}}\n' "${token_json}" "${percent}" "${total_json}" "${message_json}" >>"${MCP_PROGRESS_STREAM}" 2>/dev/null || true
 }
 
 mcp_log() {

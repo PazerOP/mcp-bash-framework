@@ -12,6 +12,13 @@ MCPBASH_SHUTDOWN_WATCHDOG_PID=""
 MCPBASH_EXIT_REQUESTED=false
 MCPBASH_PROGRESS_FLUSHER_PID=""
 MCPBASH_RESOURCE_POLL_PID=""
+MCPBASH_LAST_REGISTRY_POLL=""
+MCPBASH_DEFAULT_MAX_CONCURRENT_REQUESTS="${MCPBASH_DEFAULT_MAX_CONCURRENT_REQUESTS:-16}"
+MCPBASH_DEFAULT_MAX_OUTPUT_BYTES="${MCPBASH_DEFAULT_MAX_OUTPUT_BYTES:-10485760}"
+MCPBASH_DEFAULT_PROGRESS_PER_MIN="${MCPBASH_DEFAULT_PROGRESS_PER_MIN:-100}"
+MCPBASH_BASE_SHUTDOWN_TIMEOUT="${MCPBASH_BASE_SHUTDOWN_TIMEOUT:-5}"
+MCPBASH_BASE_SUBSCRIBE_TIMEOUT="${MCPBASH_BASE_SUBSCRIBE_TIMEOUT:-120}"
+MCPBASH_BASE_TOOL_TIMEOUT="${MCPBASH_BASE_TOOL_TIMEOUT:-30}"
 
 mcp_register_tool() {
 	local payload="$1"
@@ -56,13 +63,13 @@ mcp_core_bootstrap_state() {
 	mcp_runtime_enable_job_control
 	. "${MCPBASH_HOME}/lib/timeout.sh"
 	MCPBASH_MAIN_PGID="$(mcp_runtime_lookup_pgid "$$")"
-	MCPBASH_MAX_CONCURRENT_REQUESTS="${MCPBASH_MAX_CONCURRENT_REQUESTS:-16}"
-	MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
-	MCPBASH_MAX_PROGRESS_PER_MIN="${MCPBASH_MAX_PROGRESS_PER_MIN:-100}"
+	MCPBASH_MAX_CONCURRENT_REQUESTS="${MCPBASH_MAX_CONCURRENT_REQUESTS:-${MCPBASH_DEFAULT_MAX_CONCURRENT_REQUESTS}}"
+	MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-${MCPBASH_DEFAULT_MAX_OUTPUT_BYTES}}"
+	MCPBASH_MAX_PROGRESS_PER_MIN="${MCPBASH_MAX_PROGRESS_PER_MIN:-${MCPBASH_DEFAULT_PROGRESS_PER_MIN}}"
 	MCPBASH_MAX_LOGS_PER_MIN="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN}}"
-	MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
-	MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
-	MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
+	MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-${MCPBASH_BASE_TOOL_TIMEOUT}}"
+	MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-${MCPBASH_BASE_SUBSCRIBE_TIMEOUT}}"
+	MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-${MCPBASH_BASE_SHUTDOWN_TIMEOUT}}"
 	MCPBASH_SHUTDOWN_TIMER_STARTED=false
 	MCPBASH_RESOURCE_POLL_PID=""
 
@@ -185,7 +192,9 @@ mcp_core_start_shutdown_watchdog() {
 	(
 		sleep "${timeout}"
 		printf '%s\n' "mcp-bash: shutdown timeout (${timeout}s) elapsed; terminating." >&2
-		exit 0
+		kill -TERM "${PPID}" 2>/dev/null || true
+		sleep 1
+		kill -KILL "${PPID}" 2>/dev/null || true
 	) &
 	MCPBASH_SHUTDOWN_WATCHDOG_PID=$!
 }
@@ -547,10 +556,10 @@ mcp_core_timeout_for_method() {
 	if [ -z "${timeout_value}" ]; then
 		case "${method}" in
 		tools/*)
-			timeout_value="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
+			timeout_value="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-${MCPBASH_BASE_TOOL_TIMEOUT}}"
 			;;
 		resources/subscribe)
-			timeout_value="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
+			timeout_value="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-${MCPBASH_BASE_SUBSCRIBE_TIMEOUT}}"
 			;;
 		esac
 	fi
@@ -867,8 +876,9 @@ mcp_core_emit_registry_notifications() {
 		;;
 	esac
 
+	mcp_core_poll_registries_once
+
 	local note
-	mcp_tools_poll
 	if [ "${allow_list_changed}" = "true" ]; then
 		note="$(mcp_tools_consume_notification)"
 		if [ -n "${note}" ]; then
@@ -877,7 +887,6 @@ mcp_core_emit_registry_notifications() {
 	else
 		mcp_tools_consume_notification >/dev/null
 	fi
-	mcp_resources_poll
 	if [ "${allow_list_changed}" = "true" ]; then
 		note="$(mcp_resources_consume_notification)"
 		if [ -n "${note}" ]; then
@@ -886,7 +895,6 @@ mcp_core_emit_registry_notifications() {
 	else
 		mcp_resources_consume_notification >/dev/null
 	fi
-	mcp_prompts_poll
 	if [ "${allow_list_changed}" = "true" ]; then
 		note="$(mcp_prompts_consume_notification)"
 		if [ -n "${note}" ]; then
@@ -895,6 +903,18 @@ mcp_core_emit_registry_notifications() {
 	else
 		mcp_prompts_consume_notification >/dev/null
 	fi
+}
+
+mcp_core_poll_registries_once() {
+	local now
+	now="$(date +%s)"
+	if [ "${MCPBASH_LAST_REGISTRY_POLL:-}" = "${now}" ]; then
+		return 0
+	fi
+	MCPBASH_LAST_REGISTRY_POLL="${now}"
+	mcp_tools_poll
+	mcp_resources_poll
+	mcp_prompts_poll
 }
 
 mcp_core_flush_stream() {

@@ -143,6 +143,19 @@ mcp_handle_resources() {
 		rm -f "${MCPBASH_STATE_DIR}/resource_subscription.${subscription_id}"
 		printf '{"jsonrpc":"2.0","id":%s,"result":{}}' "${id}"
 		;;
+	resources/templates/list)
+		local limit cursor list_json
+		limit="$(mcp_json_extract_limit "${json_payload}")"
+		cursor="$(mcp_json_extract_cursor "${json_payload}")"
+		if ! list_json="$(mcp_resources_templates_list "${limit}" "${cursor}")"; then
+			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			local message
+			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resource templates}")
+			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
+			return 0
+		fi
+		printf '{"jsonrpc":"2.0","id":%s,"result":%s}' "${id}" "${list_json}"
+		;;
 	*)
 		local message
 		message=$(mcp_resources_quote "Unknown resources method")

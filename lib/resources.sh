@@ -237,22 +237,16 @@ mcp_resources_poll_subscriptions() {
 	done
 }
 mcp_resources_registry_max_bytes() {
-	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
-	case "${limit}" in
-	'' | *[!0-9]*) limit=104857600 ;;
-	esac
-	printf '%s' "${limit}"
+	mcp_registry_global_max_bytes
 }
 
 mcp_resources_enforce_registry_limits() {
 	local total="$1"
 	local json_payload="$2"
-	local limit
-	local size
-	limit="$(mcp_resources_registry_max_bytes)"
-	size="$(LC_ALL=C printf '%s' "${json_payload}" | wc -c | tr -d ' ')"
-	if [ "${size}" -gt "${limit}" ]; then
-		mcp_resources_error -32603 "Resources registry exceeds ${limit} byte cap"
+	local limit_or_size
+
+	if ! limit_or_size="$(mcp_registry_check_size "${json_payload}")"; then
+		mcp_resources_error -32603 "Resources registry exceeds ${limit_or_size} byte cap"
 		return 1
 	fi
 	if [ "${total}" -gt 500 ]; then
@@ -618,7 +612,7 @@ mcp_resources_list() {
 mcp_resources_consume_notification() {
 	if [ "${MCP_RESOURCES_CHANGED}" = true ]; then
 		MCP_RESOURCES_CHANGED=false
-		printf '{"jsonrpc":"2.0","method":"notifications/resources/listChanged","params":{}}'
+		printf '{"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{}}'
 	else
 		printf ''
 	fi
@@ -651,6 +645,19 @@ mcp_resources_metadata_for_name() {
 		return 1
 	fi
 	printf '%s' "${metadata}"
+}
+
+mcp_resources_templates_list() {
+	local limit="$1"
+	local cursor="$2"
+	# shellcheck disable=SC2034
+	_MCP_RESOURCES_ERR_CODE=0
+	# shellcheck disable=SC2034
+	_MCP_RESOURCES_ERR_MESSAGE=""
+	# For now, no templates are discovered; return an empty, paginated-compliant payload.
+	[ -n "${limit}" ] && : # inputs accepted for shape compatibility
+	[ -n "${cursor}" ] && : # inputs accepted for shape compatibility
+	printf '{"resourceTemplates":[]}'
 }
 
 mcp_resources_provider_from_uri() {

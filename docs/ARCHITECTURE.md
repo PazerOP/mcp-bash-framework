@@ -72,7 +72,7 @@ Stable modules live under `bin/` and `lib/`, protocol handlers under `handlers/`
 
 ### Tools
 - `handlers/tools.sh` implements `tools/list` and `tools/call` and rejects both in minimal mode.
-- `lib/tools.sh` scans the `tools/` tree (skipping dotfiles), prefers `NAME.meta.json` over inline `# mcp:` annotations, writes `registry/tools.json`, and computes hash/timestamp data for pagination and listChanged.
+- `lib/tools.sh` scans the `tools/` tree (skipping dotfiles), prefers `NAME.meta.json` over inline `# mcp:` annotations, writes `registry/tools.json`, and computes hash/timestamp data for pagination and list_changed notifications.
 - Cursors are opaque base64url payloads with `ver`, `collection`, `offset`, `hash`, and `timestamp`; `tools/list` returns deterministic slices with `nextCursor` and `total`.
 - `tools/call` wires the SDK env, captures stdout/stderr, surfaces `_meta.stderr`, emits structured content when metadata declares `outputSchema`, and returns `isError` on tool exit codes.
 - Executable `server.d/register.sh` can return a `tools` array to replace auto-discovery.
@@ -80,7 +80,7 @@ Stable modules live under `bin/` and `lib/`, protocol handlers under `handlers/`
 ### Resources
 - `handlers/resources.sh` supports `resources/list`, `resources/read`, `resources/subscribe`, and `resources/unsubscribe`, declining them in minimal mode.
 - `lib/resources.sh` discovers entries under `resources/`, prefers metadata files, writes `registry/resources.json`, and uses allow-listed providers with path normalization.
-- Pagination mirrors tools via `lib/paginate.sh`, tracking registry hashes for listChanged notifications.
+- Pagination mirrors tools via `lib/paginate.sh`, tracking registry hashes for list_changed notifications.
 - `resources/read` resolves URIs through providers (default `providers/file.sh`), enforces roots allow lists, returns MIME hints and `_meta` diagnostics, and can subscribe; optional polling (`MCPBASH_RESOURCES_POLL_INTERVAL_SECS`, default `2`, set `0` to disable) pushes updates.
 - File providers translate `C:\` prefixes into `/c/...` on Git-Bash/MSYS and honor `MSYS2_ARG_CONV_EXCL`. Git and HTTPS providers live in `providers/git.sh` and `providers/https.sh`.
 - `server.d/register.sh` may emit `{ "tools": [...], "resources": [...], "prompts": [...] }` to bypass auto-discovery.

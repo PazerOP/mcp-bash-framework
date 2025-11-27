@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration: tool outputSchema validation and listChanged notification TTL.
+# Integration: tool outputSchema validation and list_changed notification TTL.
 
 set -euo pipefail
 
@@ -44,7 +44,7 @@ if [ "${call_error}" = "" ]; then
 	test_fail "schema mismatch did not produce error"
 fi
 
-# Modify tool metadata and script to force listChanged via TTL
+# Modify tool metadata and script to force list_changed via TTL
 cat <<'META' >"${WORKSPACE}/tools/schema.meta.json"
 {"name":"schema.tool","description":"structured (updated)","arguments":{"type":"object","properties":{}},"outputSchema":{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}}
 META
@@ -66,9 +66,9 @@ JSON
 	MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCP_TOOLS_TTL=1 ./bin/mcp-bash <"${WORKSPACE}/followup.ndjson" >"${WORKSPACE}/followup.out"
 ) || true
 
-list_changed="$(grep -c 'notifications/tools/listChanged' "${WORKSPACE}/followup.out" || true)"
+list_changed="$(grep -c 'notifications/tools/list_changed' "${WORKSPACE}/followup.out" || true)"
 if [ "${list_changed}" -lt 1 ]; then
-	test_fail "expected tools/listChanged notification after modification"
+	test_fail "expected tools/list_changed notification after modification"
 fi
 
 printf 'Tool schema tests passed.\n'

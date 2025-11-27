@@ -164,22 +164,16 @@ mcp_tools_normalize_schema() {
 }
 
 mcp_tools_registry_max_bytes() {
-	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-104857600}"
-	case "${limit}" in
-	'' | *[!0-9]*) limit=104857600 ;;
-	esac
-	printf '%s' "${limit}"
+	mcp_registry_global_max_bytes
 }
 
 mcp_tools_enforce_registry_limits() {
 	local total="$1"
 	local json_payload="$2"
-	local limit
-	local size
-	limit="$(mcp_tools_registry_max_bytes)"
-	size="$(LC_ALL=C printf '%s' "${json_payload}" | wc -c | tr -d ' ')"
-	if [ "${size}" -gt "${limit}" ]; then
-		mcp_tools_error -32603 "Tool registry exceeds ${limit} byte cap"
+	local limit_or_size
+
+	if ! limit_or_size="$(mcp_registry_check_size "${json_payload}")"; then
+		mcp_tools_error -32603 "Tool registry exceeds ${limit_or_size} byte cap"
 		return 1
 	fi
 	if [ "${total}" -gt 500 ]; then
@@ -226,6 +220,50 @@ mcp_tools_init() {
 		MCP_TOOLS_REGISTRY_PATH="${MCPBASH_REGISTRY_DIR}/tools.json"
 	fi
 	mkdir -p "${MCPBASH_REGISTRY_DIR}"
+}
+
+mcp_tools_validate_output_schema() {
+	local stdout_file="$1"
+	local output_schema="$2"
+	local has_json_tool="$3"
+
+	if [ "${output_schema}" = "null" ] || [ "${has_json_tool}" != "true" ]; then
+		return 0
+	fi
+
+	local structured_json=""
+	if ! structured_json="$("${MCPBASH_JSON_TOOL_BIN}" -c '.' "${stdout_file}" 2>/dev/null)"; then
+		_mcp_tools_emit_error -32603 "Tool output is not valid JSON for declared outputSchema" "null"
+		return 1
+	fi
+
+	if ! printf '%s' "${structured_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e --argjson schema "${output_schema}" '
+		def required_ok($schema;$data):
+			($schema.required // []) as $req
+			| all($req[]; . as $k | ($data|has($k)));
+		def types_ok($schema;$data):
+			($schema.properties // {}) as $props
+			| ($props | to_entries | all(.[];
+				($data[.key] // null) as $v
+				| (.value.type // "") as $t
+				| if ($v == null or ($t|length)==0) then true
+				  else
+					(if $t=="string" then ($v|type)=="string"
+					elif $t=="number" then ($v|type)=="number"
+					elif $t=="integer" then ($v|type)=="number" and (($v|floor)==($v|tonumber))
+					elif $t=="boolean" then ($v|type)=="boolean"
+					elif $t=="array" then ($v|type)=="array"
+					elif $t=="object" then ($v|type)=="object"
+					else true end)
+				  end));
+		if ($schema.type // "object") != "object" then true
+		else (required_ok($schema;.) and types_ok($schema;.)) end
+	' >/dev/null 2>&1; then
+		_mcp_tools_emit_error -32603 "Tool output does not satisfy outputSchema" "null"
+		return 1
+	fi
+
+	return 0
 }
 
 mcp_tools_apply_manual_json() {
@@ -513,7 +551,7 @@ mcp_tools_scan() {
 mcp_tools_consume_notification() {
 	if [ "${MCP_TOOLS_CHANGED}" = true ]; then
 		MCP_TOOLS_CHANGED=false
-		printf '{"jsonrpc":"2.0","method":"notifications/tools/listChanged","params":{}}'
+		printf '{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}'
 	else
 		printf ''
 	fi
@@ -634,12 +672,9 @@ mcp_tools_call() {
 		return 1
 	fi
 
-	local info_json
-	info_json="$(echo "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -c '{path, outputSchema, timeoutSecs}')"
-
-	local tool_path
-	tool_path="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // empty')"
-
+	local info_fields tool_path metadata_timeout output_schema
+	info_fields="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '[.path // "", (.timeoutSecs // ""), (.outputSchema // null | tojson)] | @tsv')"
+	IFS=$'\t' read -r tool_path metadata_timeout output_schema <<<"${info_fields}"
 	if [ -z "${tool_path}" ]; then
 		mcp_tools_error -32601 "Tool path unavailable"
 		return 1
@@ -676,12 +711,6 @@ mcp_tools_call() {
 	local tool_error_file
 	tool_error_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tool-error.XXXXXX")"
 
-	local metadata_timeout
-	metadata_timeout="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty')"
-
-	local output_schema
-	output_schema="$(echo "${info_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null')"
-
 	local effective_timeout="${timeout_override}"
 	if [ -z "${effective_timeout}" ] && [ -n "${metadata_timeout}" ]; then
 		effective_timeout="${metadata_timeout}"
@@ -705,6 +734,7 @@ mcp_tools_call() {
 
 	local exit_code
 	(
+		set -o pipefail
 		cd "${MCPBASH_PROJECT_ROOT}" || exit 1
 		MCP_SDK="${MCPBASH_HOME}/sdk"
 		MCP_TOOL_NAME="${name}"
@@ -985,41 +1015,10 @@ mcp_tools_call() {
 
 	set -e
 
-	# Enforce outputSchema when declared: require JSON output and required fields.
-	if [ "${output_schema}" != "null" ] && [ "${has_json_tool}" = "true" ]; then
-		local structured_json=""
-		if ! structured_json="$("${MCPBASH_JSON_TOOL_BIN}" -c '.' "${stdout_content}" 2>/dev/null)"; then
-			_mcp_tools_emit_error -32603 "Tool output is not valid JSON for declared outputSchema" "null"
+		if ! mcp_tools_validate_output_schema "${stdout_content}" "${output_schema}" "${has_json_tool}"; then
 			cleanup_tool_temp_files
 			return 1
 		fi
-		if ! printf '%s' "${structured_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e --argjson schema "${output_schema}" '
-			def required_ok($schema;$data):
-				($schema.required // []) as $req
-				| all($req[]; . as $k | ($data|has($k)));
-			def types_ok($schema;$data):
-				($schema.properties // {}) as $props
-				| ($props | to_entries | all(.[]; 
-					($data[.key] // null) as $v
-					| (.value.type // "") as $t
-					| if ($v == null or ($t|length)==0) then true
-					  else
-						(if $t=="string" then ($v|type)=="string"
-						elif $t=="number" then ($v|type)=="number"
-						elif $t=="integer" then ($v|type)=="number" and (($v|floor)==($v|tonumber))
-						elif $t=="boolean" then ($v|type)=="boolean"
-						elif $t=="array" then ($v|type)=="array"
-						elif $t=="object" then ($v|type)=="object"
-						else true end)
-					  end));
-			if ($schema.type // "object") != "object" then true
-			else (required_ok($schema;.) and types_ok($schema;.)) end
-		' >/dev/null 2>&1; then
-			_mcp_tools_emit_error -32603 "Tool output does not satisfy outputSchema" "null"
-			cleanup_tool_temp_files
-			return 1
-		fi
-	fi
 
 	local result_json
 	result_json="$(
@@ -1039,17 +1038,16 @@ mcp_tools_call() {
 			}
 		} as $base |
 		
-		# Try to parse stdout as JSON if enabled
-		if $has_json == "true" and ($stdout | length > 0) then
-			try (
-				($stdout | fromjson) as $json |
-				$base
-				| .content += [{type: "json", json: $json}]
-				| .content += [{type: "text", text: $stdout}]
-				| .structuredContent = $json
-			) catch (
-				$base | .content += [{type: "text", text: $stdout}]
-			)
+			# Try to parse stdout as JSON if enabled
+			if $has_json == "true" and ($stdout | length > 0) then
+				try (
+					($stdout | fromjson) as $json |
+					$base
+					| .content += [{type: "text", text: $stdout}]
+					| .structuredContent = $json
+				) catch (
+					$base | .content += [{type: "text", text: $stdout}]
+				)
 		else
 			$base | .content += [{type: "text", text: $stdout}]
 		end |

@@ -22,6 +22,16 @@
 : "${MCPBASH_PROMPTS_DIR:=}"
 : "${MCPBASH_SERVER_DIR:=}"
 
+mcp_runtime_log_allowed() {
+	if [ "${MCPBASH_QUIET:-false}" = "true" ]; then
+		return 1
+	fi
+	case "${MCPBASH_LOG_LEVEL:-info}" in
+	error | critical | alert | emergency) return 1 ;;
+	esac
+	return 0
+}
+
 # Validate that MCPBASH_PROJECT_ROOT is set and exists.
 # Called early in startup; exits with helpful error if not configured.
 mcp_runtime_require_project_root() {
@@ -193,7 +203,9 @@ mcp_runtime_detect_json_tool() {
 		MCPBASH_JSON_TOOL="gojq"
 		MCPBASH_JSON_TOOL_BIN="${candidate}"
 		MCPBASH_MODE="full"
-		printf '%s\n' "Detected gojq at ${candidate}; full protocol surface enabled." >&2
+		if mcp_runtime_log_allowed; then
+			printf '%s\n' "Detected gojq at ${candidate}; full protocol surface enabled." >&2
+		fi
 		return 0
 	fi
 
@@ -202,7 +214,9 @@ mcp_runtime_detect_json_tool() {
 		MCPBASH_JSON_TOOL="jq"
 		MCPBASH_JSON_TOOL_BIN="${candidate}"
 		MCPBASH_MODE="full"
-		printf '%s\n' "Detected jq at ${candidate}; full protocol surface enabled." >&2
+		if mcp_runtime_log_allowed; then
+			printf '%s\n' "Detected jq at ${candidate}; full protocol surface enabled." >&2
+		fi
 		return 0
 	fi
 
@@ -211,7 +225,9 @@ mcp_runtime_detect_json_tool() {
 	# shellcheck disable=SC2034
 	MCPBASH_JSON_TOOL_BIN=""
 	MCPBASH_MODE="minimal"
-	printf '%s\n' 'No gojq/jq found; entering minimal mode with reduced capabilities.' >&2
+	if mcp_runtime_log_allowed; then
+		printf '%s\n' 'No gojq/jq found; entering minimal mode with reduced capabilities.' >&2
+	fi
 	return 0
 }
 

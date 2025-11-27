@@ -4,6 +4,29 @@
 set -euo pipefail
 
 MCPBASH_REGISTRY_FASTPATH_FILE=""
+MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT=104857600
+
+mcp_registry_global_max_bytes() {
+	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-${MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT}}"
+	case "${limit}" in
+	'' | *[!0-9]*) limit="${MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT}" ;;
+	esac
+	printf '%s' "${limit}"
+}
+
+mcp_registry_check_size() {
+	local json_payload="$1"
+	local limit
+	limit="$(mcp_registry_global_max_bytes)"
+	local size
+	size="$(LC_ALL=C printf '%s' "${json_payload}" | wc -c | tr -d ' ')"
+	if [ "${size}" -gt "${limit}" ]; then
+		printf '%s' "${limit}"
+		return 1
+	fi
+	printf '%s' "${size}"
+	return 0
+}
 
 mcp_registry_fastpath_file() {
 	if [ -z "${MCPBASH_STATE_DIR:-}" ]; then
