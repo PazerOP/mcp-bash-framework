@@ -675,6 +675,12 @@ mcp_tools_call() {
 	local info_fields tool_path metadata_timeout output_schema
 	info_fields="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '[.path // "", (.timeoutSecs // ""), (.outputSchema // null | tojson)] | @tsv')"
 	IFS=$'\t' read -r tool_path metadata_timeout output_schema <<<"${info_fields}"
+	case "${metadata_timeout}" in
+	"" | "null") metadata_timeout="" ;;
+	esac
+	case "${output_schema}" in
+	"" | "null") output_schema="null" ;;
+	esac
 	if [ -z "${tool_path}" ]; then
 		mcp_tools_error -32601 "Tool path unavailable"
 		return 1
@@ -810,14 +816,14 @@ mcp_tools_call() {
 			export MCP_TOOL_ERROR_FILE
 		fi
 
-		if [ -n "${effective_timeout}" ]; then
-			if [ "${tool_env_mode}" != "inherit" ]; then
-				"${env_exec[@]}" with_timeout "${effective_timeout}" -- "${absolute_path}"
-			else
-				with_timeout "${effective_timeout}" -- "${absolute_path}"
-			fi
+	if [ -n "${effective_timeout}" ]; then
+		if [ "${tool_env_mode}" != "inherit" ]; then
+			with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${absolute_path}"
 		else
-			if [ "${tool_env_mode}" != "inherit" ]; then
+			with_timeout "${effective_timeout}" -- "${absolute_path}"
+		fi
+	else
+		if [ "${tool_env_mode}" != "inherit" ]; then
 				"${env_exec[@]}" "${absolute_path}"
 			else
 				"${absolute_path}"
