@@ -76,10 +76,6 @@ mcp_runtime_init_paths() {
 		MCPBASH_TMP_ROOT="${tmp}"
 	fi
 
-	if [ -z "${MCPBASH_LOCK_ROOT}" ]; then
-		MCPBASH_LOCK_ROOT="${MCPBASH_TMP_ROOT}/mcpbash.locks"
-	fi
-
 	if [ -z "${MCPBASH_STATE_SEED}" ]; then
 		MCPBASH_STATE_SEED="${RANDOM}" # STATE_SEED initialized once per boot.
 	fi
@@ -92,6 +88,11 @@ mcp_runtime_init_paths() {
 			pid_component="$$"
 		fi
 		MCPBASH_STATE_DIR="${MCPBASH_TMP_ROOT}/mcpbash.state.${PPID}.${pid_component}.${MCPBASH_STATE_SEED}"
+	fi
+
+	# Default lock root is instance-scoped to avoid cross-process interference (e.g., lingering servers on Windows).
+	if [ -z "${MCPBASH_LOCK_ROOT}" ]; then
+		MCPBASH_LOCK_ROOT="${MCPBASH_STATE_DIR}/locks"
 	fi
 
 	# Content directories: explicit override → project default
