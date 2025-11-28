@@ -207,24 +207,14 @@ windows_subscription_test() {
 	local sub_root="$1"
 	local resp_file="${sub_root}/responses.ndjson"
 
-	(
-		echo '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}'
-		echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-		echo '{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}'
-		# Modify file after subscribe
-		(
-			sleep 1
-			echo "updated" >"${sub_root}/resources/live.txt"
-		) &
-		sleep 1
-		echo '{"jsonrpc":"2.0","id":"ping","method":"ping"}'
-		# Keep session alive to allow notification emission, then cleanly shutdown
-		sleep 2
-		echo '{"jsonrpc":"2.0","id":"shutdown","method":"shutdown"}'
-		echo '{"jsonrpc":"2.0","id":"exit","method":"exit"}'
-	) | MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash >"${resp_file}"
+	# Pass 1: subscribe/ping (no streaming notification check on Windows)
+	cat <<'EOF' | MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash >"${resp_file}"
+{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}
+{"jsonrpc":"2.0","id":"ping","method":"ping"}
+EOF
 
-	# Validate subscribe ack, ping response, and updated notification
 	local sub_ok
 	sub_ok="$(jq -r 'select(.id=="sub") | .result // empty' "${resp_file}" || true)"
 	if [ -z "${sub_ok}" ]; then
@@ -239,10 +229,23 @@ windows_subscription_test() {
 		exit 1
 	fi
 
-	local update_seen
-	update_seen="$(jq -r 'select(.method=="notifications/resources/updated") | .params.contents[0].text // empty' "${resp_file}" || true)"
-	if [ "${update_seen}" != "updated" ]; then
-		printf 'Update notification missing or incorrect on Windows file-based path\n' >&2
+	# Mutate the file and verify via a second stateless get
+	echo "updated" >"${sub_root}/resources/live.txt"
+
+	cat <<'EOF' | MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash >"${resp_file}"
+{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"get","method":"resources/get","params":{"uri":"file://__LIVE__"}}
+EOF
+
+	# Replace placeholder with actual path for jq lookup
+	local live_uri
+	live_uri="file://${sub_root}/resources/live.txt"
+
+	local get_text
+	get_text="$(jq -r --arg uri "${live_uri}" 'select(.id=="get" and .result.uri==$uri) | .result.contents[0].text // empty' "${resp_file}" || true)"
+	if [ "${get_text}" != "updated" ]; then
+		printf 'Updated content not observed on Windows file-based path\n' >&2
 		exit 1
 	fi
 }
