@@ -1,0 +1,3 @@
+Manual registry prompt demo.
+
+Explain how manual registry entries are served without scanning the filesystem, and how the `echo` provider returns data from custom URIs. Topic hint: {{topic}}.

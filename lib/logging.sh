@@ -82,3 +82,11 @@ mcp_logging_error() {
 mcp_logging_critical() {
 	mcp_logging_emit "critical" "$1" "$2"
 }
+
+mcp_logging_alert() {
+	mcp_logging_emit "alert" "$1" "$2"
+}
+
+mcp_logging_emergency() {
+	mcp_logging_emit "emergency" "$1" "$2"
+}

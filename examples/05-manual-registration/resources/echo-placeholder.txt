@@ -1,0 +1,1 @@
+This file exists so the manual registry entry has a stable path. The content served to clients comes from the echo:// URI via providers/echo.sh.

@@ -140,6 +140,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | [**02-logging-and-levels**](examples/02-logging-and-levels/) | Sending logs to the client and managing verbosity. |
 | [**03-progress-and-cancellation**](examples/03-progress-and-cancellation/) | Long-running tasks, reporting progress, and handling user cancellation. |
 | [**04-ffmpeg-studio**](examples/04-ffmpeg-studio/) | Real-world application: Video processing pipeline with media inspection. |
+| [**05-manual-registration**](examples/05-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
 
 ## Features at a Glance
 
@@ -148,6 +149,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 - **Stdio Transport**: Standard input/output. No custom daemons or sidecars.
 - **Framework/Project Separation**: Install the framework once, create unlimited projects.
 - **Graceful Degradation**: Automatically detects available JSON tools (`gojq`, `jq`) or falls back to minimal mode if none are present.
+- **Progress Streaming**: Emits progress and log notifications; set `MCPBASH_ENABLE_LIVE_PROGRESS=true` to stream them during execution.
 
 ## Configuration
 
@@ -170,6 +172,8 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_MAX_CONCURRENT_REQUESTS` | `16` | Cap concurrent worker slots. |
 | `MCPBASH_LOG_LEVEL` | `info` | Log level. Falls back to `MCPBASH_LOG_LEVEL_DEFAULT` when unset; use `debug` to see path resolution and discovery traces. |
 | `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Background polling interval for resource subscriptions; set to `0` to disable. |
+| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications as they are produced instead of after handler completion. |
+| `MCPBASH_PROGRESS_FLUSH_INTERVAL` | `0.5` | Flush interval (seconds) for live progress/log streaming when enabled. |
 | `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
 | `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Lifecycle, ping, and logging only). |
 | `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files once payloads exceed this many bytes. |
@@ -181,6 +185,11 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env var names permitted when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
 | `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Optional subpath to limit `registry refresh` scanning scope (defaults to full tools/resources/prompts trees). |
 | `MCPBASH_COMPAT_BATCHES` | (unset) | Set to `true` to enable legacy batch request support. |
+
+### Tool SDK environment
+- `MCPBASH_JSON_TOOL` and `MCPBASH_JSON_TOOL_BIN` point to the detected JSON processor (`gojq`/`jq`) and are injected into tool processes when available.
+- `MCPBASH_MODE` is `full` when JSON tooling is present and `minimal` otherwise; SDK helpers warn and downgrade behaviour when running in minimal mode.
+- `MCPBASH_TOOL_ENV_MODE` controls isolation for tool processes (`minimal`, `inherit`, or `allowlist`), but MCPBASH/MCP-prefixed variables (including JSON tool hints) are always propagated.
 
 ### Capability Modes
 
@@ -220,6 +229,7 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 ### Deep Dive
 - [**Architecture Guide**](docs/ARCHITECTURE.md) - Internal architecture, lifecycle loop, concurrency model.
 - [**Protocol Compliance**](SPEC-COMPLIANCE.md) - Detailed MCP protocol support breakdown.
+- [**Performance Guide**](docs/PERFORMANCE.md) - Tuning concurrency, timeouts, and registry scans.
 - [**Security Policy**](docs/SECURITY.md) - Input validation and execution safety.
 - [**Changelog**](CHANGELOG.md) - Notable changes between releases.
 - [**Windows Support**](docs/WINDOWS.md) - Running on Git Bash/WSL.
@@ -235,8 +245,9 @@ This server targets MCP protocol version `2025-06-18` (the current stable specif
 | Version | Status |
 |---------|--------|
 | `2025-06-18` | ✅ Fully supported (default) |
-| `2025-03-26` | ✅ Supported |
+| `2025-03-26` | ✅ Supported (downgrade) |
 | `2024-11-05` | ❌ **Not supported** |
+| `2024-10-07` | ❌ **Not supported** |
 
 Unsupported versions receive an `initialize` error payload: `{"code":-32602,"message":"Unsupported protocol version"}`.
 

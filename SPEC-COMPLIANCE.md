@@ -9,8 +9,9 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 | Target MCP Version | `2025-06-18` |
 | Transport | stdio only (HTTP/SSE out of scope) |
 | JSON-RPC Version | 2.0 |
-| Downgrade Support | Negotiated during `initialize` |
-| Unsupported Versions | `initialize` returns `{"code":-32602,"message":"Unsupported protocol version"}` |
+| Downgrade Support | Negotiated during `initialize` (to `2025-03-26` when requested) |
+| Accepted Versions | `2025-06-18` (default), `2025-03-26` |
+| Unsupported Versions | Older protocols (for example `2024-11-05`, `2024-10-07`) receive `{"code":-32602,"message":"Unsupported protocol version"}` |
 
 ## Capability Coverage Matrix
 
@@ -27,7 +28,7 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 | Prompts | Prompt discovery, listing, retrieval | `lib/prompts.sh`, `handlers/prompts.sh` |
 | **Utilities** | | |
 | Progress | Progress notifications during long operations | `lib/progress.sh`, SDK integration |
-| Cancellation | Request cancellation via `$/cancelRequest` | `lib/core.sh`, worker cancellation |
+| Cancellation | Cancellation notifications via `notifications/cancelled` | `lib/core.sh`, worker cancellation |
 | Logging | `notifications/message` for log output | `handlers/logging.sh`, `lib/logging.sh` |
 | Completion | Argument completion for tools/prompts/resources | `lib/completion.sh`, `handlers/completion.sh` |
 | Pagination | Cursor-based result pagination | `lib/paginate.sh` |

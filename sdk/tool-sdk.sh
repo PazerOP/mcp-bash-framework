@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Tool runtime SDK helpers.
+# Expects `MCPBASH_JSON_TOOL`/`MCPBASH_JSON_TOOL_BIN` and `MCPBASH_MODE` to be
+# injected by the server. When running with `MCPBASH_TOOL_ENV_MODE=minimal` or
+# without a JSON tool, JSON-centric helpers fall back to no-ops where possible.
 
 set -euo pipefail
 

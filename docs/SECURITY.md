@@ -19,6 +19,12 @@ mcp-bash keeps the attack surface small: every tool is a subprocess with a contr
 - Manual registration scripts run in-process; only enable trusted code or wrap it to sanitize output.
 - Outbound JSON is escaped and newline-compacted before hitting stdout to keep consumers safe.
 
+## Supply chain & tool audits
+- Pin tool dependencies (container digests, package versions) and verify checksums before running `bin/mcp-bash` in CI or production.
+- Treat `server.d/register.sh` and provider scripts as privileged code paths; require code review and signing, and avoid executing from writable shared volumes.
+- Run `shellcheck`/`shfmt`/`pre-commit run --all-files` on contributed tools/resources to prevent obvious injection vectors.
+- Periodically review `.registry/*.json` contents for unexpected providers/URIs and revoke filesystem roots that are no longer required.
+
 ## Expectations for extensions
 - Validate inputs inside your tools; the framework does not guess what your scripts should accept or reject.
 - Avoid invoking scripts that run arbitrary input without checks.

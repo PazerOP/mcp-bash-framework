@@ -75,9 +75,9 @@ This guide distils hands-on recommendations for designing, building, and operati
 - **Debugging helpers** – Keep `asciinema` or screen-recording ready when capturing scaffold workflows for documentation. Add captions/alt-text for accessibility per §Supporting Assets.
 
 ## 3. Project layout primer
-- **Stable vs extension directories** – Core runtime sits under `bin/`, `lib/`, `handlers/`, `providers/`, and `sdk/`. Extension-friendly directories include `tools/`, `resources/`, `prompts/`, `server.d/`, and `registry/` as illustrated in [README.md](../README.md#repository-layout).
+- **Stable vs extension directories** – Core runtime sits under `bin/`, `lib/`, `handlers/`, `providers/`, and `sdk/`. Extension-friendly directories include `tools/`, `resources/`, `prompts/`, `server.d/`, and `.registry/` as illustrated in [README.md](../README.md#repository-layout).
 - **Registration flows**:
-  - *Auto-discovery* – Default path scanning populates `registry/*.json` (see [docs/REGISTRY.md](REGISTRY.md)). Metadata is sourced from `.meta.json` then inline `# mcp:` annotations, falling back to defaults.
+  - *Auto-discovery* – Default path scanning populates `.registry/*.json` (see [docs/REGISTRY.md](REGISTRY.md)). Metadata is sourced from `.meta.json` then inline `# mcp:` annotations, falling back to defaults.
   - *Manual overrides* – Place curated registrations in `server.d/register.sh` when discovery is too slow or when deterministic ordering is required (§9 of the plan). Manual files should emit valid JSON rows and respect TTL rules.
 - **Environment staging** – Use `server.d/env.sh` to inject operator-specific configuration without editing tracked files. Document each variable inline for future maintainers.
 
@@ -94,16 +94,16 @@ The scaffolder uses a per-asset directory (for example `tools/hello/hello.sh`), 
 _Asciinema tip_: Record a short run of `bin/mcp-bash scaffold tool sample.hello` plus `./test/examples/test_examples.sh` so newcomers can view the workflow end-to-end.
 
 ### 4.2 SDK usage patterns
-- **Argument parsing** – Use `mcp_args_get` with JSONPointer queries; defensively validate required fields like `examples/01-args-and-validation/tools/echo-arg.sh:5`.
+- **Argument parsing** – Use `mcp_args_get` with JSONPointer queries; defensively validate required fields like `examples/01-args-and-validation/tools/echo-arg.sh:18-24`.
 - **Structured outputs** – Emit JSON via `mcp_emit_json` when returning typed data. For plain text, call `mcp_emit_text`.
-- **Progress & cancellation** – Emit throttled `mcp_progress` calls (10–20 updates/request) and exit early when `mcp_is_cancelled` flips true as shown in `examples/03-progress-and-cancellation/tools/slow.sh:5`.
+- **Progress & cancellation** – Emit throttled `mcp_progress` calls (10–20 updates/request) and exit early when `mcp_is_cancelled` flips true as shown in `examples/03-progress-and-cancellation/tools/slow.sh:5`. Enable streaming progress mid-flight with `MCPBASH_ENABLE_LIVE_PROGRESS=true` and tune cadence via `MCPBASH_PROGRESS_FLUSH_INTERVAL`.
 - **Logging** – Prefer `mcp_log_info`/`mcp_log_warn` so entries pass through the logging handler filters; avoid `echo` unless writing to stderr for fatal errors.
 - **Timeouts** – Set per-tool `timeoutSecs` inside `<tool>.meta.json` when default (30 seconds) is too high/low. Align metadata with `lib/timeout.sh` expectations.
 
 ### 4.3 Error handling patterns
 - Use `mcp_fail` (or `mcp_fail_invalid_args`) to return structured JSON-RPC errors with proper `code/message/data` directly from tools; it survives `tool_env_mode=minimal/allowlist` via the injected `MCP_TOOL_ERROR_FILE`.
 - Only return `-32603` (internal error) for unknown failures; otherwise map to specific JSON-RPC errors spelled out in the protocol.
-- Capture stderr and propagate actionable diagnostics; see `examples/01-args-and-validation/tools/echo-arg.sh:7` for human-readable error surfaces.
+- Capture stderr and propagate actionable diagnostics; see `examples/01-args-and-validation/tools/echo-arg.sh:30-36` for human-readable error surfaces.
 - Wrap risky filesystem/network calls in helper functions so they can be retried or mocked in unit tests.
 
 ### 4.4 Logging & instrumentation
@@ -171,7 +171,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 - [ ] Registry TTLs set to balance discovery churn vs freshness.
 - [ ] `server.d/env.sh` committed or documented for reproducibility.
 - [ ] Monitoring hooks emit at least heartbeat metrics (request count, failures).
-- [ ] Backups created for `registry/*.json` if manual overrides exist.
+- [ ] Backups created for `.registry/*.json` if manual overrides exist.
 - [ ] Rollback plan (git tag, release archive, or container image) reviewed.
 
 ### 6.4 Deployment models
@@ -182,7 +182,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 | Remote via stdio proxy | Pair with [docs/REMOTE.md](REMOTE.md) gateways to bridge HTTP/SSE | Maintain session headers, restrict outbound networking, audit proxies regularly. |
 
 ### 6.5 Discovery hygiene
-- Keep `registry/` out of version control (already `.gitignore`d) and monitor growth.
+- Keep `.registry/` out of version control (already `.gitignore`d) and monitor growth.
 - Run a nightly job that executes `bin/mcp-bash registry refresh --no-notify` to rebuild registries; use `--project-root` in CI/offline contexts.
 - Validate metadata via `scripts/verify-metadata.sh` (when available) before merging large batches of tools/resources.
 
@@ -298,7 +298,7 @@ flowchart TD
   lint -- no --> minimal{Minimal mode?}
   minimal -- yes --> jqcheck[Install jq/gojq or set FORCE_MINIMAL=false]
   minimal -- no --> registry{Registry errors?}
-  registry -- yes --> clean[Clear registry/*.json and verify metadata]
+  registry -- yes --> clean[Clear .registry/*.json and verify metadata]
   registry -- no --> timeout{Tool timeouts?}
   timeout -- yes --> adjust[Decrease runtime or raise timeoutSecs]
   timeout -- no --> escalate[Inspect logs, enable MCPBASH_DEBUG_PAYLOADS temporarily]
@@ -312,4 +312,4 @@ flowchart TD
 ## Doc changelog
 | Date | Version | Notes |
 | --- | --- | --- |
-| 2025-10-18 | v1.0 | Initial publication covering development, testing, operations, and contribution guidance. |
+| 2024-10-18 | v1.0 | Initial publication covering development, testing, operations, and contribution guidance. |

@@ -1,9 +1,16 @@
 # Error Handling Guidelines
 
-- Tool/resource failures return `isError=true` with `_meta.exitCode` and captured stderr.
+- Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; timeouts and cancellation surface as JSON-RPC errors before tool output is returned.
+- Resource failures use JSON-RPC errors (no `isError` flag) consistent with the MCP spec: invalid cursors/params return `-32602`, provider failures and oversized payloads return `-32603`.
 - Malformed tool output triggers a substitution with an error payload and a logged incident.
 - Registry or discovery errors fall back to minimal capabilities while emitting `notifications/message` with severity `error`.
 - Manual overrides should return well-formed JSON; otherwise auto-discovery resumes and issues `list_changed` notifications.
+
+Example `resources/read` error payload:
+
+```json
+{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unable to read resource"}}
+```
 
 ## JSON-RPC Error Codes
 
@@ -21,6 +28,13 @@
 | `-32005` | `exit` called before `shutdown` was requested | `handlers/lifecycle.sh` |
 
 Size guardrails: `mcp_core_guard_response_size` rejects oversized responses (default 10MB) with `-32603` and does not return partial content.
+
+## Troubleshooting Quick Hits
+- **Unsupported protocol (`-32602`)**: Client requested an older MCP version. Update the client or request `2025-03-26`/`2025-06-18`.
+- **Invalid cursor (`-32602`)**: Drop the cursor to restart pagination; ensure clients do not cache cursors across registry refreshes.
+- **Tool timed out (`-32004`)**: Reduce workload or raise `timeoutSecs` in `<tool>.meta.json`; defaults come from `MCPBASH_DEFAULT_TOOL_TIMEOUT`.
+- **Resource/provider failures (`-32603`)**: Confirm the provider is supported (`file`, `git`, `https`), URI is valid, and payload size is within `MCPBASH_MAX_RESOURCE_BYTES`.
+- **Minimal mode responses (`-32601`)**: Ensure `jq`/`gojq` is available or unset `MCPBASH_FORCE_MINIMAL` to enable tools/resources/prompts.
 
 ## Operational Safeguards
 

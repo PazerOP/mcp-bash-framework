@@ -10,6 +10,9 @@ Local linting and CI expect a few command-line tools to be present:
 
 Without `shfmt`, the lint step fails immediately with "Required command \"shfmt\" not found in PATH".
 
+### Pre-commit hooks
+Install [`pre-commit`](https://pre-commit.com/) and run `pre-commit install` to mirror CI formatting/linting locally. Hooks cover whitespace, `shfmt`, and shellcheck so commits fail fast when style drifts.
+
 ## Running Tests
 
 See [TESTING.md](TESTING.md) for detailed instructions on running the test suite.

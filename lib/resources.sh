@@ -588,22 +588,18 @@ mcp_resources_list() {
 		fi
 	fi
 
+	local total="${MCP_RESOURCES_TOTAL}"
 	local result_json
-	result_json="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" '
+	result_json="$(echo "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
 		{
-			resources: .items[$offset:$offset+$limit]
+			resources: .items[$offset:$offset+$limit],
+			total: $total
 		}
 	')"
 
-	# Check if we have a next cursor
-	local total="${MCP_RESOURCES_TOTAL}"
-	if [ $((offset + numeric_limit)) -lt "${total}" ]; then
-		local next_offset=$((offset + numeric_limit))
-		local cursor_payload
-		cursor_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n --arg ver "1" --arg col "resources" --argjson off "$next_offset" --arg hash "${MCP_RESOURCES_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
-		local encoded
-		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg next "${encoded}" '.nextCursor = $next')"
+	if ! result_json="$(mcp_paginate_attach_next_cursor "${result_json}" "resources" "${offset}" "${numeric_limit}" "${total}" "${MCP_RESOURCES_REGISTRY_HASH}")"; then
+		mcp_resources_error -32603 "Unable to encode resources cursor"
+		return 1
 	fi
 
 	printf '%s' "${result_json}"

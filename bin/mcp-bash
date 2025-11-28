@@ -121,7 +121,7 @@ mcp_scaffold_tool() {
 	fi
 	local target_dir="${MCPBASH_TOOLS_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
-		printf 'Target %s already exists\n' "${target_dir}" >&2
+		printf 'Target %s already exists (remove it or choose a new tool name)\n' "${target_dir}" >&2
 		exit 1
 	fi
 	mkdir -p "${target_dir}"
@@ -148,7 +148,7 @@ mcp_scaffold_prompt() {
 	fi
 	local target_dir="${MCPBASH_PROMPTS_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
-		printf 'Target %s already exists\n' "${target_dir}" >&2
+		printf 'Target %s already exists (remove it or choose a new prompt name)\n' "${target_dir}" >&2
 		exit 1
 	fi
 	mkdir -p "${target_dir}"
@@ -174,7 +174,7 @@ mcp_scaffold_resource() {
 	fi
 	local target_dir="${MCPBASH_RESOURCES_DIR}/${name}"
 	if [ -e "${target_dir}" ]; then
-		printf 'Target %s already exists\n' "${target_dir}" >&2
+		printf 'Target %s already exists (remove it or choose a new resource name)\n' "${target_dir}" >&2
 		exit 1
 	fi
 	mkdir -p "${target_dir}"
