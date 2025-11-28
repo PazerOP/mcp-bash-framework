@@ -208,18 +208,20 @@ windows_subscription_test() {
 	local resp_file="${sub_root}/responses.ndjson"
 
 	(
-		cat <<'EOF'
-{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
-{"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}
-EOF
-		# Modify file after subscribe, before ping
+		echo '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}'
+		echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+		echo '{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}'
+		# Modify file after subscribe
 		(
 			sleep 1
 			echo "updated" >"${sub_root}/resources/live.txt"
 		) &
 		sleep 1
 		echo '{"jsonrpc":"2.0","id":"ping","method":"ping"}'
+		# Keep session alive to allow notification emission, then cleanly shutdown
+		sleep 2
+		echo '{"jsonrpc":"2.0","id":"shutdown","method":"shutdown"}'
+		echo '{"jsonrpc":"2.0","id":"exit","method":"exit"}'
 	) | MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash >"${resp_file}"
 
 	# Validate subscribe ack, ping response, and updated notification
