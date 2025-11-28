@@ -309,6 +309,7 @@ mcp_registry_register_finalize_kind() {
 		if [ "${MCP_COMPLETION_MANUAL_ACTIVE}" = "true" ]; then
 			if [ -z "${MCP_COMPLETION_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
 				mcp_completion_manual_abort
+				# shellcheck disable=SC2034  # consumed by completion refresh path in lib/completion.sh
 				if mcp_completion_apply_manual_json "${script_output}"; then
 					MCP_COMPLETION_MANUAL_LOADED=true
 					mcp_registry_register_set_status "completions" "ok" ""
@@ -320,6 +321,7 @@ mcp_registry_register_finalize_kind() {
 			if [ -n "${script_output}" ]; then
 				mcp_logging_warning "${MCP_COMPLETION_LOGGER}" "Manual completion script output: ${script_output}"
 			fi
+			# shellcheck disable=SC2034  # consumed by completion refresh path in lib/completion.sh
 			if mcp_completion_manual_finalize; then
 				MCP_COMPLETION_MANUAL_LOADED=true
 				mcp_registry_register_set_status "completions" "ok" ""
