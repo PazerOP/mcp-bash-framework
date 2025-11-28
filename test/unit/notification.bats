@@ -21,6 +21,7 @@ source "${REPO_ROOT}/lib/tools.sh"
 # Simulate a registry with a hash
 MCP_TOOLS_REGISTRY_HASH="abc123"
 MCP_TOOLS_LAST_NOTIFIED_HASH=""
+MCP_TOOLS_CHANGED=true
 _MCP_NOTIFICATION_PAYLOAD=""
 
 # Consume with emit=false (protocol suppression)
@@ -34,6 +35,10 @@ assert_eq "" "${_MCP_NOTIFICATION_PAYLOAD}" "Expected empty payload when emit=fa
 assert_eq "" "${MCP_TOOLS_LAST_NOTIFIED_HASH}" "State should not change when emit=false"
 
 # Now consume with emit=true
+mcp_tools_consume_notification false  # still suppressed until change flag set again
+
+# Reset change flag for emit path
+MCP_TOOLS_CHANGED=true
 mcp_tools_consume_notification true
 
 # Should return notification JSON
@@ -56,6 +61,7 @@ source "${REPO_ROOT}/lib/resources.sh"
 
 MCP_RESOURCES_REGISTRY_HASH="hash1"
 MCP_RESOURCES_LAST_NOTIFIED_HASH=""
+MCP_RESOURCES_CHANGED=true
 
 # First notification
 mcp_resources_consume_notification true
@@ -66,6 +72,7 @@ assert_eq "hash1" "${MCP_RESOURCES_LAST_NOTIFIED_HASH}" "Resources state should 
 
 # Hash changes
 MCP_RESOURCES_REGISTRY_HASH="hash2"
+MCP_RESOURCES_CHANGED=true
 mcp_resources_consume_notification true
 if [[ "${_MCP_NOTIFICATION_PAYLOAD}" != *"list_changed"* ]]; then
     test_fail "Expected list_changed notification after hash change"
