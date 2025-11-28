@@ -100,8 +100,10 @@ mcp_core_wait_for_workers() {
 	fi
 
 	for pid in ${pids}; do
-		if ! wait "${pid}"; then
-			exit_code=$?
+		wait "${pid}"
+		exit_code=$?
+		# Ignore normal exits and missing jobs (127) to avoid noisy logs on shells without full job control.
+		if [ "${exit_code}" -ne 0 ] && [ "${exit_code}" -ne 127 ]; then
 			printf '%s\n' "mcp-bash: background worker ${pid} exited with status ${exit_code}" >&2
 		fi
 	done
@@ -815,7 +817,7 @@ mcp_core_emit_shutting_down() {
 # -32602 invalid params, -32603 internal error.
 # We also use the server-reserved range (-32000..-32099) for MCP-specific states:
 # -32001 cancelled, -32002 not initialized, -32003 shutting down,
-# -32004 timed out, -32005 exit before shutdown.
+# -32005 exit before shutdown. Timeouts use -32603 (internal error) by policy.
 mcp_core_build_error_response() {
 	local id_json="$1"
 	local code="$2"
