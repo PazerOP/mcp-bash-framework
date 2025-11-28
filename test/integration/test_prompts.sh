@@ -9,11 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/../common/assert.sh"
 
-# Named pipes and blocking reads are unreliable on Windows runners; skip there.
+IS_WINDOWS=false
 case "$(uname -s 2>/dev/null)" in
 MINGW* | MSYS* | CYGWIN*)
-	printf 'SKIP: prompts test disabled on Windows (FIFO/timeout unreliable)\n'
-	exit 0
+	IS_WINDOWS=true
 	;;
 esac
 
@@ -166,6 +165,64 @@ if ! jq -e '
 fi
 
 # --- TTL-driven list_changed notifications ---
+
+run_windows_prompt_notification() {
+	local win_root="${TEST_TMPDIR}/poll-win"
+	stage_workspace "${win_root}"
+	rm -f "${win_root}/server.d/register.sh"
+	mkdir -p "${win_root}/prompts"
+
+	cat <<'EOF_PROMPT' >"${win_root}/prompts/live.txt"
+Live version 1
+EOF_PROMPT
+
+	cat <<'EOF_META' >"${win_root}/prompts/live.meta.json"
+{"name": "prompt.live", "description": "Live prompt", "arguments": {"type": "object", "properties": {}}, "role": "system"}
+EOF_META
+
+	cat <<'JSON' >"${win_root}/req1.ndjson"
+{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"list1","method":"prompts/list","params":{}}
+JSON
+
+	MCPBASH_PROJECT_ROOT="${win_root}" MCP_PROMPTS_TTL=1 ./bin/mcp-bash <"${win_root}/req1.ndjson" >"${win_root}/res1.ndjson"
+
+	local count1
+	count1="$(grep -c 'notifications/prompts/list_changed' "${win_root}/res1.ndjson" || true)"
+	assert_eq 1 "${count1}" "Expected one prompts list_changed on first run (Windows file-based)"
+
+	local desc1
+	desc1="$(jq -r 'select(.id=="list1") | .result.prompts[0].description // empty' "${win_root}/res1.ndjson")"
+	assert_eq "Live prompt" "${desc1}" "Description should match v1"
+
+	# mutate prompt metadata
+	cat <<'EOF_META' >"${win_root}/prompts/live.meta.json"
+{"name": "prompt.live", "description": "Live prompt v2", "arguments": {"type": "object", "properties": {}}, "role": "system"}
+EOF_META
+
+	cat <<'JSON' >"${win_root}/req2.ndjson"
+{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"list2","method":"prompts/list","params":{}}
+JSON
+
+	MCPBASH_PROJECT_ROOT="${win_root}" MCP_PROMPTS_TTL=1 ./bin/mcp-bash <"${win_root}/req2.ndjson" >"${win_root}/res2.ndjson"
+
+	local count2
+	count2="$(grep -c 'notifications/prompts/list_changed' "${win_root}/res2.ndjson" || true)"
+	assert_eq 1 "${count2}" "Expected one prompts list_changed after mutation (Windows file-based)"
+
+	local desc2
+	desc2="$(jq -r 'select(.id=="list2") | .result.prompts[0].description // empty' "${win_root}/res2.ndjson")"
+	assert_eq "Live prompt v2" "${desc2}" "Description should match v2"
+}
+
+if [ "${IS_WINDOWS}" = "true" ]; then
+	run_windows_prompt_notification
+	exit 0
+fi
+
 POLL_ROOT="${TEST_TMPDIR}/poll"
 stage_workspace "${POLL_ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)

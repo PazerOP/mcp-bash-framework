@@ -9,6 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/../common/assert.sh"
 
+IS_WINDOWS=false
+case "$(uname -s 2>/dev/null)" in
+MINGW* | MSYS* | CYGWIN*)
+	IS_WINDOWS=true
+	;;
+esac
+
 test_create_tmpdir
 
 echo "Resources integration temp root: ${TEST_TMPDIR}"
@@ -196,6 +203,48 @@ cat <<EOF_META >"${SUB_ROOT}/resources/live.meta.json"
 {"name": "file.live", "description": "Live file", "uri": "file://${SUB_ROOT}/resources/live.txt", "mimeType": "text/plain"}
 EOF_META
 
+windows_subscription_test() {
+	local sub_root="$1"
+	local resp_file="${sub_root}/responses.ndjson"
+
+	(
+		cat <<'EOF'
+{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}
+EOF
+		# Modify file after subscribe, before ping
+		(
+			sleep 1
+			echo "updated" >"${sub_root}/resources/live.txt"
+		) &
+		sleep 1
+		echo '{"jsonrpc":"2.0","id":"ping","method":"ping"}'
+	) | MCPBASH_PROJECT_ROOT="${sub_root}" ./bin/mcp-bash >"${resp_file}"
+
+	# Validate subscribe ack, ping response, and updated notification
+	local sub_ok
+	sub_ok="$(jq -r 'select(.id=="sub") | .result // empty' "${resp_file}" || true)"
+	if [ -z "${sub_ok}" ]; then
+		printf 'Subscription response missing on Windows file-based path\n' >&2
+		exit 1
+	fi
+
+	local ping_ok
+	ping_ok="$(jq -r 'select(.id=="ping") | .result // empty' "${resp_file}" || true)"
+	if [ -z "${ping_ok}" ]; then
+		printf 'Ping response missing on Windows file-based path\n' >&2
+		exit 1
+	fi
+
+	local update_seen
+	update_seen="$(jq -r 'select(.method=="notifications/resources/updated") | .params.contents[0].text // empty' "${resp_file}" || true)"
+	if [ "${update_seen}" != "updated" ]; then
+		printf 'Update notification missing or incorrect on Windows file-based path\n' >&2
+		exit 1
+	fi
+}
+
 run_subscription_test() {
 	local sub_root="$1"
 	local pipe_in="${sub_root}/pipe_in"
@@ -306,4 +355,8 @@ run_subscription_test() {
 	done
 }
 
-run_subscription_test "${SUB_ROOT}"
+if [ "${IS_WINDOWS}" = "true" ]; then
+	windows_subscription_test "${SUB_ROOT}"
+else
+	run_subscription_test "${SUB_ROOT}"
+fi
