@@ -108,3 +108,30 @@ mcp_lock_try_reap() {
 
 	rm -rf "${path}"
 }
+
+mcp_lock_release_owned() {
+	local name="$1"
+	local owner_pid="$2"
+	local path
+	local recorded=""
+
+	if [ -z "${name}" ] || [ -z "${owner_pid}" ]; then
+		return 0
+	fi
+
+	path="$(mcp_lock_path "${name}")"
+	if [ ! -d "${path}" ]; then
+		return 0
+	fi
+
+	recorded="$(cat "${path}/pid" 2>/dev/null || true)"
+	if [ -z "${recorded}" ]; then
+		rm -rf "${path}"
+		return 0
+	fi
+
+	# Clear the lock if it belongs to the specified pid or the recorded owner is gone.
+	if [ "${recorded}" = "${owner_pid}" ] || ! kill -0 "${recorded}" 2>/dev/null; then
+		rm -rf "${path}"
+	fi
+}

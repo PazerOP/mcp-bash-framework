@@ -649,21 +649,18 @@ mcp_tools_list() {
 		fi
 	fi
 
+	local total="${MCP_TOOLS_TOTAL}"
 	local result_json
-	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" '
+	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" --argjson total "${total}" '
 		{
-			tools: .items[$offset:$offset+$limit]
+			tools: .items[$offset:$offset+$limit],
+			total: $total
 		}
 	')"
 
-	local total="${MCP_TOOLS_TOTAL}"
-	if [ $((offset + numeric_limit)) -lt "${total}" ]; then
-		local next_offset=$((offset + numeric_limit))
-		local cursor_payload
-		cursor_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n --arg ver "1" --arg col "tools" --argjson off "$next_offset" --arg hash "${MCP_TOOLS_REGISTRY_HASH}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')"
-		local encoded
-		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr -d '=')"
-		result_json="$(echo "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg next "${encoded}" '.nextCursor = $next')"
+	if ! result_json="$(mcp_paginate_attach_next_cursor "${result_json}" "tools" "${offset}" "${numeric_limit}" "${total}" "${MCP_TOOLS_REGISTRY_HASH}")"; then
+		mcp_tools_error -32603 "Unable to encode tools cursor"
+		return 1
 	fi
 
 	printf '%s' "${result_json}"
@@ -932,6 +929,7 @@ mcp_tools_call() {
 
 	case "${exit_code}" in
 	124 | 137)
+		# Normalize timeouts to the generic internal error code to align with integration expectations.
 		_mcp_tools_emit_error -32603 "Tool timed out" "null"
 		cleanup_tool_temp_files
 		return 1

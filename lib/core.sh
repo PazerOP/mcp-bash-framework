@@ -717,6 +717,8 @@ mcp_core_cancel_request() {
 	if mcp_core_process_alive "${pid}"; then
 		mcp_core_send_signal_chain "${pid}" "${pgid}" KILL
 	fi
+	# If the worker died while holding the stdout lock, force-release it using the tracked pid.
+	mcp_lock_release_owned "${MCPBASH_STDOUT_LOCK_NAME}" "${pid}"
 }
 
 mcp_core_send_signal_chain() {
