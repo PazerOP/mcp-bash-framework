@@ -371,14 +371,20 @@ mcp_resources_refresh_registry() {
 	scan_root="$(mcp_resources_scan_root)"
 	mcp_resources_init
 	mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh start register=${MCPBASH_SERVER_DIR}/register.sh exists=$([[ -x ${MCPBASH_SERVER_DIR}/register.sh ]] && echo yes || echo no) ttl=${MCP_RESOURCES_TTL:-5}"
-	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Invoking manual registration script"
-		if mcp_resources_run_manual_script; then
-			mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh satisfied by manual script"
-			return 0
+	if mcp_registry_register_apply "resources"; then
+		mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh satisfied by manual script"
+		return 0
+	else
+		local manual_status=$?
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "resources")"
+			if [ -z "${err}" ]; then
+				err="Manual registration script returned empty output or non-zero"
+			fi
+			mcp_logging_error "${MCP_RESOURCES_LOGGER}" "${err}"
+			return 1
 		fi
-		mcp_logging_error "${MCP_RESOURCES_LOGGER}" "Manual registration script returned empty output or non-zero"
-		return 1
 	fi
 	local now
 	now="$(date +%s)"
@@ -651,9 +657,44 @@ mcp_resources_templates_list() {
 	# shellcheck disable=SC2034
 	_MCP_RESOURCES_ERR_MESSAGE=""
 	# For now, no templates are discovered; return an empty, paginated-compliant payload.
-	[ -n "${limit}" ] && : # inputs accepted for shape compatibility
-	[ -n "${cursor}" ] && : # inputs accepted for shape compatibility
-	printf '{"resourceTemplates":[]}'
+
+	local numeric_limit
+	if [ -z "${limit}" ]; then
+		numeric_limit=50
+	else
+		case "${limit}" in
+		'' | *[!0-9]*) numeric_limit=50 ;;
+		0) numeric_limit=50 ;;
+		*) numeric_limit="${limit}" ;;
+		esac
+	fi
+	if [ "${numeric_limit}" -gt 200 ]; then
+		numeric_limit=200
+	fi
+
+	local hash="resource-templates-v1"
+	local offset=0
+	if [ -n "${cursor}" ]; then
+		if ! offset="$(mcp_paginate_decode "${cursor}" "resourceTemplates" "${hash}")"; then
+			mcp_resources_error -32602 "Invalid cursor"
+			return 1
+		fi
+	fi
+
+	local result_json
+	result_json="$("${MCPBASH_JSON_TOOL_BIN}" -n -c '{resourceTemplates: [], total: 0, nextCursor: null}')"
+
+	if ! result_json="$(mcp_paginate_attach_next_cursor "${result_json}" "resourceTemplates" "${offset}" "${numeric_limit}" 0 "${hash}")"; then
+		mcp_resources_error -32603 "Unable to encode resource template cursor"
+		return 1
+	fi
+
+	result_json="$("${MCPBASH_JSON_TOOL_BIN}" -c '
+		. as $root
+		| if has("nextCursor") then $root else ($root + {nextCursor: null}) end
+	' <<<"${result_json}")"
+
+	printf '%s' "${result_json}"
 }
 
 mcp_resources_provider_from_uri() {

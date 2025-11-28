@@ -5,6 +5,17 @@ set -euo pipefail
 
 MCPBASH_REGISTRY_FASTPATH_FILE=""
 MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT=104857600
+MCP_REGISTRY_REGISTER_SIGNATURE=""
+MCP_REGISTRY_REGISTER_LAST_RUN=0
+MCP_REGISTRY_REGISTER_COMPLETE=false
+MCP_REGISTRY_REGISTER_STATUS_TOOLS=""
+MCP_REGISTRY_REGISTER_STATUS_RESOURCES=""
+MCP_REGISTRY_REGISTER_STATUS_PROMPTS=""
+MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS=""
+MCP_REGISTRY_REGISTER_ERROR_TOOLS=""
+MCP_REGISTRY_REGISTER_ERROR_RESOURCES=""
+MCP_REGISTRY_REGISTER_ERROR_PROMPTS=""
+MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
 
 mcp_registry_global_max_bytes() {
 	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-${MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT}}"
@@ -139,4 +150,328 @@ mcp_registry_write_with_lock() {
 	printf '%s' "${json_payload}" >"${path}"
 	mcp_lock_release "${lock_name}"
 	return 0
+}
+
+mcp_registry_register_filesize() {
+	local path="$1"
+	if [ ! -f "${path}" ]; then
+		printf '0'
+		return 0
+	fi
+	wc -c <"${path}" 2>/dev/null | tr -d ' '
+}
+
+mcp_registry_register_ttl() {
+	local ttl="${MCPBASH_REGISTER_TTL:-5}"
+	case "${ttl}" in
+	'' | *[!0-9]*) ttl=5 ;;
+	0) ttl=5 ;;
+	esac
+	printf '%s' "${ttl}"
+}
+
+mcp_registry_register_signature() {
+	local path="$1"
+	local mtime size
+	mtime="$(mcp_registry_stat_mtime "${path}")"
+	size="$(mcp_registry_register_filesize "${path}")"
+	printf '%s:%s:%s' "${path}" "${mtime}" "${size}"
+}
+
+mcp_registry_register_reset_state() {
+	MCP_REGISTRY_REGISTER_COMPLETE=false
+	MCP_REGISTRY_REGISTER_STATUS_TOOLS=""
+	MCP_REGISTRY_REGISTER_STATUS_RESOURCES=""
+	MCP_REGISTRY_REGISTER_STATUS_PROMPTS=""
+	MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS=""
+	MCP_REGISTRY_REGISTER_ERROR_TOOLS=""
+	MCP_REGISTRY_REGISTER_ERROR_RESOURCES=""
+	MCP_REGISTRY_REGISTER_ERROR_PROMPTS=""
+	MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
+}
+
+mcp_registry_register_set_status() {
+	local kind="$1"
+	local status="$2"
+	local message="$3"
+	case "${kind}" in
+	tools)
+		MCP_REGISTRY_REGISTER_STATUS_TOOLS="${status}"
+		MCP_REGISTRY_REGISTER_ERROR_TOOLS="${message}"
+		;;
+	resources)
+		MCP_REGISTRY_REGISTER_STATUS_RESOURCES="${status}"
+		MCP_REGISTRY_REGISTER_ERROR_RESOURCES="${message}"
+		;;
+	prompts)
+		MCP_REGISTRY_REGISTER_STATUS_PROMPTS="${status}"
+		MCP_REGISTRY_REGISTER_ERROR_PROMPTS="${message}"
+		;;
+	completions)
+		MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS="${status}"
+		MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS="${message}"
+		;;
+	esac
+}
+
+mcp_registry_register_error_for_kind() {
+	local kind="$1"
+	case "${kind}" in
+	tools) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_TOOLS}" ;;
+	resources) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_RESOURCES}" ;;
+	prompts) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_PROMPTS}" ;;
+	completions) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS}" ;;
+	*) printf '' ;;
+	esac
+}
+
+mcp_registry_register_abort_all() {
+	mcp_tools_manual_abort 2>/dev/null || true
+	mcp_resources_manual_abort 2>/dev/null || true
+	mcp_prompts_manual_abort 2>/dev/null || true
+	mcp_completion_manual_abort 2>/dev/null || true
+}
+
+mcp_registry_register_finalize_kind() {
+	local kind="$1"
+	local script_output="$2"
+	case "${kind}" in
+	tools)
+		if [ "${MCP_TOOLS_MANUAL_ACTIVE}" = "true" ]; then
+			if [ -z "${MCP_TOOLS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+				mcp_tools_manual_abort
+				if mcp_tools_apply_manual_json "${script_output}"; then
+					mcp_registry_register_set_status "tools" "ok" ""
+				else
+					mcp_registry_register_set_status "tools" "error" "Manual tools registration parsing failed"
+				fi
+				return 0
+			fi
+			if [ -n "${script_output}" ]; then
+				mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Manual registration script output: ${script_output}"
+			fi
+			if mcp_tools_manual_finalize; then
+				mcp_registry_register_set_status "tools" "ok" ""
+			else
+				mcp_registry_register_set_status "tools" "error" "Manual tools registration finalize failed"
+			fi
+		else
+			mcp_registry_register_set_status "tools" "skipped" ""
+		fi
+		;;
+	resources)
+		if [ "${MCP_RESOURCES_MANUAL_ACTIVE}" = "true" ]; then
+			if [ -z "${MCP_RESOURCES_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+				mcp_resources_manual_abort
+				if mcp_resources_apply_manual_json "${script_output}"; then
+					mcp_registry_register_set_status "resources" "ok" ""
+				else
+					mcp_registry_register_set_status "resources" "error" "Manual resources registration parsing failed"
+				fi
+				return 0
+			fi
+			if [ -n "${script_output}" ]; then
+				mcp_logging_warning "${MCP_RESOURCES_LOGGER}" "Manual registration script output: ${script_output}"
+			fi
+			if mcp_resources_manual_finalize; then
+				mcp_registry_register_set_status "resources" "ok" ""
+			else
+				mcp_registry_register_set_status "resources" "error" "Manual resources registration finalize failed"
+			fi
+		else
+			mcp_registry_register_set_status "resources" "skipped" ""
+		fi
+		;;
+	prompts)
+		if [ "${MCP_PROMPTS_MANUAL_ACTIVE}" = "true" ]; then
+			if [ -z "${MCP_PROMPTS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+				mcp_prompts_manual_abort
+				if mcp_prompts_apply_manual_json "${script_output}"; then
+					mcp_registry_register_set_status "prompts" "ok" ""
+				else
+					mcp_registry_register_set_status "prompts" "error" "Manual prompts registration parsing failed"
+				fi
+				return 0
+			fi
+			if [ -n "${script_output}" ]; then
+				mcp_logging_warning "${MCP_PROMPTS_LOGGER}" "Manual registration script output: ${script_output}"
+			fi
+			if mcp_prompts_manual_finalize; then
+				mcp_registry_register_set_status "prompts" "ok" ""
+			else
+				mcp_registry_register_set_status "prompts" "error" "Manual prompts registration finalize failed"
+			fi
+		else
+			mcp_registry_register_set_status "prompts" "skipped" ""
+		fi
+		;;
+	completions)
+		if [ "${MCP_COMPLETION_MANUAL_ACTIVE}" = "true" ]; then
+			if [ -z "${MCP_COMPLETION_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+				mcp_completion_manual_abort
+				if mcp_completion_apply_manual_json "${script_output}"; then
+					MCP_COMPLETION_MANUAL_LOADED=true
+					mcp_registry_register_set_status "completions" "ok" ""
+				else
+					mcp_registry_register_set_status "completions" "error" "Manual completion registration parsing failed"
+				fi
+				return 0
+			fi
+			if [ -n "${script_output}" ]; then
+				mcp_logging_warning "${MCP_COMPLETION_LOGGER}" "Manual completion script output: ${script_output}"
+			fi
+			if mcp_completion_manual_finalize; then
+				MCP_COMPLETION_MANUAL_LOADED=true
+				mcp_registry_register_set_status "completions" "ok" ""
+			else
+				mcp_registry_register_set_status "completions" "error" "Manual completion registration finalize failed"
+			fi
+		else
+			mcp_registry_register_set_status "completions" "skipped" ""
+		fi
+		;;
+	esac
+}
+
+mcp_registry_register_execute() {
+	local script_path="$1"
+	local signature="$2"
+
+	mcp_registry_register_reset_state
+	MCP_REGISTRY_REGISTER_SIGNATURE="${signature}"
+	MCP_REGISTRY_REGISTER_LAST_RUN="$(date +%s)"
+
+	mcp_tools_manual_begin
+	mcp_resources_manual_begin
+	mcp_prompts_manual_begin
+	mcp_completion_manual_begin
+
+	local script_output_file
+	script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-register-output.XXXXXX")"
+	local script_status=0
+	local timeout="${MCPBASH_MANUAL_REGISTER_TIMEOUT:-10}"
+
+	set +e
+	if [ "${timeout}" -gt 0 ]; then
+		(
+			set -euo pipefail
+			# shellcheck disable=SC1090
+			# shellcheck disable=SC1091
+			. "${script_path}"
+		) >"${script_output_file}" 2>&1 &
+		local script_pid=$!
+		local waited=0
+		while kill -0 "${script_pid}" 2>/dev/null; do
+			if [ "${waited}" -ge "${timeout}" ]; then
+				kill "${script_pid}" 2>/dev/null || true
+				wait "${script_pid}" 2>/dev/null || true
+				script_status=124
+				break
+			fi
+			sleep 1
+			waited=$((waited + 1))
+		done
+		if [ "${script_status}" -ne 124 ]; then
+			wait "${script_pid}" 2>/dev/null || true
+			script_status=$?
+		fi
+	else
+		(
+			set -euo pipefail
+			# shellcheck disable=SC1090
+			# shellcheck disable=SC1091
+			. "${script_path}"
+		) >"${script_output_file}" 2>&1
+		script_status=$?
+	fi
+	set -e
+
+	local script_output
+	script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
+	local script_size
+	script_size="$(wc -c <"${script_output_file}" | tr -d ' ')"
+	rm -f "${script_output_file}"
+
+	local manual_limit="${MCPBASH_MAX_MANUAL_REGISTRY_BYTES:-1048576}"
+	case "${manual_limit}" in
+	'' | *[!0-9]*) manual_limit=1048576 ;;
+	0) manual_limit=1048576 ;;
+	esac
+
+	if [ "${script_size:-0}" -gt "${manual_limit}" ]; then
+		mcp_registry_register_set_status "tools" "error" "Manual registration output exceeded ${manual_limit} bytes"
+		mcp_registry_register_set_status "resources" "error" "Manual registration output exceeded ${manual_limit} bytes"
+		mcp_registry_register_set_status "prompts" "error" "Manual registration output exceeded ${manual_limit} bytes"
+		mcp_registry_register_set_status "completions" "error" "Manual registration output exceeded ${manual_limit} bytes"
+		mcp_registry_register_abort_all
+		MCP_REGISTRY_REGISTER_COMPLETE=true
+		return 0
+	fi
+
+	if [ "${script_status}" -ne 0 ]; then
+		local message="Manual registration script failed"
+		if [ "${script_status}" -eq 124 ]; then
+			message="Manual registration script timed out"
+		fi
+		mcp_registry_register_set_status "tools" "error" "${message}"
+		mcp_registry_register_set_status "resources" "error" "${message}"
+		mcp_registry_register_set_status "prompts" "error" "${message}"
+		mcp_registry_register_set_status "completions" "error" "${message}"
+		if [ -n "${script_output}" ]; then
+			mcp_logging_error "mcp.registry" "Manual registration script output: ${script_output}"
+		fi
+		mcp_registry_register_abort_all
+		MCP_REGISTRY_REGISTER_COMPLETE=true
+		return 0
+	fi
+
+	mcp_registry_register_finalize_kind "tools" "${script_output}"
+	mcp_registry_register_finalize_kind "resources" "${script_output}"
+	mcp_registry_register_finalize_kind "prompts" "${script_output}"
+	mcp_registry_register_finalize_kind "completions" "${script_output}"
+	MCP_REGISTRY_REGISTER_COMPLETE=true
+}
+
+mcp_registry_register_apply() {
+	local kind="$1"
+	local script_path="${MCPBASH_SERVER_DIR}/register.sh"
+	if [ ! -x "${script_path}" ]; then
+		return 1
+	fi
+
+	local signature
+	signature="$(mcp_registry_register_signature "${script_path}")"
+
+	local now ttl
+	now="$(date +%s)"
+	ttl="$(mcp_registry_register_ttl)"
+
+	if [ "${MCP_REGISTRY_REGISTER_COMPLETE}" = true ]; then
+		if [ "${signature}" != "${MCP_REGISTRY_REGISTER_SIGNATURE}" ] || [ $((now - MCP_REGISTRY_REGISTER_LAST_RUN)) -ge "${ttl}" ]; then
+			mcp_registry_register_reset_state
+		fi
+	fi
+
+	if [ "${MCP_REGISTRY_REGISTER_COMPLETE}" != true ]; then
+		mcp_registry_register_execute "${script_path}" "${signature}"
+	fi
+
+	local status=""
+	case "${kind}" in
+	tools) status="${MCP_REGISTRY_REGISTER_STATUS_TOOLS}" ;;
+	resources) status="${MCP_REGISTRY_REGISTER_STATUS_RESOURCES}" ;;
+	prompts) status="${MCP_REGISTRY_REGISTER_STATUS_PROMPTS}" ;;
+	completions) status="${MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS}" ;;
+	esac
+
+	case "${status}" in
+	ok | skipped)
+		return 0
+		;;
+	error)
+		return 2
+		;;
+	esac
+
+	return 1
 }

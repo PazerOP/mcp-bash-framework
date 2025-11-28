@@ -274,12 +274,19 @@ mcp_prompts_refresh_registry() {
 	local scan_root
 	scan_root="$(mcp_prompts_scan_root)"
 	mcp_prompts_init
-	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		if mcp_prompts_run_manual_script; then
-			return 0
+	if mcp_registry_register_apply "prompts"; then
+		return 0
+	else
+		local manual_status=$?
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "prompts")"
+			if [ -z "${err}" ]; then
+				err="Manual registration script returned empty output or non-zero"
+			fi
+			mcp_logging_error "${MCP_PROMPTS_LOGGER}" "${err}"
+			return 1
 		fi
-		mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Manual registration script returned empty output or non-zero"
-		return 1
 	fi
 	local now
 	now="$(date +%s)"

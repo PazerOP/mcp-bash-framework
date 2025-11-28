@@ -665,7 +665,7 @@ mcp_json_extract_cursor() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.cursor? // ""' 2>/dev/null
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.cursor? // .params.nextCursor? // ""' 2>/dev/null
 		;;
 	*)
 		printf ''

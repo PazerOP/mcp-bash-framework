@@ -118,8 +118,20 @@ mcp_handle_resources() {
 			printf '%s' "${MCPBASH_NO_RESPONSE}"
 			return 0
 		fi
-		local response
-		response="$(printf '{"jsonrpc":"2.0","id":%s,"result":{"subscriptionId":"%s"}}' "${id}" "${subscription_id}")"
+		local response_payload response
+		response_payload="$(
+			"${MCPBASH_JSON_TOOL_BIN}" -n -c \
+				--arg sub "${subscription_id}" \
+				--arg uri "${effective_uri}" \
+				--argjson resource "${result_json}" '
+					{
+						subscription: {id: $sub, uri: $uri},
+						subscriptionId: $sub,
+						resource: $resource
+					}
+				'
+		)"
+		response="$(printf '{"jsonrpc":"2.0","id":%s,"result":%s}' "${id}" "${response_payload}")"
 		mcp_logging_debug "${logger}" "Subscribe emitting response subscription=${subscription_id}"
 		rpc_send_line_direct "${response}"
 		if [ -n "${MCPBASH_STATE_DIR:-}" ]; then

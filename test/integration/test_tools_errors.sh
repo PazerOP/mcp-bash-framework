@@ -74,6 +74,6 @@ if [ -z "${slow_resp}" ]; then
 	test_fail "missing slow response"
 fi
 slow_code="$(echo "${slow_resp}" | jq -r '.error.code')"
-test_assert_eq "${slow_code}" "-32603"
+test_assert_eq "${slow_code}" "-32004"
 
 printf 'Tool error and timeout tests passed.\n'

@@ -235,15 +235,38 @@ mcp_core_process_legacy_batch() {
 	return 0
 }
 
-mcp_core_guard_response_size() {
-	local id_json="$1"
-	local payload="$2"
-	local limit="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
-	local size
+mcp_core_response_size_limit() {
+	local method="$1"
+	local limit=""
+
+	case "${method}" in
+	tools/list | resources/list | prompts/list | resources/templates/list)
+		if command -v mcp_registry_global_max_bytes >/dev/null 2>&1; then
+			limit="$(mcp_registry_global_max_bytes 2>/dev/null || true)"
+		fi
+		;;
+	esac
+
+	if [ -z "${limit}" ]; then
+		limit="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-10485760}"
+	fi
 
 	case "${limit}" in
 	'' | *[!0-9]*) limit=10485760 ;;
 	esac
+
+	printf '%s' "${limit}"
+}
+
+mcp_core_guard_response_size() {
+	local id_json="$1"
+	local payload="$2"
+	local method="$3"
+	local limit
+	local size
+
+	limit="$(mcp_core_response_size_limit "${method}")"
+
 	if [ -z "${payload}" ]; then
 		printf '%s' "${payload}"
 		return 0
@@ -256,7 +279,7 @@ mcp_core_guard_response_size() {
 	fi
 
 	printf '%s\n' "mcp-bash: response exceeded ${limit} bytes for id ${id_json:-null}" >&2
-	mcp_core_build_error_response "${id_json:-null}" -32603 "Response exceeded MAX_TOOL_OUTPUT_SIZE" ""
+	mcp_core_build_error_response "${id_json:-null}" -32603 "Response exceeded response size limit" ""
 }
 
 mcp_core_rate_limit() {
@@ -463,7 +486,7 @@ mcp_core_execute_handler() {
 		fi
 	fi
 
-	response="$(mcp_core_guard_response_size "${id_json}" "${response}")"
+	response="$(mcp_core_guard_response_size "${id_json}" "${response}" "${method}")"
 	rpc_send_line "${response}"
 }
 
@@ -599,7 +622,7 @@ mcp_core_worker_entry() {
 	fi
 
 	if [ -n "${response}" ]; then
-		response="$(mcp_core_guard_response_size "${id_json}" "${response}")"
+		response="$(mcp_core_guard_response_size "${id_json}" "${response}" "${method}")"
 		mcp_core_worker_emit "${key}" "${response}"
 	fi
 

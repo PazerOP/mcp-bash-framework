@@ -27,7 +27,7 @@ Example `resources/read` error payload:
 | `-32004` | Tool timed out | `lib/tools.sh` |
 | `-32005` | `exit` called before `shutdown` was requested | `handlers/lifecycle.sh` |
 
-Size guardrails: `mcp_core_guard_response_size` rejects oversized responses (default 10MB) with `-32603` and does not return partial content.
+Size guardrails: `mcp_core_guard_response_size` rejects oversized responses with `-32603` (tool/resource reads use `MCPBASH_MAX_TOOL_OUTPUT_SIZE`, default 10MB; registry/list payloads use `MCPBASH_REGISTRY_MAX_BYTES`, default 100MB) and does not return partial content.
 
 ## Troubleshooting Quick Hits
 - **Unsupported protocol (`-32602`)**: Client requested an older MCP version. Update the client or request `2025-03-26`/`2025-06-18`.

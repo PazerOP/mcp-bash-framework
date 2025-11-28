@@ -251,6 +251,8 @@ mcp_tools_validate_output_schema() {
 
 	# Run validation, capturing result as string
 	local validation_result
+	local validation_status=0
+	set +e
 	validation_result="$(printf '%s' "${structured_json}" | "${MCPBASH_JSON_TOOL_BIN}" --slurpfile schema "${schema_file}" '
 		($schema[0]) as $s |
 		. as $data |
@@ -275,24 +277,28 @@ mcp_tools_validate_output_schema() {
 					else true end)
 				end)
 		) as $types_ok |
-		if ($s.type // "object") != "object" then "true"
-		elif $required_ok and $types_ok then "true"
-		else "false"
+		if ($s.type // "object") != "object" then true
+		elif $required_ok and $types_ok then true
+		else false
 		end
-	' 2>/dev/null)" || validation_result="error"
+	' 2>/dev/null)"
+	validation_status=$?
+	set -e
 
 	rm -f "${schema_file}"
 
-	# Check result - must be exactly "true" (with quotes, as jq outputs strings)
-	case "${validation_result}" in
-	'"true"' | 'true')
-		return 0
-		;;
-	*)
+	if [ "${validation_status}" -ne 0 ]; then
 		_mcp_tools_emit_error -32603 "Tool output does not satisfy outputSchema" "null"
 		return 1
-		;;
-	esac
+	fi
+
+	# Check result - must be exactly true
+	if [ "${validation_result}" = "true" ]; then
+		return 0
+	fi
+
+	_mcp_tools_emit_error -32603 "Tool output does not satisfy outputSchema" "null"
+	return 1
 }
 
 mcp_tools_apply_manual_json() {
@@ -405,11 +411,19 @@ mcp_tools_refresh_registry() {
 	local scan_root
 	scan_root="$(mcp_tools_scan_root)"
 	mcp_tools_init
-	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		if mcp_tools_run_manual_script; then
-			return 0
+	if mcp_registry_register_apply "tools"; then
+		return 0
+	else
+		local manual_status=$?
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "tools")"
+			if [ -z "${err}" ]; then
+				err="Manual registration script returned empty output or non-zero"
+			fi
+			mcp_logging_error "${MCP_TOOLS_LOGGER}" "${err}"
+			return 1
 		fi
-		return 1
 	fi
 	local now
 	now="$(date +%s)"
@@ -927,19 +941,36 @@ mcp_tools_call() {
 	stderr_content="${stderr_file}"
 	stdout_content="${stdout_file}"
 
-	case "${exit_code}" in
-	124 | 137)
-		# Normalize timeouts to the generic internal error code to align with integration expectations.
-		_mcp_tools_emit_error -32603 "Tool timed out" "null"
-		cleanup_tool_temp_files
-		return 1
-		;;
-	143)
+	local cancelled_flag="false"
+	if [ -n "${MCP_CANCEL_FILE:-}" ] && [ -f "${MCP_CANCEL_FILE}" ]; then
+		cancelled_flag="true"
+	fi
+
+	local timed_out="false"
+	if [ -n "${effective_timeout}" ]; then
+		case "${exit_code}" in
+		124 | 137)
+			timed_out="true"
+			;;
+		143)
+			if [ "${cancelled_flag}" != "true" ]; then
+				timed_out="true"
+			fi
+			;;
+		esac
+	fi
+
+	if [ "${cancelled_flag}" = "true" ]; then
 		_mcp_tools_emit_error -32001 "Tool cancelled" "null"
 		cleanup_tool_temp_files
 		return 1
-		;;
-	esac
+	fi
+
+	if [ "${timed_out}" = "true" ]; then
+		_mcp_tools_emit_error -32004 "Tool timed out" "null"
+		cleanup_tool_temp_files
+		return 1
+	fi
 
 	local tool_error_raw=""
 	if [ -n "${tool_error_file}" ] && [ -e "${tool_error_file}" ]; then

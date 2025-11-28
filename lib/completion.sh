@@ -350,13 +350,20 @@ mcp_completion_refresh_manual() {
 	if [ "${MCP_COMPLETION_MANUAL_LOADED}" = true ]; then
 		return 0
 	fi
-	if [ -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		if mcp_completion_run_manual_script; then
-			MCP_COMPLETION_MANUAL_LOADED=true
-			return 0
+	if mcp_registry_register_apply "completions"; then
+		MCP_COMPLETION_MANUAL_LOADED=true
+		return 0
+	else
+		local manual_status=$?
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "completions")"
+			if [ -z "${err}" ]; then
+				err="Manual completion registration failed"
+			fi
+			mcp_logging_error "${MCP_COMPLETION_LOGGER}" "${err}"
+			return 1
 		fi
-		mcp_logging_error "${MCP_COMPLETION_LOGGER}" "Manual completion registration failed"
-		return 1
 	fi
 	MCP_COMPLETION_MANUAL_LOADED=true
 	return 0
@@ -578,13 +585,13 @@ mcp_completion_normalize_output() {
 						suggestions: ($payload.suggestions // []),
 						hasMore: bool($payload.hasMore),
 						next: $payload.next,
-						cursor: ($payload.cursor // "")
+						cursor: ($payload.nextCursor // $payload.cursor // "")
 					}
 				end
 				| .suggestions as $all
 				| ($all | length) as $total
 				| (.suggestions = $all[0:$limit])
-				| (.hasMore = (bool(.hasMore) or ($total > $limit)))
+				| (.hasMore = (bool(.hasMore) or ($total > $limit) or ((.cursor // "") | length > 0)))
 				| (.next = (
 					if .next == null then
 						if .hasMore then ($start + (.suggestions | length)) else null end
@@ -792,7 +799,7 @@ mcp_completion_run_provider() {
 	if ! next_index="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.next // ""' 2>/dev/null)"; then
 		next_index=""
 	fi
-	if ! cursor_value="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.cursor // ""' 2>/dev/null)"; then
+	if ! cursor_value="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.nextCursor // .cursor // ""' 2>/dev/null)"; then
 		cursor_value=""
 	fi
 
@@ -865,10 +872,11 @@ mcp_completion_finalize() {
 				{
 					completion: {
 						values: $suggestions,
-						hasMore: ($has_more == true)
+						hasMore: ($has_more == true),
+						nextCursor: (if $cursor == "" then null else $cursor end)
 					}
 				}
-				+ (if $cursor != "" then {_meta: {cursor: $cursor}} else {} end)
+				| (if $cursor != "" then (._meta = {cursor: $cursor}) else . end)
 			'
 	)"
 }
