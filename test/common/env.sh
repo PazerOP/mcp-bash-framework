@@ -15,11 +15,24 @@ export PATH="${MCPBASH_HOME}/bin:${PATH}"
 # Prefer gojq for cross-platform determinism, falling back to jq. Use type -P
 # to ignore any shell functions so sourcing this file multiple times stays safe.
 TEST_JSON_TOOL_BIN=""
-if TEST_JSON_TOOL_BIN="$(type -P gojq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
-	:
-elif TEST_JSON_TOOL_BIN="$(type -P jq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
-	:
-else
+# gojq has shown memory spikes on Windows runners; prefer jq there if available.
+case "$(uname -s 2>/dev/null)" in
+MINGW* | MSYS*)
+	if TEST_JSON_TOOL_BIN="$(type -P jq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
+		:
+	elif TEST_JSON_TOOL_BIN="$(type -P gojq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
+		:
+	fi
+	;;
+*)
+	if TEST_JSON_TOOL_BIN="$(type -P gojq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
+		:
+	elif TEST_JSON_TOOL_BIN="$(type -P jq 2>/dev/null)" && [ -n "${TEST_JSON_TOOL_BIN}" ]; then
+		:
+	fi
+	;;
+esac
+if [ -z "${TEST_JSON_TOOL_BIN}" ]; then
 	printf 'Required command "jq" (or gojq) not found in PATH\n' >&2
 	exit 1
 fi
