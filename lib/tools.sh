@@ -623,6 +623,7 @@ mcp_tools_consume_notification() {
 	fi
 
 	if [ "${actually_emit}" = "true" ]; then
+		# shellcheck disable=SC2034  # stored for next consume call
 		MCP_TOOLS_LAST_NOTIFIED_HASH="${current_hash}"
 		MCP_TOOLS_CHANGED=false
 		_MCP_NOTIFICATION_PAYLOAD='{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}'

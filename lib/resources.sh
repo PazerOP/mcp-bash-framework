@@ -649,6 +649,7 @@ mcp_resources_consume_notification() {
 	fi
 
 	if [ "${actually_emit}" = "true" ]; then
+		# shellcheck disable=SC2034  # stored for next consume call
 		MCP_RESOURCES_LAST_NOTIFIED_HASH="${current_hash}"
 		MCP_RESOURCES_CHANGED=false
 		_MCP_NOTIFICATION_PAYLOAD='{"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{}}'
