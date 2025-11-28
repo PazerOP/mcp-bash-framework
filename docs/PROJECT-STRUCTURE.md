@@ -79,6 +79,19 @@ export MCPBASH_TOOLS_DIR=/app/tools-v2      # Override tools location
 export MCPBASH_PROMPTS_DIR=/shared/prompts  # Shared prompts
 ```
 
+## Completions
+
+Completions are registered via `server.d/register.sh` (not auto-discovered). A minimal example:
+
+```bash
+# server.d/register.sh
+mcp_completion_manual_begin
+mcp_completion_register_manual '{"name":"example.completion","path":"completions/example.sh","timeoutSecs":5}'
+mcp_completion_manual_finalize
+```
+
+Paths in `path` are resolved relative to `MCPBASH_PROJECT_ROOT`. Registry refresh will load the completions registry and make names available to `completion/complete`.
+
 ## Tool SDK discovery
 
 `lib/tools.sh` exports `MCP_SDK` to the framework's `sdk/` directory so tools can `source "${MCP_SDK}/tool-sdk.sh"`. Templates fall back to resolving `sdk/` relative to the script when executed directly. When copying tools into another tree, set `MCP_SDK` yourself (see [SDK Discovery](../README.md#sdk-discovery)) to keep helpers locatable.

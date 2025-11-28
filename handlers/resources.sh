@@ -137,10 +137,6 @@ mcp_handle_resources() {
 		if [ -n "${MCPBASH_STATE_DIR:-}" ]; then
 			printf '%s %s\n' "subscribe-response" "${subscription_id}" >>"${MCPBASH_STATE_DIR}/resources.debug.log"
 		fi
-		mcp_resources_emit_update "${subscription_id}" "${result_json}"
-		if [ -n "${MCPBASH_STATE_DIR:-}" ]; then
-			printf '%s %s\n' "subscribe-emit-update" "${subscription_id}" >>"${MCPBASH_STATE_DIR}/resources.debug.log"
-		fi
 		printf '%s' "${MCPBASH_NO_RESPONSE}"
 		;;
 	resources/unsubscribe)

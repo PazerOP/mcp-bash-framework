@@ -9,9 +9,9 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 | Target MCP Version | `2025-06-18` |
 | Transport | stdio only (HTTP/SSE out of scope) |
 | JSON-RPC Version | 2.0 |
-| Downgrade Support | Negotiated during `initialize` (to `2025-03-26` when requested) |
-| Accepted Versions | `2025-06-18` (default), `2025-03-26` |
-| Unsupported Versions | Older protocols (for example `2024-11-05`, `2024-10-07`) receive `{"code":-32602,"message":"Unsupported protocol version"}` |
+| Downgrade Support | Negotiated during `initialize` (to `2025-03-26` or `2024-11-05` when requested) |
+| Accepted Versions | `2025-06-18` (default), `2025-03-26`, `2024-11-05` |
+| Unsupported Versions | Older protocols (for example `2024-10-07`) receive `{"code":-32602,"message":"Unsupported protocol version"}` |
 
 ## Capability Coverage Matrix
 
@@ -32,6 +32,7 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 | Logging | `notifications/message` for log output | `handlers/logging.sh`, `lib/logging.sh` |
 | Completion | Argument completion for tools/prompts/resources | `lib/completion.sh`, `handlers/completion.sh` |
 | Pagination | Cursor-based result pagination | `lib/paginate.sh` |
+| Resource Templates | Optional templates listing | `handlers/resources.sh`, `lib/resources.sh`, `lib/spec.sh` |
 | **Infrastructure** | | |
 | Runtime Environment | Tooling detection, minimal-mode fallbacks | `bin/mcp-bash`, `lib/runtime.sh` |
 | Concurrency Model | Worker orchestration, cancellation, locks | `lib/core.sh`, `lib/ids.sh`, `lib/lock.sh` |

@@ -24,7 +24,7 @@ Example `resources/read` error payload:
 | `-32001` | Tool cancelled (SIGTERM/INT from client) | `lib/tools.sh` |
 | `-32002` | Server not initialized (`initialize` not completed) | `lib/core.sh` |
 | `-32003` | Server shutting down (rejecting new work) | `lib/core.sh` |
-| `-32004` | Tool timed out | `lib/tools.sh` |
+| `-32603` | Tool timed out | `lib/tools.sh` |
 | `-32005` | `exit` called before `shutdown` was requested | `handlers/lifecycle.sh` |
 
 Size guardrails: `mcp_core_guard_response_size` rejects oversized responses with `-32603` (tool/resource reads use `MCPBASH_MAX_TOOL_OUTPUT_SIZE`, default 10MB; registry/list payloads use `MCPBASH_REGISTRY_MAX_BYTES`, default 100MB) and does not return partial content.
@@ -32,7 +32,7 @@ Size guardrails: `mcp_core_guard_response_size` rejects oversized responses with
 ## Troubleshooting Quick Hits
 - **Unsupported protocol (`-32602`)**: Client requested an older MCP version. Update the client or request `2025-03-26`/`2025-06-18`.
 - **Invalid cursor (`-32602`)**: Drop the cursor to restart pagination; ensure clients do not cache cursors across registry refreshes.
-- **Tool timed out (`-32004`)**: Reduce workload or raise `timeoutSecs` in `<tool>.meta.json`; defaults come from `MCPBASH_DEFAULT_TOOL_TIMEOUT`.
+- **Tool timed out (`-32603`)**: Reduce workload or raise `timeoutSecs` in `<tool>.meta.json`; defaults come from `MCPBASH_DEFAULT_TOOL_TIMEOUT`.
 - **Resource/provider failures (`-32603`)**: Confirm the provider is supported (`file`, `git`, `https`), URI is valid, and payload size is within `MCPBASH_MAX_RESOURCE_BYTES`.
 - **Minimal mode responses (`-32601`)**: Ensure `jq`/`gojq` is available or unset `MCPBASH_FORCE_MINIMAL` to enable tools/resources/prompts.
 

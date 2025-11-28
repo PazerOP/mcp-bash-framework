@@ -1,6 +1,6 @@
 # mcp-bash
 
- [![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=main&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=main&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
 [![License](https://img.shields.io/github/license/yaniv-golan/mcp-bash-framework)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-%3E%3D3.2-green.svg)](https://www.gnu.org/software/bash/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue)](https://spec.modelcontextprotocol.io/)
@@ -28,7 +28,7 @@ Most MCP servers assume you’re willing to spin up heavyweight runtimes and fra
 ### 1. Install the Framework
 
 ```bash
-git clone https://github.com/yaniv-golan/mcp-bash.git ~/mcp-bash
+git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/mcp-bash
 ```
 
 ### 2. Create Your Project
@@ -128,6 +128,19 @@ export MCP_SDK=/path/to/mcp-bash/sdk
 ```
 
 If the SDK can’t be resolved, the script exits with a clear error.
+
+## Completions
+
+Completions are registered via `server.d/register.sh` (they are not auto-discovered). A minimal registration snippet:
+
+```bash
+# server.d/register.sh
+mcp_completion_manual_begin
+mcp_completion_register_manual '{"name":"example.completion","path":"completions/example.sh","timeoutSecs":5}'
+mcp_completion_manual_finalize
+```
+
+Paths are resolved relative to `MCPBASH_PROJECT_ROOT`, and registry refreshes pick them up automatically.
 
 ## Learn by Example
 
@@ -246,7 +259,7 @@ This server targets MCP protocol version `2025-06-18` (the current stable specif
 |---------|--------|
 | `2025-06-18` | ✅ Fully supported (default) |
 | `2025-03-26` | ✅ Supported (downgrade) |
-| `2024-11-05` | ❌ **Not supported** |
+| `2024-11-05` | ✅ Supported (downgrade) |
 | `2024-10-07` | ❌ **Not supported** |
 
 Unsupported versions receive an `initialize` error payload: `{"code":-32602,"message":"Unsupported protocol version"}`.

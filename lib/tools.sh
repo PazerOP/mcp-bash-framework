@@ -192,7 +192,7 @@ mcp_tools_error() {
 # Usage: _mcp_tools_emit_error <code> <message> [data]
 # The data argument should be valid JSON (object, string, null, etc.)
 # Codes are JSON-RPC 2.0 values; we also emit the reserved server range for
-# tool-specific states (-32001 cancelled, -32004 timed out).
+# tool-specific states (-32001 cancelled, -32603 timed out).
 _mcp_tools_emit_error() {
 	local err_code="$1"
 	local err_message="$2"
@@ -967,7 +967,7 @@ mcp_tools_call() {
 	fi
 
 	if [ "${timed_out}" = "true" ]; then
-		_mcp_tools_emit_error -32004 "Tool timed out" "null"
+		_mcp_tools_emit_error -32603 "Tool timed out" "null"
 		cleanup_tool_temp_files
 		return 1
 	fi

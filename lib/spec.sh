@@ -5,7 +5,7 @@ set -euo pipefail
 
 mcp_spec_supported_protocols() {
 	# Default protocol 2025-06-18 with explicit back-compat for earlier releases.
-	printf '%s' "2025-06-18 2025-03-26"
+	printf '%s' "2025-06-18 2025-03-26 2024-11-05"
 }
 
 mcp_spec_resolve_protocol_version() {
@@ -29,12 +29,19 @@ mcp_spec_resolve_protocol_version() {
 
 mcp_spec_capabilities_full() {
 	cat <<'EOF'
-{"logging":{},"tools":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"prompts":{"listChanged":true},"completion":{}}
+{"logging":{},"tools":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true,"templates":true},"prompts":{"listChanged":true},"completion":{}}
 EOF
 }
 
 mcp_spec_capabilities_backport_20250326() {
 	# Older protocol maintains core surface but omits listChanged flags added in 2025-06-18.
+	cat <<'EOF'
+{"logging":{},"tools":{},"resources":{"subscribe":true},"prompts":{},"completion":{}}
+EOF
+}
+
+mcp_spec_capabilities_backport_20241105() {
+	# Legacy protocol support for clients pinned to 2024-11-05; no listChanged flags.
 	cat <<'EOF'
 {"logging":{},"tools":{},"resources":{"subscribe":true},"prompts":{},"completion":{}}
 EOF
@@ -53,6 +60,9 @@ mcp_spec_capabilities_for_runtime() {
 		case "${protocol}" in
 		2025-03-26)
 			mcp_spec_capabilities_backport_20250326
+			;;
+		2024-11-05)
+			mcp_spec_capabilities_backport_20241105
 			;;
 		*)
 			mcp_spec_capabilities_full

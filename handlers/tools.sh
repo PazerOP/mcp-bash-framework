@@ -10,6 +10,26 @@ mcp_tools_quote() {
 	mcp_json_quote_text "${text}"
 }
 
+mcp_tools_extract_call_fields() {
+	# Extract name, arguments (compact JSON), and timeoutSecs in a single jq/gojq pass.
+	local json_payload="$1"
+	local extraction
+	if extraction="$(
+		{ printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '
+			[
+				(.params.name // ""),
+				((.params.arguments // {}) | tojson),
+				((.params.timeoutSecs // "") | tostring)
+			] | @tsv
+		'; } 2>/dev/null
+	)"; then
+		printf '%s' "${extraction}"
+	else
+		# Fallback: empty fields so caller can apply defaults/validation.
+		printf '\t\t'
+	fi
+}
+
 mcp_handle_tools() {
 	local method="$1"
 	local json_payload="$2"
@@ -50,15 +70,17 @@ mcp_handle_tools() {
 		;;
 	tools/call)
 		local name args_json timeout_override
-		name="$(mcp_json_extract_tool_name "${json_payload}")"
+		# Extract fields in one JSON-tool pass; keep args as compact JSON
+		extraction="$(mcp_tools_extract_call_fields "${json_payload}")"
+		IFS=$'\t' read -r name args_json timeout_override <<<"${extraction}"
+		[ -z "${args_json}" ] && args_json="{}"
+
 		if [ -z "${name}" ]; then
 			local message
 			message=$(mcp_tools_quote "Tool name is required")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
 			return 0
 		fi
-		args_json="$(mcp_json_extract_arguments "${json_payload}")"
-		timeout_override="$(mcp_json_extract_timeout_override "${json_payload}")"
 		local result_json
 		if ! mcp_tools_call "${name}" "${args_json}" "${timeout_override}"; then
 			result_json="${_MCP_TOOLS_RESULT:-}"
