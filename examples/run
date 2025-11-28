@@ -20,7 +20,17 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-printf 'Detected JSON tooling: %s\n' "${MCPBASH_JSON_TOOL:-unknown}" >&2
+json_tool="${MCPBASH_JSON_TOOL:-}"
+if [ -z "${json_tool}" ]; then
+  if command -v gojq >/dev/null 2>&1; then
+    json_tool="gojq"
+  elif command -v jq >/dev/null 2>&1; then
+    json_tool="jq"
+  else
+    json_tool="minimal"
+  fi
+fi
+printf 'Detected JSON tooling: %s (no Python support; jq/gojq or minimal mode)\n' "${json_tool}" >&2
 
 # Copy framework files
 cp -a "${SCRIPT_DIR}/../bin" "${TMPDIR}/"

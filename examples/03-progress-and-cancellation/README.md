@@ -1,27 +1,33 @@
 # 03-progress-and-cancellation
 
-## Demonstrates
-- Emitting progress notifications using the SDK.
-- Cancelling an in-flight tool call (`notifications/cancelled`).
+**What you’ll learn**
+- Emitting progress notifications with a progress token
+- Cooperative cancellation surfaced as `-32001` cancellation
+- Text vs structured output depending on jq/gojq (no Python fallback)
 
-## Run
+**Prereqs**
+- Bash 3.2+
+- jq or gojq recommended; otherwise minimal mode (text-only output)
+
+**Run**
 ```
 ./examples/run 03-progress-and-cancellation
 ```
-In another terminal:
+
+**Transcript**
 ```
-printf '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":"2","method":"tools/call","params":{"name":"example.slow","_meta":{"progressToken":"token-1"}}}\n' | ./examples/run 03-progress-and-cancellation
+> tools/call example.slow {"_meta":{"progressToken":"token-1"}}
+< notifications/progress ... "Working (10%)"
+< notifications/progress ... "Working (50%)"
+> notifications/cancelled {"requestId":"1"}
+< {"error":{"code":-32001,"message":"Cancelled","isError":true}}
 ```
 
-While the tool runs, send:
-```
-printf '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"2"}}\n' | ./examples/run 03-progress-and-cancellation
-```
-Watch for `notifications/progress` and the tool’s final cancellation outcome.
+**Success criteria**
+- Progress notifications arrive while the tool runs when `_meta.progressToken` is set
+- Cancellation returns `-32001` and stops further progress updates
 
-## SDK Helpers
-`examples/run` configures `MCP_SDK` automatically so `tools/slow.sh` can load `sdk/tool-sdk.sh`. When running the script manually, export `MCP_SDK` first (see [SDK Discovery](../../README.md#sdk-discovery)).
-
-## Tips
-- Remove the cancellation request to see the tool finish and respond with text.
-- Adjust `timeoutSecs` in `slow.meta.json` to exercise watchdog behaviour.
+**Troubleshooting**
+- Ensure scripts are executable (`chmod +x examples/run examples/03-progress-and-cancellation/tools/*.sh`).
+- If you don’t see progress, include `_meta.progressToken` in the call.
+- Avoid CRLF in requests; send LF-only NDJSON.

@@ -154,8 +154,10 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | [**01-args-and-validation**](examples/01-args-and-validation/) | Handling JSON arguments and input validation. |
 | [**02-logging-and-levels**](examples/02-logging-and-levels/) | Sending logs to the client and managing verbosity. |
 | [**03-progress-and-cancellation**](examples/03-progress-and-cancellation/) | Long-running tasks, reporting progress, and handling user cancellation. |
-| [**04-ffmpeg-studio**](examples/04-ffmpeg-studio/) | Real-world application: Video processing pipeline with media inspection. |
-| [**05-manual-registration**](examples/05-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
+| [**04-resources-basics**](examples/04-resources-basics/) | Listing and reading resources via the built-in file provider. |
+| [**05-prompts-basics**](examples/05-prompts-basics/) | Discovering and rendering prompt templates. |
+| [**06-manual-registration**](examples/06-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
+| [**Advanced: ffmpeg-studio**](examples/advanced/ffmpeg-studio/) | Real-world application: video processing pipeline with media inspection (optional, heavy deps). |
 
 ## Features at a Glance
 
@@ -248,11 +250,12 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 - [**Security Policy**](docs/SECURITY.md) - Input validation and execution safety.
 - [**Changelog**](CHANGELOG.md) - Notable changes between releases.
 - [**Windows Support**](docs/WINDOWS.md) - Running on Git Bash/WSL.
+- [**Remote Connectivity**](docs/REMOTE.md) - Exposing mcp-bash over HTTP/SSE via external gateways.
 
 ### Scope and Goals
 - Bash-only Model Context Protocol server verified on macOS Bash 3.2, Linux Bash ≥3.2, and experimental Git-Bash/WSL environments.
 - Targets MCP protocol version `2025-06-18` while supporting negotiated downgrades.
-- Transport support is limited to stdio; HTTP/SSE/OAuth transports remain out of scope.
+- Transport support is limited to stdio; HTTP/SSE/OAuth transports remain out of scope (see [Remote Connectivity](docs/REMOTE.md) for gateway options).
 
 ### Protocol Version Compatibility
 This server targets MCP protocol version `2025-06-18` (the current stable specification) and supports negotiated downgrades during `initialize`.

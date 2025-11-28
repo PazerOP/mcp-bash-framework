@@ -1,31 +1,32 @@
 # 01-args-and-validation
 
-## Goal
-Demonstrates argument parsing and validation errors.
+**What you’ll learn**
+- Reading arguments with `mcp_args_get`
+- Validation failures surfacing as `isError=true`
+- Structured output when jq/gojq is available; text fallback otherwise
 
-## Run
+**Prereqs**
+- Bash 3.2+
+- jq or gojq recommended; otherwise minimal mode (text-only output)
+
+**Run**
 ```
 ./examples/run 01-args-and-validation
 ```
-Send requests with the argument:
-```
-printf '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":"2","method":"tools/call","params":{"name":"example.echoArg","arguments":{"value":"hi"}}}\n' | ./examples/run 01-args-and-validation
-```
 
-## SDK Helpers
-`examples/run` sets `MCP_SDK` automatically so the tool can source the shared helpers. If you invoke `tools/echo-arg.sh` directly, export `MCP_SDK` yourself (see [SDK Discovery](../../README.md#sdk-discovery)).
-
-## Transcript
+**Transcript**
 ```
 > tools/call example.echoArg {"value":"hi"}
 < {"result":{"content":[{"type":"text","text":"You sent: hi"}]}}
+> tools/call example.echoArg {}
+< {"error":{"code":-32602,"message":"Missing 'value' argument","isError":true}}
 ```
 
-To see validation failure:
-```
-printf '{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"example.echoArg"}}\n' | ./examples/run 01-args-and-validation
-```
+**Success criteria**
+- `tools/list` shows `example.echoArg`
+- Valid call echoes the provided value; missing argument yields a validation error
 
-## Troubleshooting
-- Ensure scripts are executable: `chmod +x examples/01-args-and-validation/tools/*.sh`
-- Install `jq` for nicer JSON handling.
+**Troubleshooting**
+- Ensure scripts are executable (`chmod +x examples/run examples/01-args-and-validation/tools/*.sh`).
+- Install jq/gojq for structured JSON output; otherwise expect text-only responses.
+- Avoid CRLF in requests; send LF-only NDJSON.

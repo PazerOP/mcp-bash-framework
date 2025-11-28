@@ -1,0 +1,15 @@
+{
+  "name": "prompt.greeting",
+  "description": "Render a friendly greeting with a provided name",
+  "path": "greeting.txt",
+  "arguments": {
+    "type": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name to greet"
+      }
+    }
+  }
+}

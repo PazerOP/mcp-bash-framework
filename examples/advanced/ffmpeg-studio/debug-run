@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Wrapper to log stdin for debugging
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+tee "${MCPBASH_TMP_ROOT:-/tmp}/mcp-debug-stdin.log" | "${SCRIPT_DIR}/run"

@@ -1,22 +1,32 @@
 # 02-logging-and-levels
 
-## Purpose
-Show how tools emit structured logs and how `logging/setLevel` affects visibility.
+**What you’ll learn**
+- Emitting structured logs from a tool
+- Changing verbosity via `logging/setLevel`
+- Text vs structured output depending on jq/gojq (no Python fallback)
 
-## Usage
+**Prereqs**
+- Bash 3.2+
+- jq or gojq recommended; otherwise minimal mode (text-only output)
+
+**Run**
 ```
 ./examples/run 02-logging-and-levels
 ```
-Then from another terminal:
+
+**Transcript**
 ```
-printf '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":"2","method":"logging/setLevel","params":{"level":"debug"}}\n{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"example.logger"}}\n' | ./examples/run 02-logging-and-levels
+> logging/setLevel {"level":"debug"}
+> tools/call example.logger
+< notifications/message ... "example.logger" ...
+< {"result":{"content":[{"type":"text","text":"Check your logging notifications"}]}}
 ```
 
-## SDK Helpers
-`examples/run` sets `MCP_SDK` for you so `tools/logger.sh` can source the SDK helpers. Set `MCP_SDK` manually if you execute the script outside of the runner (see [SDK Discovery](../../README.md#sdk-discovery)).
+**Success criteria**
+- `tools/list` shows `example.logger`
+- Setting level to `debug` yields `notifications/message` entries from the tool
 
-You should see `notifications/message` messages containing `example.logger` before the tool result.
-
-## Troubleshooting
-- If logs do not appear, ensure you set the level to `debug` or `info`.
-- Minimal mode still supports logging but may degrade structured metadata.
+**Troubleshooting**
+- Ensure scripts are executable (`chmod +x examples/run examples/02-logging-and-levels/tools/*.sh`).
+- If no logs appear, confirm `logging/setLevel` to `debug` or `info`.
+- Avoid CRLF in requests; send LF-only NDJSON.
