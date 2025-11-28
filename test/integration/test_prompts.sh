@@ -241,30 +241,32 @@ wait_for "id" "list" || {
 	exit 1
 }
 
-# Modify prompt
+# Modify prompt and force refresh via a second list
 printf 'Live version 2\n' >"${POLL_ROOT}/prompts/live.txt"
 
-# Wait for update notification
+# Wait for TTL and trigger another prompts/list
 sleep 1.2
-send '{"jsonrpc": "2.0", "id": "ping", "method": "ping"}'
+send '{"jsonrpc": "2.0", "id": "list2", "method": "prompts/list", "params": {}}'
 
-# We expect a ping response AND a list_changed notification
+# Expect a list2 response AND a list_changed notification
 seen_update=false
-seen_ping=false
+seen_list=false
 end_time=$(($(date +%s) + 10))
 
 while [ "$(date +%s)" -lt "${end_time}" ]; do
-	if [ "${seen_update}" = "true" ] && [ "${seen_ping}" = "true" ]; then
+	if [ "${seen_update}" = "true" ] && [ "${seen_list}" = "true" ]; then
 		break
 	fi
 	response="$(read_response)" || break
-	if [ -z "${response}" ]; then continue; fi
+	if [ -z "${response}" ]; then
+		continue
+	fi
 
 	id="$(printf '%s' "${response}" | jq -r '.id // empty')"
 	method="$(printf '%s' "${response}" | jq -r '.method // empty')"
 
-	if [ "${id}" = "ping" ]; then
-		seen_ping=true
+	if [ "${id}" = "list2" ]; then
+		seen_list=true
 	fi
 	if [ "${method}" = "notifications/prompts/list_changed" ]; then
 		seen_update=true
