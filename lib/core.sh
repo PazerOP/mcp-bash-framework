@@ -742,6 +742,16 @@ mcp_core_cancel_request() {
 	fi
 	# If the worker died while holding the stdout lock, force-release it using the tracked pid.
 	mcp_lock_release_owned "${MCPBASH_STDOUT_LOCK_NAME}" "${pid}"
+	# Fallback for environments where kill -0 cannot verify ownership (e.g., some Windows shells).
+	local stdout_lock
+	stdout_lock="$(mcp_lock_path "${MCPBASH_STDOUT_LOCK_NAME}")"
+	if [ -d "${stdout_lock}" ]; then
+		local lock_owner
+		lock_owner="$(cat "${stdout_lock}/pid" 2>/dev/null || true)"
+		if [ -n "${lock_owner}" ] && [ "${lock_owner}" = "${pid}" ]; then
+			rm -rf "${stdout_lock}" 2>/dev/null || true
+		fi
+	fi
 }
 
 mcp_core_send_signal_chain() {
