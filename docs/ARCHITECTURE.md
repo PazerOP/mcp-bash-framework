@@ -10,6 +10,7 @@ mcp-bash-framework/
 ├─ bin/mcp-bash
 ├─ lib/
 │  ├─ core.sh
+│  ├─ hash.sh
 │  ├─ rpc.sh
 │  ├─ json.sh
 │  ├─ lock.sh
@@ -21,7 +22,11 @@ mcp-bash-framework/
 │  ├─ logging.sh
 │  ├─ runtime.sh
 │  ├─ completion.sh
+│  ├─ registry.sh
 │  ├─ resource_providers.sh
+│  ├─ resources.sh
+│  ├─ prompts.sh
+│  ├─ tools.sh
 │  └─ spec.sh
 ├─ handlers/
 │  ├─ lifecycle.sh

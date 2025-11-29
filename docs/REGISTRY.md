@@ -106,7 +106,7 @@ Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_
       "name": "summarise.notes",
       "description": "Summarise meeting notes",
       "path": "summarise/summarise.txt",
-      "inputSchema": {
+      "arguments": {
         "type": "object",
         "required": ["notes"],
         "properties": {

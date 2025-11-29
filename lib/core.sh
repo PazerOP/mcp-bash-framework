@@ -910,7 +910,7 @@ mcp_core_emit_progress_stream() {
 	[ -f "${stream}" ] || return 0
 	while IFS= read -r line || [ -n "${line}" ]; do
 		[ -z "${line}" ] && continue
-		if ! mcp_core_rate_limit "${key}" "progress"; then
+		if mcp_core_rate_limit "${key}" "progress"; then
 			rpc_send_line "${line}"
 		fi
 	done <"${stream}"
@@ -934,7 +934,7 @@ mcp_core_emit_log_stream() {
 		local level
 		level="$(mcp_core_extract_log_level "${line}")"
 		if mcp_logging_is_enabled "${level}"; then
-			if ! mcp_core_rate_limit "${key}" "log"; then
+			if mcp_core_rate_limit "${key}" "log"; then
 				rpc_send_line "${line}"
 			fi
 		fi
@@ -1007,17 +1007,17 @@ mcp_core_flush_stream() {
 	tail -c +$((last_offset + 1)) "${stream}" 2>/dev/null \
 		| while IFS= read -r line || [ -n "${line}" ]; do
 			[ -z "${line}" ] && continue
-			if [ "${kind}" = "log" ]; then
-				local level
-				level="$(mcp_core_extract_log_level "${line}")"
-				if ! mcp_logging_is_enabled "${level}"; then
-					continue
-				fi
+		if [ "${kind}" = "log" ]; then
+			local level
+			level="$(mcp_core_extract_log_level "${line}")"
+			if ! mcp_logging_is_enabled "${level}"; then
+				continue
 			fi
-			if ! mcp_core_rate_limit "${key}" "${kind}"; then
-				rpc_send_line "${line}"
-			fi
-		done
+		fi
+		if mcp_core_rate_limit "${key}" "${kind}"; then
+			rpc_send_line "${line}"
+		fi
+	done
 	echo "${size}" >"${offset_file}"
 }
 
