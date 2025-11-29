@@ -11,6 +11,7 @@ Usage:
   mcp-bash                 # launch server
   mcp-bash --help          # show this help
   mcp-bash --version       # show version
+  mcp-bash debug           # launch server with debug logging (see docs/DEBUGGING.md)
   mcp-bash scaffold tool <name>
   mcp-bash scaffold prompt <name>
   mcp-bash scaffold resource <name>
@@ -527,6 +528,20 @@ if [ "${1-}" = "scaffold" ]; then
 		exit 1
 		;;
 	esac
+fi
+
+if [ "${1-}" = "debug" ]; then
+	shift
+	export MCPBASH_DEBUG_PAYLOADS=true
+	export MCPBASH_PRESERVE_STATE=true
+	# Create predictable debug directory
+	MCPBASH_STATE_DIR="${TMPDIR:-/tmp}/mcpbash.debug.$$"
+	export MCPBASH_STATE_DIR
+	mkdir -p "${MCPBASH_STATE_DIR}"
+	# Print location to stderr immediately (safe for stdio servers)
+	printf 'mcp-bash debug: logging to %s/payload.debug.log\n' "${MCPBASH_STATE_DIR}" >&2
+	main "$@"
+	exit $?
 fi
 
 main "$@"

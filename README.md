@@ -173,6 +173,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 - **Framework/Project Separation**: Install the framework once, create unlimited projects.
 - **Graceful Degradation**: Automatically detects available JSON tools (`gojq`, `jq`) or falls back to minimal mode if none are present.
 - **Progress Streaming**: Emits progress and log notifications; set `MCPBASH_ENABLE_LIVE_PROGRESS=true` to stream them during execution.
+- **Debug Mode**: Run `mcp-bash debug` to capture all JSON-RPC messages for analysis. See [docs/DEBUGGING.md](docs/DEBUGGING.md).
 
 ## Configuration
 
@@ -198,7 +199,8 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Background polling interval for resource subscriptions; set to `0` to disable. |
 | `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications as they are produced instead of after handler completion. |
 | `MCPBASH_PROGRESS_FLUSH_INTERVAL` | `0.5` | Flush interval (seconds) for live progress/log streaming when enabled. |
-| `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
+| `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. See [docs/DEBUGGING.md](docs/DEBUGGING.md). |
+| `MCPBASH_PRESERVE_STATE` | (unset) | Set to `true` to keep state directory after server exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |
 | `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Lifecycle, ping, and logging only). |
 | `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files once payloads exceed this many bytes. |
 | `MCPBASH_MAX_TOOL_STDERR_SIZE` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum stderr captured from a tool before failing the call. |

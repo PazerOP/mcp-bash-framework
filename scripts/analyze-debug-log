@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+# Parse and analyze mcp-bash debug logs.
+#
+# Usage:
+#   analyze-debug-log <log-file>              # Pretty-print all messages
+#   analyze-debug-log <log-file> --compact    # One line per message
+#   analyze-debug-log <log-file> --requests   # Show only incoming requests
+#   analyze-debug-log <log-file> --responses  # Show only outgoing responses
+#   analyze-debug-log <log-file> --json       # Output as JSON array
+
+set -euo pipefail
+
+mode="pretty"
+filter=""
+log_file=""
+
+show_help() {
+	cat <<'EOF'
+Usage: analyze-debug-log <log-file> [options]
+
+Parse mcp-bash debug logs into human-readable format.
+
+Options:
+  --compact, -c    One line per message (timestamp, direction, method/id)
+  --json, -j       Output as JSON array
+  --requests, -r   Show only incoming requests
+  --responses, -R  Show only outgoing responses
+  --help, -h       Show this help
+
+Log format (pipe-delimited):
+  timestamp|category|key|status|payload
+
+Examples:
+  analyze-debug-log /tmp/mcpbash.debug.12345/payload.debug.log
+  analyze-debug-log debug.log --compact
+  analyze-debug-log debug.log --requests | jq '.method'
+EOF
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--compact | -c)
+		mode="compact"
+		shift
+		;;
+	--json | -j)
+		mode="json"
+		shift
+		;;
+	--requests | -r)
+		filter="request"
+		shift
+		;;
+	--responses | -R)
+		filter="response"
+		shift
+		;;
+	--help | -h)
+		show_help
+		exit 0
+		;;
+	-*)
+		printf 'Unknown option: %s\n' "$1" >&2
+		exit 1
+		;;
+	*)
+		if [ -z "${log_file}" ]; then
+			log_file="$1"
+		else
+			printf 'Too many arguments\n' >&2
+			exit 1
+		fi
+		shift
+		;;
+	esac
+done
+
+if [ -z "${log_file}" ]; then
+	show_help
+	exit 1
+fi
+
+if [ ! -f "${log_file}" ]; then
+	printf 'File not found: %s\n' "${log_file}" >&2
+	exit 1
+fi
+
+# Check for jq (required for json mode and pretty mode)
+if [ "${mode}" = "json" ] || [ "${mode}" = "pretty" ]; then
+	if ! command -v jq >/dev/null 2>&1; then
+		printf 'Error: jq is required for %s mode\n' "${mode}" >&2
+		exit 1
+	fi
+fi
+
+format_timestamp() {
+	local ts="$1"
+	if command -v gdate >/dev/null 2>&1; then
+		gdate -d "@${ts}" '+%H:%M:%S' 2>/dev/null || printf '%s' "${ts}"
+	elif date --version 2>/dev/null | grep -q GNU; then
+		date -d "@${ts}" '+%H:%M:%S' 2>/dev/null || printf '%s' "${ts}"
+	else
+		# macOS date
+		date -r "${ts}" '+%H:%M:%S' 2>/dev/null || printf '%s' "${ts}"
+	fi
+}
+
+case "${mode}" in
+pretty)
+	while IFS='|' read -r timestamp category key status payload || [ -n "${timestamp}" ]; do
+		[ -z "${timestamp}" ] && continue
+
+		# Apply filter if set
+		if [ -n "${filter}" ] && [ "${category}" != "${filter}" ]; then
+			continue
+		fi
+
+		# Format direction indicator
+		case "${category}" in
+		request)
+			direction="→ RECV"
+			color="\033[0;32m" # green
+			;;
+		response)
+			direction="← SEND"
+			color="\033[0;34m" # blue
+			;;
+		*)
+			direction="  ${category}"
+			color="\033[0;33m" # yellow
+			;;
+		esac
+		reset="\033[0m"
+
+		# Extract method or id from payload
+		method=""
+		msg_id=""
+		if [ -n "${payload}" ]; then
+			method="$(printf '%s' "${payload}" | jq -r '.method // empty' 2>/dev/null || true)"
+			msg_id="$(printf '%s' "${payload}" | jq -r '.id // empty' 2>/dev/null || true)"
+		fi
+
+		# Format timestamp
+		ts_formatted="$(format_timestamp "${timestamp}")"
+
+		# Print header
+		printf '\n'
+		printf "${color}━━━ [%s] %s ━━━${reset}\n" "${ts_formatted}" "${direction}"
+		if [ -n "${method}" ]; then
+			printf 'Method: %s\n' "${method}"
+		fi
+		if [ -n "${msg_id}" ]; then
+			printf 'ID: %s\n' "${msg_id}"
+		fi
+		printf 'Status: %s\n' "${status}"
+
+		# Pretty-print payload
+		if [ -n "${payload}" ] && [ "${payload}" != "__MCP_NO_RESPONSE__" ]; then
+			printf '\n'
+			# Unescape the payload (it was escaped for storage)
+			unescaped="$(printf '%s' "${payload}" | sed 's/\\n/\n/g; s/\\r/\r/g')"
+			printf '%s' "${unescaped}" | jq . 2>/dev/null || printf '%s\n' "${payload}"
+		fi
+	done <"${log_file}"
+	printf '\n'
+	;;
+
+compact)
+	while IFS='|' read -r timestamp category key status payload || [ -n "${timestamp}" ]; do
+		[ -z "${timestamp}" ] && continue
+
+		# Apply filter if set
+		if [ -n "${filter}" ] && [ "${category}" != "${filter}" ]; then
+			continue
+		fi
+
+		# Format direction indicator
+		case "${category}" in
+		request) direction="→" ;;
+		response) direction="←" ;;
+		*) direction="?" ;;
+		esac
+
+		# Extract method or id from payload
+		method=""
+		msg_id=""
+		if [ -n "${payload}" ] && command -v jq >/dev/null 2>&1; then
+			method="$(printf '%s' "${payload}" | jq -r '.method // empty' 2>/dev/null || true)"
+			msg_id="$(printf '%s' "${payload}" | jq -r '.id // empty' 2>/dev/null || true)"
+		fi
+
+		# Format timestamp
+		ts_formatted="$(format_timestamp "${timestamp}")"
+
+		# Print compact line
+		if [ -n "${method}" ]; then
+			printf '[%s] %s %s (id=%s) [%s]\n' "${ts_formatted}" "${direction}" "${method}" "${msg_id}" "${status}"
+		else
+			printf '[%s] %s response id=%s [%s]\n' "${ts_formatted}" "${direction}" "${msg_id}" "${status}"
+		fi
+	done <"${log_file}"
+	;;
+
+json)
+	printf '[\n'
+	first=true
+	while IFS='|' read -r timestamp category key status payload || [ -n "${timestamp}" ]; do
+		[ -z "${timestamp}" ] && continue
+
+		# Apply filter if set
+		if [ -n "${filter}" ] && [ "${category}" != "${filter}" ]; then
+			continue
+		fi
+
+		if [ "${first}" = "true" ]; then
+			first=false
+		else
+			printf ',\n'
+		fi
+
+		# Unescape payload
+		unescaped="$(printf '%s' "${payload}" | sed 's/\\n/\n/g; s/\\r/\r/g')"
+
+		# Build JSON object - handle empty/special payloads
+		if [ -z "${unescaped}" ] || [ "${unescaped}" = "__MCP_NO_RESPONSE__" ]; then
+			jq -n \
+				--arg ts "${timestamp}" \
+				--arg cat "${category}" \
+				--arg key "${key}" \
+				--arg status "${status}" \
+				'{timestamp: ($ts | tonumber), category: $cat, key: $key, status: $status, payload: null}'
+		else
+			jq -n \
+				--arg ts "${timestamp}" \
+				--arg cat "${category}" \
+				--arg key "${key}" \
+				--arg status "${status}" \
+				--argjson payload "${unescaped}" \
+				'{timestamp: ($ts | tonumber), category: $cat, key: $key, status: $status, payload: $payload}'
+		fi
+	done <"${log_file}"
+	printf '\n]\n'
+	;;
+esac
+

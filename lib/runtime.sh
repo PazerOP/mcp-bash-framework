@@ -169,6 +169,14 @@ mcp_runtime_cleanup() {
 
 	mcp_io_log_corruption_summary
 
+	# Skip cleanup if MCPBASH_PRESERVE_STATE is set (useful for debugging)
+	if [ "${MCPBASH_PRESERVE_STATE:-}" = "true" ]; then
+		if [ -n "${MCPBASH_STATE_DIR}" ]; then
+			printf 'mcp-bash: state preserved at %s\n' "${MCPBASH_STATE_DIR}" >&2
+		fi
+		return
+	fi
+
 	if [ -n "${MCPBASH_STATE_DIR}" ] && [ -d "${MCPBASH_STATE_DIR}" ]; then
 		mcp_runtime_safe_rmrf "${MCPBASH_STATE_DIR}"
 	fi

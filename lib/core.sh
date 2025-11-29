@@ -381,6 +381,11 @@ mcp_core_handle_line() {
 	local normalized_line
 	local method
 
+	# Log incoming request for debugging
+	if mcp_io_debug_enabled; then
+		mcp_io_debug_log "request" "-" "recv" "${raw_line}"
+	fi
+
 	normalized_line="$(mcp_json_normalize_line "${raw_line}")" || {
 		mcp_core_emit_parse_error "Parse error" -32700 "Failed to normalize input"
 		return
