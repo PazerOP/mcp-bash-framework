@@ -5,6 +5,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+VERBOSE="${VERBOSE:-0}"
+UNICODE="${UNICODE:-0}"
+
+if [ -z "${MCPBASH_LOG_JSON_TOOL:-}" ] && [ "${VERBOSE}" != "1" ]; then
+	MCPBASH_LOG_JSON_TOOL="quiet"
+	export MCPBASH_LOG_JSON_TOOL
+fi
+
+PASS_ICON="[PASS]"
+FAIL_ICON="[FAIL]"
+if [ "${UNICODE}" = "1" ]; then
+	PASS_ICON="✅"
+	FAIL_ICON="❌"
+fi
+
 UNIT_TESTS=()
 while IFS= read -r path; do
 	UNIT_TESTS+=("${path}")
@@ -17,17 +32,20 @@ fi
 
 passed=0
 failed=0
+total="${#UNIT_TESTS[@]}"
+index=1
 
 for test_script in "${UNIT_TESTS[@]}"; do
 	name="$(basename "${test_script}")"
-	printf '== %s ==\n' "${name}"
+	printf '[%02d/%02d] %s ... ' "${index}" "${total}" "${name}"
 	if bash "${test_script}"; then
-		printf '✅ %s\n' "${name}"
+		printf '%s\n' "${PASS_ICON}"
 		passed=$((passed + 1))
 	else
-		printf '❌ %s\n' "${name}" >&2
+		printf '%s\n' "${FAIL_ICON}" >&2
 		failed=$((failed + 1))
 	fi
+	index=$((index + 1))
 done
 
 printf '\nUnit summary: %d passed, %d failed\n' "${passed}" "${failed}"

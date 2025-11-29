@@ -1,5 +1,11 @@
 # Testing Guide
 
+## Runner Flags
+
+- `VERBOSE=1` streams per-test logs and re-enables JSON tooling discovery logs (default is quiet).
+- `UNICODE=1` uses ✅/❌; default output is ASCII `[PASS]/[FAIL]`.
+- `MCPBASH_LOG_JSON_TOOL=log` forces JSON tooling detection logs even when `VERBOSE` is off.
+
 ## Linting
 
 ```

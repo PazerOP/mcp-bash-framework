@@ -11,6 +11,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/common/assert.sh"
 
+VERBOSE="${VERBOSE:-0}"
+UNICODE="${UNICODE:-0}"
+
+PASS_ICON="[PASS]"
+FAIL_ICON="[FAIL]"
+if [ "${UNICODE}" = "1" ]; then
+	PASS_ICON="✅"
+	FAIL_ICON="❌"
+fi
+
 test_require_command jq
 
 test_create_tmpdir
@@ -95,4 +105,5 @@ if [[ "${text}" != *"Hello from smoke tool"* ]]; then
 	test_fail "tool call text missing or incorrect: ${text}"
 fi
 
-printf 'Smoke test passed.\n'
+printf '%s smoke.sh\n' "${PASS_ICON}"
+printf '\nSmoke summary: 1 passed, 0 failed\n'

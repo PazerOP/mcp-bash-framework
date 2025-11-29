@@ -16,6 +16,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 test_require_command jq
 
+VERBOSE="${VERBOSE:-0}"
+UNICODE="${UNICODE:-0}"
+
+PASS_ICON="[PASS]"
+FAIL_ICON="[FAIL]"
+if [ "${UNICODE}" = "1" ]; then
+	PASS_ICON="✅"
+	FAIL_ICON="❌"
+fi
+
 discover_examples() {
 	local entry
 	for entry in "${MCPBASH_HOME}/examples/"[0-9][0-9]-*; do
@@ -98,6 +108,25 @@ if [ "${#examples[@]}" -eq 0 ]; then
 	exit 1
 fi
 
+total="${#examples[@]}"
+index=1
+passed=0
+failed=0
+
 for example in "${examples[@]}"; do
-	run_example_suite "${example}"
+	printf '[%02d/%02d] %s ... ' "${index}" "${total}" "${example}"
+	if run_example_suite "${example}"; then
+		printf '%s\n' "${PASS_ICON}"
+		passed=$((passed + 1))
+	else
+		printf '%s\n' "${FAIL_ICON}" >&2
+		failed=$((failed + 1))
+	fi
+	index=$((index + 1))
 done
+
+printf '\nExamples summary: %d passed, %d failed\n' "${passed}" "${failed}"
+
+if [ "${failed}" -ne 0 ]; then
+	exit 1
+fi
