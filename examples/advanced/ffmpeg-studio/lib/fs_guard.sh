@@ -11,7 +11,18 @@ declare -g MCP_FFMPEG_GUARD_BASE=""
 mcp_ffmpeg_guard_realpath() {
 	local target="$1"
 	if command -v realpath >/dev/null 2>&1; then
-		realpath -m "${target}"
+		if realpath -m "${target}" 2>/dev/null; then
+			return
+		fi
+		if realpath "${target}" 2>/dev/null; then
+			return
+		fi
+	fi
+	if (cd "$(dirname "${target}")" 2>/dev/null && pwd -P >/dev/null); then
+		(
+			cd "$(dirname "${target}")" 2>/dev/null || exit 1
+			printf '%s/%s\n' "$(pwd -P)" "$(basename "${target}")"
+		)
 		return
 	fi
 	echo "mcp_ffmpeg_guard: realpath is required" >&2
@@ -32,6 +43,12 @@ mcp_ffmpeg_guard_init() {
 		return 0
 	fi
 
+	local json_bin="${MCPBASH_JSON_TOOL_BIN:-jq}"
+	if ! command -v "${json_bin}" >/dev/null 2>&1; then
+		echo "mcp_ffmpeg_guard: JSON tool ${json_bin} not available (set MCPBASH_JSON_TOOL_BIN)" >&2
+		return 1
+	fi
+
 	local base="$1"
 	if [[ -z "${base}" ]]; then
 		base="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,22 +62,28 @@ mcp_ffmpeg_guard_init() {
 	fi
 
 	local -a entries=()
-	if ! mapfile -t entries < <(jq -r '
-		.roots as $roots
-		| if ($roots | type) != "array" or ($roots | length) == 0 then
-			error("media_roots.json must define a non-empty \"roots\" array")
-		  else
-			$roots[]
-			| if (.path | type) != "string" or (.path | length) == 0 then
-				error("each root entry requires a non-empty \"path\"")
-			  else
-				"\(.path)\t\(.mode // \"rw\")"
-			  end
-		  end
-	' "${config}"); then
+	local jq_script_file
+	jq_script_file="$(mktemp "${TMPDIR:-/tmp}/mcp-ffmpeg-jq.XXXXXX")"
+	cat <<'JQ' >"${jq_script_file}"
+.roots as $roots
+| if ($roots | type) != "array" or ($roots | length) == 0 then
+    error("media_roots.json must define a non-empty \"roots\" array")
+  else
+    $roots[]
+    | if (.path | type) != "string" or (.path | length) == 0 then
+        error("each root entry requires a non-empty \"path\"")
+      else
+        "\(.path)\t\(.mode // "rw")"
+      end
+  end
+JQ
+
+	if ! mapfile -t entries < <("${json_bin}" -r -f "${jq_script_file}" "${config}"); then
+		rm -f "${jq_script_file}"
 		echo "mcp_ffmpeg_guard: invalid config in ${config}" >&2
 		return 1
 	fi
+	rm -f "${jq_script_file}"
 
 	if [[ "${#entries[@]}" -eq 0 ]]; then
 		echo "mcp_ffmpeg_guard: no media roots configured" >&2
@@ -152,6 +175,11 @@ mcp_ffmpeg_guard_resolve() {
 	local canonical=""
 	local matched_index=-1
 
+	# Normalize common user inputs: strip leading "./" and an initial "<root-name>/" prefix.
+	if [[ "${user_path}" == ./* ]]; then
+		user_path="${user_path#./}"
+	fi
+
 	if [[ "${user_path}" == /* ]]; then
 		if ! canonical="$(mcp_ffmpeg_guard_realpath "${user_path}")"; then
 			return 1
@@ -163,8 +191,13 @@ mcp_ffmpeg_guard_resolve() {
 	else
 		for i in "${!MCP_FFMPEG_ROOTS[@]}"; do
 			local root="${MCP_FFMPEG_ROOTS[$i]}"
+			local candidate="${user_path}"
+			local root_name="${root##*/}"
+			if [[ "${candidate}" == "${root_name}/"* ]]; then
+				candidate="${candidate#"${root_name}"/}"
+			fi
 			local attempt
-			if ! attempt="$(mcp_ffmpeg_guard_realpath "${root}/${user_path}")"; then
+			if ! attempt="$(mcp_ffmpeg_guard_realpath "${root}/${candidate}")"; then
 				return 1
 			fi
 			if mcp_ffmpeg_guard_path_contains "${root}" "${attempt}"; then

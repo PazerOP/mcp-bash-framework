@@ -12,7 +12,14 @@ if ! command -v ffprobe >/dev/null 2>&1; then
 fi
 
 # Create media directory if it doesn't exist
-mkdir -p "$(dirname "$0")/media"
+MEDIA_DIR="$(cd "$(dirname "$0")" && pwd)/media"
+mkdir -p "${MEDIA_DIR}"
+
+# Generate a tiny sample clip if none exists
+if [ ! -f "${MEDIA_DIR}/example.mp4" ]; then
+  ffmpeg -hide_banner -loglevel error \
+    -f lavfi -i testsrc=duration=3:size=640x360:rate=25 \
+    -pix_fmt yuv420p "${MEDIA_DIR}/example.mp4" >/dev/null
+fi
 
 exit 0
-
