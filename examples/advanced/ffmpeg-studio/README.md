@@ -6,10 +6,11 @@
 - Long-running tool orchestration with progress updates and cancellation
 - Structured inspection vs text scraping for media metadata
 - Sandboxed file access via configured media roots
+- Optional elicitation confirmation before overwriting outputs (if the client supports elicitation)
 
 **What it does**
 - `inspect_media`: runs `ffprobe` and returns normalized JSON (duration, streams, codecs, resolution) instead of raw text.
-- `transcode`: converts an input to a preset (e.g., 720p, gif), emitting progress and honoring cancellation; keeps output inside allowed roots.
+- `transcode`: converts an input to a preset (e.g., 720p, gif), emitting progress and honoring cancellation; keeps output inside allowed roots. If the client supports elicitation, it will ask before overwriting an existing output; otherwise it refuses to overwrite.
 - `extract_frame`: grabs a frame at a timestamp to an output file under the media root.
 - Preset configs keep invocations short while still exposing meaningful parameters.
 

@@ -202,3 +202,82 @@ mcp_emit_json() {
 	fi
 	printf '%s' "${json}"
 }
+
+# Elicitation helpers ---------------------------------------------------------
+
+MCP_ELICIT_DEFAULT_TIMEOUT="${MCPBASH_ELICITATION_TIMEOUT:-30}"
+
+mcp_elicit() {
+	local message="$1"
+	local schema_json="$2"
+	local timeout="${3:-${MCP_ELICIT_DEFAULT_TIMEOUT}}"
+
+	if [ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]; then
+		__mcp_sdk_warn "mcp_elicit: Client does not support elicitation"
+		printf '{"action":"decline","content":null}'
+		return 1
+	fi
+
+	if [ -z "${MCP_ELICIT_REQUEST_FILE:-}" ] || [ -z "${MCP_ELICIT_RESPONSE_FILE:-}" ]; then
+		__mcp_sdk_warn "mcp_elicit: Elicitation environment not configured"
+		printf '{"action":"error","content":null}'
+		return 1
+	fi
+
+	rm -f "${MCP_ELICIT_RESPONSE_FILE}"
+
+	local message_json
+	message_json="$(__mcp_sdk_json_escape "${message}")"
+	local tmp_request="${MCP_ELICIT_REQUEST_FILE}.tmp.$$"
+	printf '{"message":%s,"schema":%s}' "${message_json}" "${schema_json}" >"${tmp_request}"
+	mv "${tmp_request}" "${MCP_ELICIT_REQUEST_FILE}"
+
+	local max_iterations=$((timeout * 10))
+	local iterations=0
+	while [ ! -f "${MCP_ELICIT_RESPONSE_FILE}" ] && [ "${iterations}" -lt "${max_iterations}" ]; do
+		sleep 0.1
+		iterations=$((iterations + 1))
+		if mcp_is_cancelled; then
+			rm -f "${MCP_ELICIT_REQUEST_FILE}"
+			printf '{"action":"cancel","content":null}'
+			return 1
+		fi
+	done
+
+	if [ ! -f "${MCP_ELICIT_RESPONSE_FILE}" ]; then
+		rm -f "${MCP_ELICIT_REQUEST_FILE}"
+		__mcp_sdk_warn "mcp_elicit: Timeout waiting for user response"
+		printf '{"action":"error","content":null}'
+		return 1
+	fi
+
+	local response
+	response="$(cat "${MCP_ELICIT_RESPONSE_FILE}")"
+	rm -f "${MCP_ELICIT_RESPONSE_FILE}"
+	printf '%s' "${response}"
+}
+
+mcp_elicit_string() {
+	local message="$1"
+	local field_name="${2:-value}"
+	local schema
+	schema="$(printf '{"type":"object","properties":{"%s":{"type":"string"}},"required":["%s"]}' "${field_name}" "${field_name}")"
+	mcp_elicit "${message}" "${schema}"
+}
+
+mcp_elicit_confirm() {
+	local message="$1"
+	local schema='{"type":"object","properties":{"confirmed":{"type":"boolean"}},"required":["confirmed"]}'
+	mcp_elicit "${message}" "${schema}"
+}
+
+mcp_elicit_choice() {
+	local message="$1"
+	shift
+	local options=("$@")
+	local enum_json
+	enum_json="$(printf '%s\n' "${options[@]}" | jq -R . | jq -s -c .)"
+	local schema
+	schema="$(printf '{"type":"object","properties":{"choice":{"type":"string","enum":%s}},"required":["choice"]}' "${enum_json}")"
+	mcp_elicit "${message}" "${schema}"
+}

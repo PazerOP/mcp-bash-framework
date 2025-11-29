@@ -73,6 +73,10 @@ mcp_core_bootstrap_state() {
 	MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-${MCPBASH_BASE_SHUTDOWN_TIMEOUT}}"
 	MCPBASH_SHUTDOWN_TIMER_STARTED=false
 	MCPBASH_RESOURCE_POLL_PID=""
+	MCPBASH_CLIENT_SUPPORTS_ELICITATION=0
+	MCPBASH_NEXT_OUTGOING_ID=1
+	rm -f "${MCPBASH_STATE_DIR}"/elicit.*.id 2>/dev/null || true
+	rm -f "${MCPBASH_STATE_DIR}"/pending.*.path 2>/dev/null || true
 
 	# setup SDK notification streams
 	MCP_PROGRESS_STREAM="${MCPBASH_STATE_DIR}/progress.ndjson"
@@ -396,6 +400,16 @@ mcp_core_handle_line() {
 		return
 	fi
 
+	# Route responses (result/error) before method extraction
+	if { mcp_json_has_key "${normalized_line}" "result" || mcp_json_has_key "${normalized_line}" "error"; } && ! mcp_json_has_key "${normalized_line}" "method"; then
+		mcp_rpc_handle_response "${normalized_line}"
+		mcp_core_emit_registry_notifications
+		if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
+			mcp_elicitation_process_requests
+		fi
+		return
+	fi
+
 	method="$(mcp_json_extract_method "${normalized_line}")" || {
 		mcp_core_emit_parse_error "Invalid Request" -32600 "Missing method"
 		return
@@ -404,6 +418,9 @@ mcp_core_handle_line() {
 	mcp_core_dispatch_object "${normalized_line}" "${method}"
 
 	mcp_core_emit_registry_notifications
+	if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
+		mcp_elicitation_process_requests
+	fi
 
 	if [ "${MCPBASH_EXIT_REQUESTED}" = true ]; then
 		mcp_core_wait_for_workers
@@ -705,6 +722,9 @@ mcp_core_worker_cleanup() {
 	local stderr_file="$2"
 
 	if [ -n "${key}" ]; then
+		if declare -F mcp_elicitation_cleanup_for_worker >/dev/null 2>&1; then
+			mcp_elicitation_cleanup_for_worker "${key}"
+		fi
 		mcp_ids_clear_worker "${key}"
 		rm -f "${MCPBASH_STATE_DIR}/rate.progress.${key}.log"
 		rm -f "${MCPBASH_STATE_DIR}/rate.log.${key}.log"
@@ -800,6 +820,10 @@ mcp_core_cancel_request() {
 		if [ -n "${lock_owner}" ] && [ "${lock_owner}" = "${pid}" ]; then
 			rm -rf "${stdout_lock}" 2>/dev/null || true
 		fi
+	fi
+
+	if declare -F mcp_elicitation_cancel_for_worker >/dev/null 2>&1; then
+		mcp_elicitation_cancel_for_worker "${key}"
 	fi
 }
 
@@ -1052,6 +1076,9 @@ mcp_core_start_progress_flusher() {
 		while :; do
 			if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ]; then
 				mcp_core_flush_worker_streams_once
+			fi
+			if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
+				mcp_elicitation_process_requests
 			fi
 			sleep "${MCPBASH_PROGRESS_FLUSH_INTERVAL:-0.5}"
 		done

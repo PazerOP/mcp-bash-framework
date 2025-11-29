@@ -834,6 +834,22 @@ mcp_tools_call() {
 		has_json_tool="true"
 	fi
 
+	# Elicitation environment
+	local elicit_supported="0"
+	local elicit_request_file=""
+	local elicit_response_file=""
+	if declare -F mcp_elicitation_is_supported >/dev/null 2>&1 && [ -n "${key:-}" ]; then
+		if mcp_elicitation_is_supported; then
+			elicit_supported="1"
+			elicit_request_file="$(mcp_elicitation_request_path_for_worker "${key}")"
+			elicit_response_file="$(mcp_elicitation_response_path_for_worker "${key}")"
+			rm -f "${elicit_request_file}" "${elicit_response_file}"
+		fi
+	fi
+	if mcp_logging_is_enabled "debug"; then
+		mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Elicitation env supported=${elicit_supported} request=${elicit_request_file:-none} response=${elicit_response_file:-none}"
+	fi
+
 	cleanup_tool_temp_files() {
 		rm -f "${stdout_file}" "${stderr_file}"
 		[ -n "${tool_error_file}" ] && rm -f "${tool_error_file}"
@@ -900,9 +916,14 @@ mcp_tools_call() {
 				"MCP_TOOL_ARGS_JSON=${MCP_TOOL_ARGS_JSON}"
 				"MCP_TOOL_METADATA_JSON=${MCP_TOOL_METADATA_JSON}"
 				"MCP_TOOL_ERROR_FILE=${MCP_TOOL_ERROR_FILE}"
+				"MCP_ELICIT_SUPPORTED=${elicit_supported}"
 			)
 			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && env_exec+=("MCP_TOOL_ARGS_FILE=${MCP_TOOL_ARGS_FILE}")
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && env_exec+=("MCP_TOOL_METADATA_FILE=${MCP_TOOL_METADATA_FILE}")
+			if [ "${elicit_supported}" = "1" ]; then
+				env_exec+=("MCP_ELICIT_REQUEST_FILE=${elicit_request_file}")
+				env_exec+=("MCP_ELICIT_RESPONSE_FILE=${elicit_response_file}")
+			fi
 
 			if [ "${tool_env_mode}" = "allowlist" ]; then
 				local allowlist_raw allowlist_var allowlist_value
@@ -920,6 +941,11 @@ mcp_tools_call() {
 			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && export MCP_TOOL_ARGS_FILE
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && export MCP_TOOL_METADATA_FILE
 			export MCP_TOOL_ERROR_FILE
+			export MCP_ELICIT_SUPPORTED="${elicit_supported}"
+			if [ "${elicit_supported}" = "1" ]; then
+				export MCP_ELICIT_REQUEST_FILE="${elicit_request_file}"
+				export MCP_ELICIT_RESPONSE_FILE="${elicit_response_file}"
+			fi
 		fi
 
 		if [ -n "${effective_timeout}" ]; then

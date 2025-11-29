@@ -1,0 +1,9 @@
+{
+  "name": "example.elicitation",
+  "description": "Demonstrates elicitation confirm + choice",
+  "arguments": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

@@ -3,6 +3,68 @@
 
 set -euo pipefail
 
+# Track outgoing requests awaiting responses using files for Bash 3.2 compatibility
+MCPBASH_NEXT_OUTGOING_ID="${MCPBASH_NEXT_OUTGOING_ID:-1}"
+
+mcp_rpc_pending_path() {
+	local request_id="$1"
+	printf '%s/pending.%s.path' "${MCPBASH_STATE_DIR}" "${request_id}"
+}
+
+mcp_rpc_next_outgoing_id() {
+	local id="${MCPBASH_NEXT_OUTGOING_ID}"
+	MCPBASH_NEXT_OUTGOING_ID=$((MCPBASH_NEXT_OUTGOING_ID + 1))
+	printf '%s' "${id}"
+}
+
+mcp_rpc_register_pending() {
+	local request_id="$1"
+	local response_file="$2"
+	printf '%s' "${response_file}" >"$(mcp_rpc_pending_path "${request_id}")"
+}
+
+mcp_rpc_unregister_pending() {
+	local request_id="$1"
+	rm -f "$(mcp_rpc_pending_path "${request_id}")"
+}
+
+mcp_rpc_handle_response() {
+	local json_payload="$1"
+	local id
+	id="$(mcp_json_extract_id "${json_payload}")"
+
+	local response_file
+	response_file="$(cat "$(mcp_rpc_pending_path "${id}")" 2>/dev/null || true)"
+	if [ -z "${response_file}" ]; then
+		mcp_logging_warning "mcp.rpc" "Received response for unknown request id=${id}"
+		return 1
+	fi
+
+	rm -f "$(mcp_rpc_pending_path "${id}")"
+
+	# Clear worker mapping if available (elicitation)
+	if declare -F mcp_elicitation_clear_request_id >/dev/null 2>&1; then
+		mcp_elicitation_clear_request_id "${id}"
+	fi
+
+	local normalized
+	if mcp_json_has_key "${json_payload}" "error"; then
+		local error_code error_message
+		error_code="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.error.code // -32603' 2>/dev/null || printf '%s' "-32603")"
+		error_message="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.error.message // "Unknown error"' 2>/dev/null || printf '%s' "Unknown error")"
+		mcp_logging_warning "mcp.elicitation" "Client error: code=${error_code} message=${error_message}"
+		normalized='{"action":"error","content":null}'
+	else
+		local action content
+		action="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.result.action // "error"' 2>/dev/null || printf '%s' "error")"
+		content="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.result.content // null' 2>/dev/null || printf 'null')"
+		normalized="$(printf '{"action":"%s","content":%s}' "${action}" "${content}")"
+	fi
+
+	printf '%s' "${normalized}" >"${response_file}"
+	return 0
+}
+
 rpc_send_line() {
 	local payload="$1"
 	mcp_io_send_line "${payload}"

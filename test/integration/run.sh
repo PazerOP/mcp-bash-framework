@@ -9,6 +9,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/../common/assert.sh"
 
+VERBOSE="${VERBOSE:-0}"
+UNICODE="${UNICODE:-0}"
+KEEP_INTEGRATION_LOGS="${KEEP_INTEGRATION_LOGS:-0}"
+
+if [ -z "${MCPBASH_LOG_JSON_TOOL:-}" ] && [ "${VERBOSE}" != "1" ]; then
+	MCPBASH_LOG_JSON_TOOL="quiet"
+	export MCPBASH_LOG_JSON_TOOL
+fi
+
+SUITE_TMP="${MCPBASH_INTEGRATION_TMP:-$(mktemp -d "${TMPDIR:-/tmp}/mcpbash.integration.XXXXXX")}"
+LOG_DIR="${SUITE_TMP}/logs"
+mkdir -p "${LOG_DIR}"
+
+cleanup_suite_tmp() {
+	if [ "${KEEP_INTEGRATION_LOGS}" = "1" ]; then
+		return
+	fi
+	if [ -n "${SUITE_TMP}" ] && [ -d "${SUITE_TMP}" ]; then
+		rm -rf "${SUITE_TMP}" 2>/dev/null || true
+	fi
+}
+trap cleanup_suite_tmp EXIT INT TERM
+
+PASS_ICON="[PASS]"
+FAIL_ICON="[FAIL]"
+if [ "${UNICODE}" = "1" ]; then
+	PASS_ICON="✅"
+	FAIL_ICON="❌"
+fi
+
 TESTS=(
 	"test_capabilities.sh"
 	"test_core_errors.sh"
@@ -29,23 +59,87 @@ TESTS=(
 	"test_notification_dedup.sh"
 	"test_cancellation.sh"
 	"test_cli_guards.sh"
+	"test_elicitation.sh"
 )
 
 passed=0
 failed=0
+total="${#TESTS[@]}"
 
-for test_script in "${TESTS[@]}"; do
-	printf '== %s ==\n' "${test_script}"
-	if "${SCRIPT_DIR}/${test_script}"; then
-		printf '✅ %s\n' "${test_script}"
+get_test_desc() {
+	local script="$1"
+	local line
+	line="$(grep -m1 '^TEST_DESC=' "${SCRIPT_DIR}/${script}" || true)"
+	if [ -z "${line}" ]; then
+		printf '%s' "${script}"
+		return
+	fi
+	line="${line#TEST_DESC=}"
+	line="${line%\"}"
+	line="${line#\"}"
+	if [ -z "${line}" ]; then
+		printf '%s' "${script}"
+	else
+		printf '%s' "${line}"
+	fi
+}
+
+run_test() {
+	local test_script="$1"
+	local index="$2"
+	local desc log_file start end elapsed status
+	desc="$(get_test_desc "${test_script}")"
+	log_file="${LOG_DIR}/${test_script}.log"
+	start="$(date +%s)"
+
+	if [ "${VERBOSE}" = "1" ]; then
+		(
+			set -o pipefail
+			"${SCRIPT_DIR}/${test_script}" 2>&1 | while IFS= read -r line || [ -n "${line}" ]; do
+				printf '[%s] %s\n' "${test_script}" "${line}"
+			done
+			exit "${PIPESTATUS[0]}"
+		) | tee "${log_file}"
+		status="${PIPESTATUS[0]}"
+	else
+		if "${SCRIPT_DIR}/${test_script}" >"${log_file}" 2>&1; then
+			status=0
+		else
+			status=$?
+		fi
+	fi
+
+	end="$(date +%s)"
+	elapsed=$((end - start))
+
+	if [ "${status}" -eq 0 ]; then
+		printf '[%02d/%02d] %s — %s ... %s (%ss)\n' "${index}" "${total}" "${test_script}" "${desc}" "${PASS_ICON}" "${elapsed}"
 		passed=$((passed + 1))
 	else
-		printf '❌ %s\n' "${test_script}" >&2
+		printf '[%02d/%02d] %s — %s ... %s (%ss)\n' "${index}" "${total}" "${test_script}" "${desc}" "${FAIL_ICON}" "${elapsed}" >&2
+		printf '  log: %s\n' "${log_file}" >&2
+		tail -n 40 "${log_file}" >&2 || true
 		failed=$((failed + 1))
 	fi
+}
+
+index=1
+suite_start="$(date +%s)"
+
+for test_script in "${TESTS[@]}"; do
+	run_test "${test_script}" "${index}"
+	index=$((index + 1))
 done
 
-printf '\nIntegration summary: %d passed, %d failed\n' "${passed}" "${failed}"
+suite_end="$(date +%s)"
+suite_elapsed=$((suite_end - suite_start))
+
+log_note="${LOG_DIR}"
+if [ "${KEEP_INTEGRATION_LOGS}" != "1" ]; then
+	log_note="${LOG_DIR} (will be removed; set KEEP_INTEGRATION_LOGS=1 to preserve)"
+fi
+
+printf '\nIntegration summary: %d passed, %d failed (logs: %s, elapsed: %ss)\n' "${passed}" "${failed}" "${log_note}" "${suite_elapsed}"
 
 if [ "${failed}" -ne 0 ]; then
 	exit 1

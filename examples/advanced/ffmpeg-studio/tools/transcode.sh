@@ -66,9 +66,20 @@ if [ ! -f "${full_input}" ]; then
 	mcp_fail -32602 "Input file not found: ${input_path}"
 fi
 
-# Validation: Output collision
+# Validation: Output collision with elicitation-based confirmation
 if [ -f "${full_output}" ]; then
-	mcp_fail -32602 "Output file already exists: ${output_path}"
+	if [ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]; then
+		mcp_fail -32602 "Output file exists and elicitation is not supported; refusing to overwrite ${output_path}"
+	fi
+	overwrite_resp="$(mcp_elicit_confirm "Output ${output_path} exists. Overwrite?")"
+	overwrite_action="$(printf '%s' "${overwrite_resp}" | jq -r '.action')"
+	if [ "${overwrite_action}" != "accept" ]; then
+		mcp_fail -32602 "Overwrite declined for ${output_path}"
+	fi
+	confirmed="$(printf '%s' "${overwrite_resp}" | jq -r '.content.confirmed // false')"
+	if [ "${confirmed}" != "true" ]; then
+		mcp_fail -32602 "Overwrite not confirmed for ${output_path}"
+	fi
 fi
 
 # Determine ffmpeg args based on preset

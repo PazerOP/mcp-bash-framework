@@ -45,6 +45,15 @@ mcp_handle_lifecycle() {
 			mcp_logging_debug "mcp.lifecycle" "Initialize requested=${requested_version} negotiated=${negotiated_version}"
 		fi
 
+		local client_caps="{}"
+		if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
+			client_caps="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.params.capabilities // {}' 2>/dev/null || printf '{}')"
+		fi
+		mcp_elicitation_init "${client_caps}"
+		if mcp_logging_is_enabled "debug"; then
+			mcp_logging_debug "mcp.lifecycle" "Elicitation support=${MCPBASH_CLIENT_SUPPORTS_ELICITATION}"
+		fi
+
 		printf '%s' "$(mcp_spec_build_initialize_response "${id}" "${capabilities}" "${negotiated_version}")"
 		;;
 	notifications/initialized | initialized)

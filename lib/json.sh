@@ -258,6 +258,46 @@ mcp_json_minimal_parse() {
 	return 0
 }
 
+mcp_json_has_key() {
+	local json="$1"
+	local key="$2"
+	if [ -z "${key}" ]; then
+		return 1
+	fi
+
+	if mcp_runtime_is_minimal_mode; then
+		if ! mcp_json_minimal_parse "${json}"; then
+			return 1
+		fi
+		case "${key}" in
+		method)
+			[ -n "${MCP_JSON_CACHE_METHOD}" ] && return 0
+			return 1
+			;;
+		id)
+			[ "${MCP_JSON_CACHE_HAS_ID}" = "true" ] && return 0
+			return 1
+			;;
+		*)
+			# Lightweight check for other keys in minimal mode
+			case "${json}" in
+			*\"${key}\"*) return 0 ;;
+			esac
+			return 1
+			;;
+		esac
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		if printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -e --arg key "${key}" 'has($key)' >/dev/null 2>&1; then
+			return 0
+		fi
+		;;
+	esac
+	return 1
+}
+
 mcp_json_minimal_split_pairs() {
 	local content="$1"
 	local length=${#content}
