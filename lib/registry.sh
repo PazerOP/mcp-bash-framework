@@ -17,6 +17,27 @@ MCP_REGISTRY_REGISTER_ERROR_RESOURCES=""
 MCP_REGISTRY_REGISTER_ERROR_PROMPTS=""
 MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
 
+mcp_registry_resolve_scan_root() {
+	local default_dir="$1"
+	local scan_root="${default_dir}"
+	local filter_path="${MCPBASH_REGISTRY_REFRESH_PATH:-}"
+
+	if [ -n "${filter_path}" ]; then
+		local candidate="${filter_path}"
+		case "${candidate}" in
+		/*) ;;
+		*)
+			candidate="${MCPBASH_PROJECT_ROOT%/}/${candidate}"
+			;;
+		esac
+		if [ -d "${candidate}" ] && [[ "${candidate}" == "${default_dir}"* ]]; then
+			scan_root="${candidate}"
+		fi
+	fi
+
+	printf '%s' "${scan_root}"
+}
+
 mcp_registry_global_max_bytes() {
 	local limit="${MCPBASH_REGISTRY_MAX_BYTES:-${MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT}}"
 	case "${limit}" in
@@ -76,10 +97,10 @@ mcp_registry_fastpath_snapshot() {
 		printf '0|0|0'
 		return 0
 	fi
-	local count hash mtime manifest=""
-	count="$(find "${scan_root}" -type f ! -name ".*" 2>/dev/null | wc -l | tr -d ' ')"
+	local count=0 hash mtime manifest=""
 	while IFS= read -r path; do
 		[ -z "${path}" ] && continue
+		count=$((count + 1))
 		local file_mtime
 		file_mtime="$(mcp_registry_stat_mtime "${path}")"
 		# Use relative path to avoid absolute prefixes in hash

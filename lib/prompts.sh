@@ -24,21 +24,13 @@ MCP_PROMPTS_MANUAL_ACTIVE=false
 MCP_PROMPTS_MANUAL_BUFFER=""
 MCP_PROMPTS_MANUAL_DELIM=$'\036'
 
+if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
+fi
+
 mcp_prompts_scan_root() {
-	local scan_root="${MCPBASH_PROMPTS_DIR}"
-	if [ -n "${MCPBASH_REGISTRY_REFRESH_PATH:-}" ]; then
-		local candidate="${MCPBASH_REGISTRY_REFRESH_PATH}"
-		case "${candidate}" in
-		/*) ;;
-		*)
-			candidate="${MCPBASH_PROJECT_ROOT%/}/${candidate}"
-			;;
-		esac
-		if [ -d "${candidate}" ] && [[ "${candidate}" == "${MCPBASH_PROMPTS_DIR}"* ]]; then
-			scan_root="${candidate}"
-		fi
-	fi
-	printf '%s' "${scan_root}"
+	mcp_registry_resolve_scan_root "${MCPBASH_PROMPTS_DIR}"
 }
 
 mcp_prompts_manual_begin() {
@@ -139,66 +131,6 @@ mcp_prompts_manual_finalize() {
 	MCP_PROMPTS_MANUAL_ACTIVE=false
 	MCP_PROMPTS_MANUAL_BUFFER=""
 	return 0
-}
-
-mcp_prompts_run_manual_script() {
-	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		return 1
-	fi
-
-	mcp_prompts_manual_begin
-
-	local script_output_file
-	script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-prompts-manual-output.XXXXXX")"
-	local script_status=0
-
-	set +e
-	# shellcheck disable=SC1090
-	# shellcheck disable=SC1091  # register.sh lives in project; optional for callers
-	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
-	script_status=$?
-	set -e
-
-	local script_output
-	script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
-	rm -f "${script_output_file}"
-
-	if [ "${script_status}" -ne 0 ]; then
-		mcp_prompts_manual_abort
-		mcp_prompts_error -32603 "Manual registration script failed"
-		if [ -n "${script_output}" ]; then
-			if mcp_logging_verbose_enabled; then
-				mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Manual registration script output: ${script_output}"
-			else
-				mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Manual registration script failed (enable MCPBASH_LOG_VERBOSE=true for details)"
-			fi
-		fi
-		return 1
-	fi
-
-	if [ -z "${MCP_PROMPTS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
-		mcp_prompts_manual_abort
-		if ! mcp_prompts_apply_manual_json "${script_output}"; then
-			return 1
-		fi
-		return 0
-	fi
-
-	if [ -n "${script_output}" ]; then
-		if mcp_logging_verbose_enabled; then
-			mcp_logging_warning "${MCP_PROMPTS_LOGGER}" "Manual registration script output: ${script_output}"
-		else
-			mcp_logging_warning "${MCP_PROMPTS_LOGGER}" "Manual registration script produced output (enable MCPBASH_LOG_VERBOSE=true to view)"
-		fi
-	fi
-
-	if ! mcp_prompts_manual_finalize; then
-		return 1
-	fi
-	return 0
-}
-mcp_prompts_registry_max_bytes() {
-	mcp_registry_global_max_bytes
 }
 
 mcp_prompts_enforce_registry_limits() {

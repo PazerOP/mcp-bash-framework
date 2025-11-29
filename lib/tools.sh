@@ -26,21 +26,13 @@ MCP_TOOLS_MANUAL_BUFFER=""
 MCP_TOOLS_MANUAL_DELIM=$'\036'
 MCP_TOOLS_LOGGER="${MCP_TOOLS_LOGGER:-mcp.tools}"
 
+if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
+fi
+
 mcp_tools_scan_root() {
-	local scan_root="${MCPBASH_TOOLS_DIR}"
-	if [ -n "${MCPBASH_REGISTRY_REFRESH_PATH:-}" ]; then
-		local candidate="${MCPBASH_REGISTRY_REFRESH_PATH}"
-		case "${candidate}" in
-		/*) ;;
-		*)
-			candidate="${MCPBASH_PROJECT_ROOT%/}/${candidate}"
-			;;
-		esac
-		if [ -d "${candidate}" ] && [[ "${candidate}" == "${MCPBASH_TOOLS_DIR}"* ]]; then
-			scan_root="${candidate}"
-		fi
-	fi
-	printf '%s' "${scan_root}"
+	mcp_registry_resolve_scan_root "${MCPBASH_TOOLS_DIR}"
 }
 
 mcp_tools_manual_begin() {
@@ -332,76 +324,6 @@ mcp_tools_apply_manual_json() {
 	if [ "${write_rc}" -ne 0 ]; then
 		return "${write_rc}"
 	fi
-}
-
-mcp_tools_run_manual_script() {
-	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		return 1
-	fi
-
-	mcp_tools_manual_begin
-
-	local script_output_file
-	script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tools-manual-output.XXXXXX")"
-	local script_status=0
-	local manual_limit="${MCPBASH_MAX_MANUAL_REGISTRY_BYTES:-1048576}"
-	case "${manual_limit}" in
-	'' | *[!0-9]*) manual_limit=1048576 ;;
-	0) manual_limit=1048576 ;;
-	esac
-
-	set +e
-	# shellcheck disable=SC1090
-	# shellcheck disable=SC1091  # register.sh lives in project; optional for callers
-	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
-	script_status=$?
-	set -e
-
-	local script_size
-	script_size="$(wc -c <"${script_output_file}" | tr -d ' ')"
-	if [ "${script_size}" -gt "${manual_limit}" ]; then
-		rm -f "${script_output_file}"
-		mcp_tools_manual_abort
-		mcp_tools_error -32603 "Manual registration output exceeded ${manual_limit} bytes"
-		return 1
-	fi
-	local script_output
-	script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
-	rm -f "${script_output_file}"
-
-	if [ "${script_status}" -ne 0 ]; then
-		mcp_tools_manual_abort
-		mcp_tools_error -32603 "Manual registration script failed"
-		if [ -n "${script_output}" ]; then
-			if mcp_logging_verbose_enabled; then
-				mcp_logging_error "${MCP_TOOLS_LOGGER}" "Manual registration script output: ${script_output}"
-			else
-				mcp_logging_error "${MCP_TOOLS_LOGGER}" "Manual registration script failed (enable MCPBASH_LOG_VERBOSE=true for details)"
-			fi
-		fi
-		return 1
-	fi
-
-	if [ -z "${MCP_TOOLS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
-		mcp_tools_manual_abort
-		if ! mcp_tools_apply_manual_json "${script_output}"; then
-			return 1
-		fi
-		return 0
-	fi
-
-	if [ -n "${script_output}" ]; then
-		if mcp_logging_verbose_enabled; then
-			mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Manual registration script output: ${script_output}"
-		else
-			mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Manual registration script produced output (enable MCPBASH_LOG_VERBOSE=true to view)"
-		fi
-	fi
-
-	if ! mcp_tools_manual_finalize; then
-		return 1
-	fi
-	return 0
 }
 
 mcp_tools_refresh_registry() {

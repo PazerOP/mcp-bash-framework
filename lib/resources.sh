@@ -24,52 +24,22 @@ MCP_RESOURCES_MANUAL_BUFFER=""
 MCP_RESOURCES_MANUAL_DELIM=$'\036'
 MCP_RESOURCES_LOGGER="${MCP_RESOURCES_LOGGER:-mcp.resources}"
 
-mcp_resources_url_encode() {
-	local value="$1"
-	local output=""
-	local i char hex
-	local LC_ALL=C
-	for ((i = 0; i < ${#value}; i++)); do
-		char="${value:i:1}"
-		case "${char}" in
-		[a-zA-Z0-9.~_-] | / | :)
-			output+="${char}"
-			;;
-		*)
-			printf -v hex '%02X' "'${char}"
-			output+="%${hex}"
-			;;
-		esac
-	done
-	printf '%s' "${output}"
-}
+if ! command -v mcp_uri_file_uri_from_path >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/uri.sh"
+fi
+
+if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
+fi
 
 mcp_resources_file_uri_from_path() {
-	local path="$1"
-	local dir base abs_path
-	if ! dir="$(cd "$(dirname "${path}")" >/dev/null 2>&1 && pwd)"; then
-		return 1
-	fi
-	base="$(basename "${path}")"
-	abs_path="${dir}/${base}"
-	mcp_resources_url_encode "file://${abs_path}"
+	mcp_uri_file_uri_from_path "$1"
 }
 
 mcp_resources_scan_root() {
-	local scan_root="${MCPBASH_RESOURCES_DIR}"
-	if [ -n "${MCPBASH_REGISTRY_REFRESH_PATH:-}" ]; then
-		local candidate="${MCPBASH_REGISTRY_REFRESH_PATH}"
-		case "${candidate}" in
-		/*) ;;
-		*)
-			candidate="${MCPBASH_PROJECT_ROOT%/}/${candidate}"
-			;;
-		esac
-		if [ -d "${candidate}" ] && [[ "${candidate}" == "${MCPBASH_RESOURCES_DIR}"* ]]; then
-			scan_root="${candidate}"
-		fi
-	fi
-	printf '%s' "${scan_root}"
+	mcp_registry_resolve_scan_root "${MCPBASH_RESOURCES_DIR}"
 }
 
 mcp_resources_manual_begin() {
@@ -362,63 +332,6 @@ mcp_resources_apply_manual_json() {
 	if [ "${write_rc}" -ne 0 ]; then
 		return "${write_rc}"
 	fi
-}
-
-mcp_resources_run_manual_script() {
-	if [ ! -x "${MCPBASH_SERVER_DIR}/register.sh" ]; then
-		return 1
-	fi
-
-	mcp_resources_manual_begin
-
-	local script_output_file
-	script_output_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resources-manual-output.XXXXXX")"
-	local script_status=0
-
-	set +e
-	# shellcheck disable=SC1090
-	# shellcheck disable=SC1091  # register.sh lives in project; optional for callers
-	. "${MCPBASH_SERVER_DIR}/register.sh" >"${script_output_file}" 2>&1
-	script_status=$?
-	set -e
-
-	local script_output
-	script_output="$(cat "${script_output_file}" 2>/dev/null || true)"
-	rm -f "${script_output_file}"
-
-	if [ "${script_status}" -ne 0 ]; then
-		mcp_resources_manual_abort
-		mcp_resources_error -32603 "Manual registration script failed"
-		if [ -n "${script_output}" ]; then
-			if mcp_logging_verbose_enabled; then
-				mcp_logging_error "${MCP_RESOURCES_LOGGER}" "Manual registration script output: ${script_output}"
-			else
-				mcp_logging_error "${MCP_RESOURCES_LOGGER}" "Manual registration script failed (enable MCPBASH_LOG_VERBOSE=true for details)"
-			fi
-		fi
-		return 1
-	fi
-
-	if [ -z "${MCP_RESOURCES_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
-		mcp_resources_manual_abort
-		if ! mcp_resources_apply_manual_json "${script_output}"; then
-			return 1
-		fi
-		return 0
-	fi
-
-	if [ -n "${script_output}" ]; then
-		if mcp_logging_verbose_enabled; then
-			mcp_logging_warning "${MCP_RESOURCES_LOGGER}" "Manual registration script output: ${script_output}"
-		else
-			mcp_logging_warning "${MCP_RESOURCES_LOGGER}" "Manual registration script produced output (enable MCPBASH_LOG_VERBOSE=true to view)"
-		fi
-	fi
-
-	if ! mcp_resources_manual_finalize; then
-		return 1
-	fi
-	return 0
 }
 
 mcp_resources_refresh_registry() {
