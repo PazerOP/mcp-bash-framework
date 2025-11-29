@@ -24,6 +24,37 @@ MCP_RESOURCES_MANUAL_BUFFER=""
 MCP_RESOURCES_MANUAL_DELIM=$'\036'
 MCP_RESOURCES_LOGGER="${MCP_RESOURCES_LOGGER:-mcp.resources}"
 
+mcp_resources_url_encode() {
+	local value="$1"
+	local output=""
+	local i char hex
+	local LC_ALL=C
+	for ((i = 0; i < ${#value}; i++)); do
+		char="${value:i:1}"
+		case "${char}" in
+		[a-zA-Z0-9.~_-] | / | :)
+			output+="${char}"
+			;;
+		*)
+			printf -v hex '%02X' "'${char}"
+			output+="%${hex}"
+			;;
+		esac
+	done
+	printf '%s' "${output}"
+}
+
+mcp_resources_file_uri_from_path() {
+	local path="$1"
+	local dir base abs_path
+	if ! dir="$(cd "$(dirname "${path}")" >/dev/null 2>&1 && pwd)"; then
+		return 1
+	fi
+	base="$(basename "${path}")"
+	abs_path="${dir}/${base}"
+	mcp_resources_url_encode "file://${abs_path}"
+}
+
 mcp_resources_scan_root() {
 	local scan_root="${MCPBASH_RESOURCES_DIR}"
 	if [ -n "${MCPBASH_REGISTRY_REFRESH_PATH:-}" ]; then
@@ -176,8 +207,19 @@ mcp_resources_emit_update() {
 	local uri
 	uri="$(echo "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.contents[0].uri // ""')"
 	local params
-	if ! params="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg uri "${uri}" --argjson payload "${payload}" '($payload + {uri: $uri})' 2>/dev/null)"; then
-		params="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg uri "${uri}" '{uri: $uri}')" || params='{"uri":""}'
+	if ! params="$("${MCPBASH_JSON_TOOL_BIN}" -n -c \
+		--arg sub "${subscription_id}" \
+		--arg uri "${uri}" \
+		--argjson resource "${payload}" '{
+			subscriptionId: $sub,
+			subscription: {id: $sub, uri: $uri},
+			resource: $resource
+		}' 2>/dev/null)"; then
+		params="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg sub "${subscription_id}" --arg uri "${uri}" '{
+			subscriptionId: $sub,
+			subscription: {id: $sub, uri: $uri},
+			resource: {contents: []}
+		}')" || params='{"subscriptionId":""}'
 	fi
 	rpc_send_line_direct "$("${MCPBASH_JSON_TOOL_BIN}" -n -c --argjson params "${params}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
 }
@@ -186,10 +228,20 @@ mcp_resources_emit_error() {
 	local subscription_id="$1"
 	local code="$2"
 	local message="$3"
+	local uri="${4:-}"
 	local payload
-	payload="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --argjson code "${code}" --arg msg "${message}" '{
-		error: {code: $code, message: $msg}
-	}')"
+	if [ -z "${uri}" ]; then
+		uri=""
+	fi
+	payload="$("${MCPBASH_JSON_TOOL_BIN}" -n -c \
+		--arg sub "${subscription_id}" \
+		--arg uri "${uri}" \
+		--argjson code "${code}" \
+		--arg msg "${message}" '{
+			subscriptionId: $sub,
+			subscription: {id: $sub, uri: $uri},
+			error: {code: $code, message: $msg}
+		}')"
 	rpc_send_line_direct "$("${MCPBASH_JSON_TOOL_BIN}" -n -c --argjson params "${payload}" '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":$params}')"
 }
 
@@ -229,7 +281,7 @@ mcp_resources_poll_subscriptions() {
 			error_fingerprint="ERROR:${code}:$(mcp_resources_hash_payload "${message}")"
 			if [ "${error_fingerprint}" != "${fingerprint}" ]; then
 				mcp_resources_subscription_store "${subscription_id}" "${name}" "${uri}" "${error_fingerprint}"
-				mcp_resources_emit_error "${subscription_id}" "${code}" "${message}"
+				mcp_resources_emit_error "${subscription_id}" "${code}" "${message}" "${uri}"
 			fi
 		fi
 	done
@@ -461,9 +513,12 @@ mcp_resources_scan() {
 	local resources_dir="${1:-${MCPBASH_RESOURCES_DIR}}"
 	local items_file
 	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resources-items.XXXXXX")"
+	local names_seen_file
+	names_seen_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resources-names.XXXXXX")"
+	local duplicate_name=""
 
 	if [ -d "${resources_dir}" ]; then
-		find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
+		while IFS= read -r path; do
 			local rel_path="${path#"${MCPBASH_RESOURCES_DIR}"/}"
 			local base_name
 			base_name="$(basename "${path}")"
@@ -518,6 +573,13 @@ mcp_resources_scan() {
 			fi
 
 			if [ -z "${uri}" ]; then
+				local computed_uri=""
+				if computed_uri="$(mcp_resources_file_uri_from_path "${path}" 2>/dev/null)"; then
+					uri="${computed_uri}"
+				fi
+			fi
+
+			if [ -z "${uri}" ]; then
 				continue
 			fi
 
@@ -529,6 +591,12 @@ mcp_resources_scan() {
 				esac
 			fi
 
+			if grep -Fxq "${name}" "${names_seen_file}"; then
+				duplicate_name="${name}"
+				break
+			fi
+			echo "${name}" >>"${names_seen_file}"
+
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
@@ -537,7 +605,14 @@ mcp_resources_scan() {
 				--arg mime "$mime" \
 				--arg provider "$provider" \
 				'{name: $name, description: $desc, path: $path, uri: $uri, mimeType: $mime, provider: $provider}' >>"${items_file}"
-		done
+		done < <(find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | LC_ALL=C sort)
+	fi
+
+	if [ -n "${duplicate_name}" ]; then
+		rm -f "${items_file}" "${names_seen_file}"
+		mcp_logging_error "${MCP_RESOURCES_LOGGER}" "Duplicate resource name detected: ${duplicate_name}"
+		mcp_resources_error -32603 "Duplicate resource name: ${duplicate_name}"
+		return 1
 	fi
 
 	local timestamp
@@ -546,7 +621,7 @@ mcp_resources_scan() {
 	if [ -s "${items_file}" ]; then
 		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
 	fi
-	rm -f "${items_file}"
+	rm -f "${items_file}" "${names_seen_file}"
 
 	local hash
 	hash="$(mcp_resources_hash_payload "${items_json}")"

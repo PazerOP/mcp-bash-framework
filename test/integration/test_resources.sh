@@ -327,7 +327,7 @@ run_subscription_test() {
 		if [ "$id" = "ping" ]; then
 			ping_seen=true
 		elif [ "$method" = "notifications/resources/updated" ]; then
-			if [ "$(echo "$line" | jq -r '.params.contents[0].text // empty')" = "updated" ]; then
+			if [ "$(echo "$line" | jq -r '.params.resource.contents[0].text // empty')" = "updated" ]; then
 				update_seen=true
 			fi
 		fi

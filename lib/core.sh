@@ -951,6 +951,9 @@ mcp_core_emit_registry_notifications() {
 	2025-03-26)
 		allow_list_changed="false"
 		;;
+	2024-11-05)
+		allow_list_changed="false"
+		;;
 	esac
 
 	mcp_core_poll_registries_once
