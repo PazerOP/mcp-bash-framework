@@ -1007,17 +1007,17 @@ mcp_core_flush_stream() {
 	tail -c +$((last_offset + 1)) "${stream}" 2>/dev/null \
 		| while IFS= read -r line || [ -n "${line}" ]; do
 			[ -z "${line}" ] && continue
-		if [ "${kind}" = "log" ]; then
-			local level
-			level="$(mcp_core_extract_log_level "${line}")"
-			if ! mcp_logging_is_enabled "${level}"; then
-				continue
+			if [ "${kind}" = "log" ]; then
+				local level
+				level="$(mcp_core_extract_log_level "${line}")"
+				if ! mcp_logging_is_enabled "${level}"; then
+					continue
+				fi
 			fi
-		fi
-		if mcp_core_rate_limit "${key}" "${kind}"; then
-			rpc_send_line "${line}"
-		fi
-	done
+			if mcp_core_rate_limit "${key}" "${kind}"; then
+				rpc_send_line "${line}"
+			fi
+		done
 	echo "${size}" >"${offset_file}"
 }
 
