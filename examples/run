@@ -30,7 +30,7 @@ if [ -z "${json_tool}" ]; then
     json_tool="minimal"
   fi
 fi
-printf 'Detected JSON tooling: %s (no Python support; jq/gojq or minimal mode)\n' "${json_tool}" >&2
+printf 'Detected JSON tooling: %s (using jq/gojq or minimal mode)\n' "${json_tool}" >&2
 
 # Copy framework files
 cp -a "${SCRIPT_DIR}/../bin" "${TMPDIR}/"
