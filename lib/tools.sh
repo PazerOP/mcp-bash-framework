@@ -860,6 +860,10 @@ mcp_tools_call() {
 	fi
 
 	cleanup_tool_temp_files() {
+		# Preserve temp files when debugging so we can inspect tool I/O.
+		if [ "${MCPBASH_PRESERVE_STATE:-}" = "true" ]; then
+			return 0
+		fi
 		rm -f "${stdout_file}" "${stderr_file}"
 		[ -n "${tool_error_file}" ] && rm -f "${tool_error_file}"
 		[ -n "${args_file}" ] && rm -f "${args_file}"

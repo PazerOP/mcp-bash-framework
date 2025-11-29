@@ -51,6 +51,15 @@ mcp_roots_load_all_fallbacks() {
 	if [ "${#MCPBASH_ROOTS_PATHS[@]}" -eq 0 ]; then
 		mcp_roots_load_fallback
 	fi
+	# Debug dump to state dir if available
+	if [ -n "${MCPBASH_STATE_DIR:-}" ]; then
+		{
+			local i
+			for i in "${!MCPBASH_ROOTS_PATHS[@]}"; do
+				printf '%s|%s|%s\n' "${MCPBASH_ROOTS_URIS[$i]:-}" "${MCPBASH_ROOTS_NAMES[$i]:-}" "${MCPBASH_ROOTS_PATHS[$i]:-}"
+			done
+		} >"${MCPBASH_STATE_DIR}/roots.debug" 2>/dev/null || true
+	fi
 }
 
 mcp_roots_init_after_initialized() {

@@ -53,7 +53,7 @@ mcp_args_get() {
 	local payload
 	payload="$(mcp_args_raw)"
 	if command -v "${MCPBASH_JSON_TOOL_BIN:-}" >/dev/null 2>&1; then
-		printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c "${filter}" 2>/dev/null
+		printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -rc "${filter}" 2>/dev/null
 	else
 		__mcp_sdk_warn "mcp_args_get: JSON tooling unavailable; use mcp_args_raw instead"
 		printf ''
