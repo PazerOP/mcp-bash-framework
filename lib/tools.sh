@@ -926,6 +926,9 @@ mcp_tools_call() {
 				"MCP_TOOL_METADATA_JSON=${MCP_TOOL_METADATA_JSON}"
 				"MCP_TOOL_ERROR_FILE=${MCP_TOOL_ERROR_FILE}"
 				"MCP_ELICIT_SUPPORTED=${elicit_supported}"
+				"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL:-}"
+				"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN:-}"
+				"MCPBASH_MODE=${MCPBASH_MODE:-full}"
 			)
 			if declare -F mcp_roots_wait_ready >/dev/null 2>&1; then
 				env_exec+=("MCP_ROOTS_JSON=${MCP_ROOTS_JSON:-[]}")
@@ -956,6 +959,9 @@ mcp_tools_call() {
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && export MCP_TOOL_METADATA_FILE
 			export MCP_TOOL_ERROR_FILE
 			export MCP_ELICIT_SUPPORTED="${elicit_supported}"
+			export MCPBASH_JSON_TOOL="${MCPBASH_JSON_TOOL:-}"
+			export MCPBASH_JSON_TOOL_BIN="${MCPBASH_JSON_TOOL_BIN:-}"
+			export MCPBASH_MODE="${MCPBASH_MODE:-full}"
 			if [ "${elicit_supported}" = "1" ]; then
 				export MCP_ELICIT_REQUEST_FILE="${elicit_request_file}"
 				export MCP_ELICIT_RESPONSE_FILE="${elicit_response_file}"
