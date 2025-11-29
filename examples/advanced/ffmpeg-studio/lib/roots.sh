@@ -65,7 +65,14 @@ ffmpeg_resolve_path() {
 	else
 		while IFS= read -r root; do
 			[ -n "${root}" ] || continue
-			local candidate="${root}/${user_path}"
+			local candidate="${user_path}"
+			# If the path is already prefixed with the root folder name (e.g., "media/foo"),
+			# trim it to avoid duplicating ("media/media/foo").
+			local root_name="${root##*/}"
+			if [[ "${candidate}" == "${root_name}/"* ]]; then
+				candidate="${candidate#${root_name}/}"
+			fi
+			candidate="${root}/${candidate}"
 			local attempt
 			if ! attempt="$(ffmpeg_normalize_path "${candidate}")"; then
 				continue
