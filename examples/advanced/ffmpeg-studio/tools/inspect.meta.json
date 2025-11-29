@@ -1,7 +1,7 @@
 {
   "name": "inspect_media",
   "description": "Inspects a media file to retrieve metadata (codec, duration, resolution) using ffprobe.",
-  "arguments": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "path": {

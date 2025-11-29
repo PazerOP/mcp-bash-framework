@@ -91,6 +91,7 @@ Entries describe resource templates and providers. Paths are relative to `MCPBAS
 - When no `provider` is specified, the scanner infers one from the URI scheme (`file://`, `git://`, `https://`); unrecognised schemes default to `file` and are rejected if the provider script is unavailable.
 - Discovery records `name`, `description`, `path`, `uri`, `mimeType`, and `provider`; argument/template schemas are not persisted today.
 - Template-style `inputSchema` fields and `resources/templates/list` discovery are not implemented yet; the handler currently returns an empty `resourceTemplates` array.
+- The `file` provider fails closed if no resource roots are configured; missing/non-existent roots are ignored, so ensure allowed roots exist before use.
 
 ## `.registry/prompts.json`
 

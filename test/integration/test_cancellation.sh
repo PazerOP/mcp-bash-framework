@@ -54,7 +54,7 @@ send '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
 send '{"jsonrpc":"2.0","id":"slow","method":"tools/call","params":{"name":"cancel.slow","arguments":{}}}'
 sleep 1
-send '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"id":"slow"}}'
+send '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"slow"}}'
 
 # Ping to flush events
 send '{"jsonrpc":"2.0","id":"ping","method":"ping"}'

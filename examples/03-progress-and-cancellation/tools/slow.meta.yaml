@@ -1,5 +1,6 @@
-{
-  "name": "example.slow",
-  "description": "Reports progress and supports cancellation",
-  "timeoutSecs": 10
-}
+name: example.slow
+description: Reports progress and supports cancellation
+inputSchema:
+  type: object
+  properties: {}
+timeoutSecs: 10

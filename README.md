@@ -248,6 +248,7 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 - [**Protocol Compliance**](SPEC-COMPLIANCE.md) - Detailed MCP protocol support breakdown.
 - [**Performance Guide**](docs/PERFORMANCE.md) - Tuning concurrency, timeouts, and registry scans.
 - [**Security Policy**](docs/SECURITY.md) - Input validation and execution safety.
+- [**Minimal Mode**](docs/MINIMAL-MODE.md) - Behavior when jq/gojq is missing or minimal mode is forced.
 - [**Changelog**](CHANGELOG.md) - Notable changes between releases.
 - [**Windows Support**](docs/WINDOWS.md) - Running on Git Bash/WSL.
 - [**Remote Connectivity**](docs/REMOTE.md) - Exposing mcp-bash over HTTP/SSE via external gateways.

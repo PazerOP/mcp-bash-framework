@@ -1,7 +1,7 @@
 {
   "name": "transcode",
   "description": "Transcodes media files using ffmpeg with selectable presets and real-time progress reporting.",
-  "arguments": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "input": {

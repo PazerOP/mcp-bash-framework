@@ -41,12 +41,19 @@ normalize_path() {
 	)
 }
 
-path="$(normalize_path "${path}")"
+path="$(normalize_path "${path}" 2>/dev/null || true)"
+if [ -z "${path}" ]; then
+	# Path could not be normalized (likely missing); treat as not found.
+	exit 3
+fi
 roots_input="${MCP_RESOURCES_ROOTS:-${MCPBASH_RESOURCES_DIR:-${MCPBASH_PROJECT_ROOT:-}}}"
 allowed=false
+saw_root=false
 while IFS= read -r root; do
 	[ -z "${root}" ] && continue
-	check_root="$(normalize_path "${root}")"
+	check_root="$(normalize_path "${root}" 2>/dev/null || true)"
+	[ -z "${check_root}" ] && continue
+	saw_root=true
 	case "${path}" in
 	"${check_root}" | "${check_root}"/*)
 		allowed=true
@@ -55,6 +62,8 @@ while IFS= read -r root; do
 	esac
 done <<<"$(printf '%s\n' "${roots_input}" | tr ':' '\n')"
 if [ "${allowed}" != true ]; then
+	# Fail closed if no roots were usable or path is outside allowed roots.
+	[ "${saw_root}" != true ] && printf '%s' "" >&2
 	printf '%s' "" >&2
 	exit 2
 fi

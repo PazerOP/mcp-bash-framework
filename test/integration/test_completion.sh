@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "${TMP}"' EXIT
 
+# Relies on the builtin completion provider when no project-defined completion exists.
 cat <<'JSON' >"${TMP}/requests.ndjson"
 {"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}

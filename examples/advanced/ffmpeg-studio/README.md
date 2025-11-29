@@ -16,7 +16,7 @@
 **Prereqs**
 - Bash 3.2+
 - `ffmpeg` and `ffprobe` on PATH
-- jq or gojq recommended; otherwise minimal mode (progress/logs still work, structured JSON may degrade)
+- jq or gojq (required; fs_guard uses it to parse media roots)
 
 **Run**
 ```

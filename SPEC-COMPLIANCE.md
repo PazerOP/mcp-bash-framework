@@ -65,6 +65,12 @@ The following MCP features are currently out of scope:
 | Roots (client feature) | Client-side feature, not applicable to servers |
 | Elicitation (client feature) | Client-side feature, not applicable to servers |
 
+**Applicability notes**
+
+- “Not applicable” entries above are client-side-only features per MCP spec.
+- “Not yet implemented” items (e.g., resource templates discovery) are stubbed with empty responses and advertised as reserved for future use.
+- “Partial” surfaces (e.g., older protocol versions without `listChanged`) are intentionally reduced per back-compat behavior.
+
 ## Verification
 
 Compliance is verified through:

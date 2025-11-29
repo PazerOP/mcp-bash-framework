@@ -6,7 +6,7 @@ mcp-bash follows one rule: do the minimum necessary to translate MCP messages in
 
 ## Repository layout
 ```
-mcp-bash/
+mcp-bash-framework/
 ├─ bin/mcp-bash
 ├─ lib/
 │  ├─ core.sh

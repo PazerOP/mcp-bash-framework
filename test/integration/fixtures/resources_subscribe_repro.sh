@@ -53,6 +53,7 @@ printf 'Enable payload logging via MCPBASH_DEBUG_PAYLOADS=true for stdout traces
 
 	# Start server
 	coproc SERVER { ./bin/mcp-bash; }
+	SERVER_PID=$!
 
 	send() {
 		local payload="$1"

@@ -1,7 +1,7 @@
 {
   "name": "extract_frame",
   "description": "Extracts a single video frame as an image at a specific timestamp.",
-  "arguments": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "input": {

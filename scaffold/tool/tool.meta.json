@@ -1,7 +1,7 @@
 {
   "name": "__NAME__",
   "description": "One-line summary for __NAME__ tool",
-  "arguments": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "name": {

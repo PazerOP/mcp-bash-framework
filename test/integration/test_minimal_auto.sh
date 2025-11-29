@@ -15,19 +15,16 @@ test_create_tmpdir
 WORKSPACE="${TEST_TMPDIR}/minimal-auto"
 test_stage_workspace "${WORKSPACE}"
 
-if command -v gojq >/dev/null 2>&1 || command -v jq >/dev/null 2>&1; then
-	printf 'SKIP: jq/gojq available on PATH; auto-minimal fallback not triggered.\n'
-	exit 0
-fi
-
 cat <<'JSON' >"${WORKSPACE}/requests.ndjson"
 {"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
-{"jsonrpc":"2.0","id":"log","method":"logging/setLevel","params":{"level":"DEBUG"}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":"log","method":"logging/setLevel","params":{"level":"INVALID"}}
 JSON
 
 (
 	cd "${WORKSPACE}" || exit 1
-	PATH="/usr/bin:/bin" MCPBASH_PROJECT_ROOT="${WORKSPACE}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
+	# Force minimal mode even if jq/gojq are available on PATH.
+	MCPBASH_FORCE_MINIMAL=true PATH="/usr/bin:/bin" MCPBASH_PROJECT_ROOT="${WORKSPACE}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
 ) || true
 
 init_caps="$(jq -c 'select(.id=="init") | .result.capabilities // empty' "${WORKSPACE}/responses.ndjson")"

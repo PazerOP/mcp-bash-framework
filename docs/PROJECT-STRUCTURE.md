@@ -92,6 +92,12 @@ mcp_completion_manual_finalize
 
 Paths in `path` are resolved relative to `MCPBASH_PROJECT_ROOT`. Registry refresh will load the completions registry and make names available to `completion/complete`.
 
+## Metadata conventions
+
+- Tools: use `inputSchema` as the canonical argument schema; `arguments` is treated as a legacy alias for older metadata.
+- Prompts/completions: use `arguments` to describe prompt/completion parameters.
+- Prefer `.meta.json`; `.meta.yaml` files are supported but should contain valid YAML, not embedded JSON.
+
 ## Tool SDK discovery
 
 `lib/tools.sh` exports `MCP_SDK` to the framework's `sdk/` directory so tools can `source "${MCP_SDK}/tool-sdk.sh"`. Templates fall back to resolving `sdk/` relative to the script when executed directly. When copying tools into another tree, set `MCP_SDK` yourself (see [SDK Discovery](../README.md#sdk-discovery)) to keep helpers locatable.

@@ -108,31 +108,50 @@ if [ -z "${total_duration_us}" ] || [ "${total_duration_us}" -eq 0 ]; then
 	total_duration_us=1
 fi
 
-# Run ffmpeg with progress pipe
-# We use a temp file for the pipe since bash pipes can be tricky with exit codes
+# Run ffmpeg with a dedicated progress pipe so we can track cancellation and exit codes accurately.
 mcp_progress 0 "Starting transcoding..."
+progress_fifo="$(mktemp -u "${TMPDIR:-/tmp}/mcp-ffmpeg-progress.XXXXXX")"
+mkfifo "${progress_fifo}"
+cleanup_fifo() {
+	rm -f "${progress_fifo}"
+}
+trap cleanup_fifo EXIT INT TERM
 
-ffmpeg "${ffmpeg_args[@]}" -i "${full_input}" -progress pipe:1 "${full_output}" | while read -r line; do
+ffmpeg "${ffmpeg_args[@]}" -i "${full_input}" -progress "${progress_fifo}" "${full_output}" &
+ffmpeg_pid=$!
+
+while IFS= read -r line; do
 	key=${line%%=*}
 	value=${line#*=}
 
 	if [[ "$key" == "out_time_us" ]]; then
 		current_us=$value
-		# Avoid division by zero
 		if [ "${total_duration_us}" -gt 0 ]; then
 			pct=$((current_us * 100 / total_duration_us))
-			# Clamp to 100
-			if [ $pct -gt 100 ]; then pct=100; fi
+			[ $pct -gt 100 ] && pct=100
 			mcp_progress "${pct}" "Transcoding... ${pct}%"
 		fi
 	fi
 
-	# Check cancellation
 	if mcp_is_cancelled; then
+		kill "${ffmpeg_pid}" 2>/dev/null || true
+		wait "${ffmpeg_pid}" 2>/dev/null || true
 		rm -f "${full_output}"
 		mcp_fail -32001 "Cancelled"
 	fi
-done
+done <"${progress_fifo}"
+
+wait_status=0
+if ! wait "${ffmpeg_pid}"; then
+	wait_status=$?
+fi
+rm -f "${progress_fifo}"
+trap - EXIT INT TERM
+
+if [ "${wait_status}" -ne 0 ]; then
+	rm -f "${full_output}"
+	mcp_fail -32603 "Transcode failed (ffmpeg exit ${wait_status})"
+fi
 
 json_tool="${MCPBASH_JSON_TOOL_BIN:-}"
 if [ -z "${json_tool}" ] || ! command -v "${json_tool}" >/dev/null 2>&1; then

@@ -20,25 +20,17 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-json_tool="${MCPBASH_JSON_TOOL:-}"
-if [ -z "${json_tool}" ]; then
-  if command -v gojq >/dev/null 2>&1; then
-    json_tool="gojq"
-  elif command -v jq >/dev/null 2>&1; then
-    json_tool="jq"
-  else
-    json_tool="minimal"
-  fi
-fi
-printf 'Detected JSON tooling: %s (using jq/gojq or minimal mode)\n' "${json_tool}" >&2
+# Use the same JSON tooling detection as the runtime to avoid drift.
+# shellcheck source=../lib/runtime.sh
+source "${SCRIPT_DIR}/../lib/runtime.sh"
+mcp_runtime_detect_json_tool
+json_tool="${MCPBASH_JSON_TOOL:-minimal}"
+json_tool_bin="${MCPBASH_JSON_TOOL_BIN:-<none>}"
+printf 'JSON tooling: %s (%s)\n' "${json_tool}" "${json_tool_bin}" >&2
 
-# Copy framework files
-cp -a "${SCRIPT_DIR}/../bin" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../lib" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../handlers" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../providers" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../sdk" "${TMPDIR}/"
-cp -a "${SCRIPT_DIR}/../scaffold" "${TMPDIR}/" 2>/dev/null || true
+# Reuse the framework in-place; only stage example content into a temp project.
+FRAMEWORK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export MCPBASH_HOME="${FRAMEWORK_ROOT}"
 
 # Create project directories
 mkdir -p "${TMPDIR}/tools"
@@ -78,4 +70,4 @@ ls -la "${TMPDIR}/tools" >&2
 
 cd "${TMPDIR}" || exit 1
 export MCPBASH_PROJECT_ROOT="${TMPDIR}"
-exec "${TMPDIR}/bin/mcp-bash"
+exec "${FRAMEWORK_ROOT}/bin/mcp-bash"
