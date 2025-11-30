@@ -71,29 +71,31 @@ if [ -f "${full_output}" ]; then
 	fi
 fi
 
-# Determine ffmpeg args based on preset
-ffmpeg_args=("-hide_banner" "-y")
+# Determine ffmpeg args based on preset (separate input vs output options for ordering)
+global_opts=("-hide_banner")
+input_opts=()
+output_opts=("-y")
 
 if [ -n "${start_time}" ]; then
-	ffmpeg_args+=("-ss" "${start_time}")
+	input_opts+=("-ss" "${start_time}")
 fi
 if [ -n "${duration}" ]; then
-	ffmpeg_args+=("-t" "${duration}")
+	input_opts+=("-t" "${duration}")
 fi
 
 case "${preset}" in
 "1080p")
-	ffmpeg_args+=("-c:v" "libx264" "-preset" "fast" "-crf" "23" "-vf" "scale=-2:1080" "-c:a" "aac" "-b:a" "128k")
+	output_opts+=("-c:v" "libx264" "-preset" "fast" "-crf" "23" "-vf" "scale=-2:1080" "-c:a" "aac" "-b:a" "128k")
 	;;
 "720p")
-	ffmpeg_args+=("-c:v" "libx264" "-preset" "fast" "-crf" "23" "-vf" "scale=-2:720" "-c:a" "aac" "-b:a" "128k")
+	output_opts+=("-c:v" "libx264" "-preset" "fast" "-crf" "23" "-vf" "scale=-2:720" "-c:a" "aac" "-b:a" "128k")
 	;;
 "audio-only")
-	ffmpeg_args+=("-vn" "-c:a" "libmp3lame" "-b:a" "192k")
+	output_opts+=("-vn" "-c:a" "libmp3lame" "-b:a" "192k")
 	;;
 "gif")
 	# Complex filter for high quality GIF
-	ffmpeg_args+=("-vf" "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
+	output_opts+=("-vf" "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
 	;;
 *)
 	mcp_fail -32602 "Invalid preset: ${preset}"
@@ -117,7 +119,7 @@ cleanup_fifo() {
 }
 trap cleanup_fifo EXIT INT TERM
 
-ffmpeg "${ffmpeg_args[@]}" -i "${full_input}" -progress "${progress_fifo}" "${full_output}" &
+ffmpeg "${global_opts[@]}" "${input_opts[@]}" -i "${full_input}" -progress "${progress_fifo}" "${output_opts[@]}" "${full_output}" &
 ffmpeg_pid=$!
 
 while IFS= read -r line; do
