@@ -2,6 +2,7 @@
 # Tool discovery, registry generation, invocation helpers.
 
 set -euo pipefail
+# shellcheck disable=SC2030,SC2031  # Subshell env mutations are intentionally isolated
 
 MCP_TOOLS_REGISTRY_JSON=""
 MCP_TOOLS_REGISTRY_HASH=""
@@ -657,6 +658,7 @@ mcp_tools_metadata_for_name() {
 	printf '%s' "${metadata}"
 }
 
+# shellcheck disable=SC2031  # Subshell env exports are deliberate; parent values remain unchanged.
 mcp_tools_call() {
 	local name="$1"
 	local args_json="$2"
@@ -793,7 +795,9 @@ mcp_tools_call() {
 	}
 
 	local exit_code
+	# shellcheck disable=SC2030,SC2031
 	(
+		# Environment mutations here are intentionally scoped to this subshell.
 		# Ignore SIGTERM in this subshell - only the tool process should be killed
 		# The tool runs in its own process via with_timeout, which handles the signal
 		trap '' TERM

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: tool error propagation, stderr capture, timeout overrides.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Tool stderr, non-zero exit, and timeouts."
 
 set -euo pipefail

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: resource provider safety and allowlist enforcement.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Resource provider allowlist denies outside roots."
 
 set -euo pipefail

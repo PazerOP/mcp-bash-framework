@@ -15,10 +15,8 @@ VERBOSE="${VERBOSE:-0}"
 UNICODE="${UNICODE:-0}"
 
 PASS_ICON="[PASS]"
-FAIL_ICON="[FAIL]"
 if [ "${UNICODE}" = "1" ]; then
 	PASS_ICON="✅"
-	FAIL_ICON="❌"
 fi
 
 test_require_command jq

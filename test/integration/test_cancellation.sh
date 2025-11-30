@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: cancellation notification terminates a running worker.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Cancellation request aborts a running worker."
 
 set -euo pipefail

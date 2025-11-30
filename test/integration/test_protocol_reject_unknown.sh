@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: unsupported protocol version should return -32602.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Unsupported protocol versions return -32602 errors."
 
 set -euo pipefail

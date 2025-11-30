@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: progress/log emissions and rate limiting.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Progress and log notifications with rate limits."
 
 set -euo pipefail

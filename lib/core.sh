@@ -75,6 +75,7 @@ mcp_core_bootstrap_state() {
 	MCPBASH_SHUTDOWN_TIMER_STARTED=false
 	MCPBASH_RESOURCE_POLL_PID=""
 	MCPBASH_CLIENT_SUPPORTS_ELICITATION=0
+	# shellcheck disable=SC2034  # Used by RPC helpers in lib/rpc.sh
 	MCPBASH_NEXT_OUTGOING_ID=1
 	rm -f "${MCPBASH_STATE_DIR}"/elicit.*.id 2>/dev/null || true
 	rm -f "${MCPBASH_STATE_DIR}"/pending.*.path 2>/dev/null || true

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: forced minimal mode (even when jq/gojq are available).
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Forced minimal mode despite jq availability."
 
 set -euo pipefail

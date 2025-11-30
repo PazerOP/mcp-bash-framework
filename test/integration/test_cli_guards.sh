@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: CLI guard for missing MCPBASH_PROJECT_ROOT.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="CLI scaffolding rejects missing project root."
 
 set -euo pipefail

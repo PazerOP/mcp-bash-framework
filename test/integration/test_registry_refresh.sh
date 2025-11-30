@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Registry refresh builds cache and respects state."
 set -euo pipefail
 

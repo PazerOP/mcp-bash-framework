@@ -16,6 +16,7 @@ MCPBASH_ROOTS_PENDING_REQUEST=0
 MCPBASH_ROOTS_PENDING_REQUEST_ID=""
 MCPBASH_ROOTS_GENERATION=0
 MCPBASH_ROOTS_LAST_REQUEST_TIME=0
+# shellcheck disable=SC2034  # Consumed by lifecycle handler for logging and feature gating
 MCPBASH_CLIENT_SUPPORTS_ROOTS=0
 MCPBASH_CLIENT_SUPPORTS_ROOTS_LIST_CHANGED=0
 
@@ -35,6 +36,7 @@ mcp_roots_capture_capabilities() {
 			MCPBASH_CLIENT_SUPPORTS_ROOTS=1
 		fi
 		if printf '%s' "${client_caps_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.roots.listChanged == true' >/dev/null 2>&1; then
+			# shellcheck disable=SC2034
 			MCPBASH_CLIENT_SUPPORTS_ROOTS_LIST_CHANGED=1
 		fi
 	fi
@@ -83,7 +85,7 @@ mcp_roots_request_from_client() {
 	# Debounce rapid notifications.
 	local now
 	now="$(date +%s)"
-	if (( now - MCPBASH_ROOTS_LAST_REQUEST_TIME < MCPBASH_ROOTS_DEBOUNCE_INTERVAL )); then
+	if ((now - MCPBASH_ROOTS_LAST_REQUEST_TIME < MCPBASH_ROOTS_DEBOUNCE_INTERVAL)); then
 		mcp_logging_debug "${MCP_ROOTS_LOGGER}" "Debouncing roots/list request"
 		return 0
 	fi
@@ -99,7 +101,7 @@ mcp_roots_request_from_client() {
 	mcp_roots_clear
 
 	MCPBASH_ROOTS_PENDING_REQUEST=1
-	(( MCPBASH_ROOTS_GENERATION++ )) || true
+	((MCPBASH_ROOTS_GENERATION++)) || true
 	local current_generation="${MCPBASH_ROOTS_GENERATION}"
 
 	local request_id
@@ -262,18 +264,18 @@ mcp_roots_uri_to_path() {
 	# Percent-decode path
 	local decoded=""
 	local i=0 len=${#path}
-	while (( i < len )); do
+	while ((i < len)); do
 		local char="${path:i:1}"
-		if [[ "${char}" == "%" ]] && (( i + 2 < len )); then
+		if [[ "${char}" == "%" ]] && ((i + 2 < len)); then
 			local hex="${path:i+1:2}"
 			if [[ "${hex}" =~ ^[0-9A-Fa-f]{2}$ ]]; then
-				decoded+="$(printf "\\x${hex}")"
-				(( i += 3 ))
+				decoded+="$(printf '%b' "\\x${hex}")"
+				((i += 3))
 				continue
 			fi
 		fi
 		decoded+="${char}"
-		(( i++ ))
+		((i++))
 	done
 
 	if [[ "${decoded}" != /* ]]; then
@@ -349,11 +351,11 @@ mcp_roots_load_fallback() {
 	fi
 
 	local entries
-	if ! entries="$(cat "${config}" | "${MCPBASH_JSON_TOOL_BIN}" -r '
+	if ! entries="$("${MCPBASH_JSON_TOOL_BIN}" -r '
 		.roots // [] |
 		map(select((.path // "") != "")) |
 		map("\(.path // "")\t\(.name // "")") |
-		.[]')" 2>/dev/null; then
+		.[]' <"${config}")" 2>/dev/null; then
 		mcp_logging_warning "${MCP_ROOTS_LOGGER}" "Invalid fallback config at ${config}"
 		return 0
 	fi
@@ -406,7 +408,6 @@ mcp_roots_get_json() {
 		return 0
 	fi
 
-	local payload=""
 	local entries=()
 	local i
 	for i in "${!MCPBASH_ROOTS_PATHS[@]}"; do
@@ -415,7 +416,10 @@ mcp_roots_get_json() {
 			"$(mcp_json_escape_string "${MCPBASH_ROOTS_NAMES[$i]}")" \
 			"$(mcp_json_escape_string "${MCPBASH_ROOTS_PATHS[$i]}")")")
 	done
-	printf '[%s]' "$(IFS=,; printf '%s' "${entries[*]}")"
+	printf '[%s]' "$(
+		IFS=,
+		printf '%s' "${entries[*]}"
+	)"
 }
 
 mcp_roots_contains_path() {
@@ -439,7 +443,7 @@ mcp_roots_wait_ready() {
 	while [ "${MCPBASH_ROOTS_READY}" != "1" ]; do
 		local now
 		now="$(date +%s)"
-		if (( now - start >= timeout )); then
+		if ((now - start >= timeout)); then
 			mcp_logging_warning "${MCP_ROOTS_LOGGER}" "Timeout waiting for roots; loading fallback"
 			if [ "${MCPBASH_ROOTS_PENDING_REQUEST}" = "1" ]; then
 				if [ -n "${MCPBASH_ROOTS_PENDING_REQUEST_ID}" ]; then
@@ -447,7 +451,7 @@ mcp_roots_wait_ready() {
 				fi
 				MCPBASH_ROOTS_PENDING_REQUEST=0
 				MCPBASH_ROOTS_PENDING_REQUEST_ID=""
-				(( MCPBASH_ROOTS_GENERATION++ )) || true
+				((MCPBASH_ROOTS_GENERATION++)) || true
 			fi
 			mcp_roots_load_all_fallbacks
 			MCPBASH_ROOTS_READY=1

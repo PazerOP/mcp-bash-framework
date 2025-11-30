@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Deduplicate back-to-back list_changed notifications."
 set -euo pipefail
 

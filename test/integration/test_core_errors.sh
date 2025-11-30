@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: core protocol errors, gating, and batch rejection.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Core error normalization, gating, and batch rejection."
 
 set -euo pipefail

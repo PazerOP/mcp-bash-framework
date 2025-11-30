@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Prompt auto-discovery, manual overrides, and subscriptions."
 set -euo pipefail
 

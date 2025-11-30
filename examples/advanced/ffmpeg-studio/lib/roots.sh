@@ -36,7 +36,9 @@ ffmpeg_require_roots() {
 	local default_root
 	default_root="$(ffmpeg_normalize_path "${FFMPEG_STUDIO_ROOT}/media")" || mcp_fail -32603 "Unable to resolve default media root"
 	MCP_ROOTS_PATHS="${default_root}"
+	# shellcheck disable=SC2034  # Exported for downstream MCP tools
 	MCP_ROOTS_COUNT=1
+	# shellcheck disable=SC2034  # Exported for downstream MCP tools
 	MCP_ROOTS_JSON="[{\"uri\":\"file://${default_root}\",\"name\":\"Media\",\"path\":\"${default_root}\"}]"
 }
 
@@ -70,7 +72,7 @@ ffmpeg_resolve_path() {
 			# trim it to avoid duplicating ("media/media/foo").
 			local root_name="${root##*/}"
 			if [[ "${candidate}" == "${root_name}/"* ]]; then
-				candidate="${candidate#${root_name}/}"
+				candidate="${candidate#"${root_name}"/}"
 			fi
 			candidate="${root}/${candidate}"
 			local attempt

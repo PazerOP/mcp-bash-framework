@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration: lifecycle gating, shutdown handling, and exit semantics.
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Lifecycle gating for init, shutdown, and exit."
 
 set -euo pipefail

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # Used by test runner for reporting.
 TEST_DESC="Built-in completion provider and cursor handling."
 set -euo pipefail
 
