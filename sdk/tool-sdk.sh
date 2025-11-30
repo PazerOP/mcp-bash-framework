@@ -314,8 +314,9 @@ mcp_elicit_choice() {
 	local message="$1"
 	shift
 	local options=("$@")
+	local json_tool="${MCPBASH_JSON_TOOL_BIN:-jq}"
 	local enum_json
-	enum_json="$(printf '%s\n' "${options[@]}" | jq -R . | jq -s -c .)"
+	enum_json="$(printf '%s\n' "${options[@]}" | "${json_tool}" -R . | "${json_tool}" -s -c .)"
 	local schema
 	schema="$(printf '{"type":"object","properties":{"choice":{"type":"string","enum":%s}},"required":["choice"]}' "${enum_json}")"
 	mcp_elicit "${message}" "${schema}"

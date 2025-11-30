@@ -31,13 +31,13 @@ init_caps="$(jq 'select(.id=="1") | .result.capabilities' "${TMP}/responses.ndjs
 tools_list_changed="$(printf '%s' "${init_caps}" | jq -r '.tools.listChanged // empty')"
 resources_subscribe="$(printf '%s' "${init_caps}" | jq -r '.resources.subscribe // empty')"
 resources_list_changed="$(printf '%s' "${init_caps}" | jq -r '.resources.listChanged // empty')"
-resources_templates="$(printf '%s' "${init_caps}" | jq -r '.resources.templates // empty')"
+resources_templates_has="$(printf '%s' "${init_caps}" | jq '.resources | has("templates")')"
 prompts_list_changed="$(printf '%s' "${init_caps}" | jq -r '.prompts.listChanged // empty')"
 
 test_assert_eq "${tools_list_changed}" "true"
 test_assert_eq "${resources_subscribe}" "true"
 test_assert_eq "${resources_list_changed}" "true"
-test_assert_eq "${resources_templates}" "true"
+test_assert_eq "${resources_templates_has}" "false"
 test_assert_eq "${prompts_list_changed}" "true"
 
 templates_result_count="$(jq -r 'select(.id=="3") | .result.resourceTemplates | length' "${TMP}/responses.ndjson")"

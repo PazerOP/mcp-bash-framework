@@ -19,7 +19,7 @@ All registries adhere to the same top-level structure:
 - `version`: Schema version (currently `1`).
 - `generatedAt`: UTC timestamp when the scan completed.
 - `items`: Array containing the discovered entities.
-- `hash`: SHA-256 hash of the canonicalised `items` array; changed hashes trigger `notifications/*/list_changed`.
+- `hash`: Hash of the canonicalised `items` array; SHA-256 when available, falling back to `cksum` if sha256 utilities are missing. Changed hashes trigger `notifications/*/list_changed`.
 - `total`: Count of `items`.
 
 Guardrails are enforced for all registries:
@@ -96,7 +96,7 @@ Entries describe resource templates and providers. Paths are relative to `MCPBAS
 
 The MCP protocol supports **resource templates** — parameterized resources using [RFC 6570 URI templates](https://datatracker.ietf.org/doc/html/rfc6570) (e.g., `file:///{path}`, `logs/{date}.log`). Templates allow servers to expose dynamic access patterns without enumerating every possible resource.
 
-**Current status:** The `resources/templates/list` endpoint is implemented and returns a valid, paginated empty response. The server advertises `"templates": true` in its capabilities. Template discovery from `.meta.json` files (using `uriTemplate` instead of `uri`) is not yet implemented.
+**Current status:** The `resources/templates/list` endpoint is implemented and returns a valid, paginated empty response. Template discovery from `.meta.json` files (using `uriTemplate` instead of `uri`) is not yet implemented, and the capability is not advertised until discovery is added.
 
 **Response format:**
 

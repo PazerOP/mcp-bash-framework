@@ -62,13 +62,12 @@ The following MCP features are currently out of scope:
 | HTTP/SSE Transport | stdio-only design; see `docs/REMOTE.md` for proxy guidance |
 | OAuth Authorization | Out of scope for stdio transport |
 | Sampling (client feature) | Client-side feature, not applicable to servers |
-| Roots (client feature) | Client-side feature, not applicable to servers |
-| Elicitation (client feature) | Client-side feature, not applicable to servers |
 
 **Applicability notes**
 
-- “Not applicable” entries above are client-side-only features per MCP spec.
-- Resource templates: The `resources/templates/list` method is implemented and returns an empty `resourceTemplates` array. The capability is advertised (`"templates": true`) but template discovery from `.meta.json` files is not yet implemented. Clients can call the endpoint; it will return valid, paginated empty results.
+- Roots: Implemented as a server→client request (`roots/list`) per spec; server capabilities do not advertise a roots surface.
+- Elicitation: Implemented when clients advertise support; tools can pause and request additional user input.
+- Resource templates: `resources/templates/list` is implemented but returns an empty `resourceTemplates` array; capability is no longer advertised until discovery is implemented.
 - “Partial” surfaces (e.g., older protocol versions without `listChanged`) are intentionally reduced per back-compat behavior.
 
 ## Verification

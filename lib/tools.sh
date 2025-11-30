@@ -771,11 +771,12 @@ mcp_tools_call() {
 	local elicit_supported="0"
 	local elicit_request_file=""
 	local elicit_response_file=""
-	if declare -F mcp_elicitation_is_supported >/dev/null 2>&1 && [ -n "${key:-}" ]; then
+	local elicit_key="${MCPBASH_WORKER_KEY:-${key:-}}"
+	if declare -F mcp_elicitation_is_supported >/dev/null 2>&1 && [ -n "${elicit_key}" ]; then
 		if mcp_elicitation_is_supported; then
 			elicit_supported="1"
-			elicit_request_file="$(mcp_elicitation_request_path_for_worker "${key}")"
-			elicit_response_file="$(mcp_elicitation_response_path_for_worker "${key}")"
+			elicit_request_file="$(mcp_elicitation_request_path_for_worker "${elicit_key}")"
+			elicit_response_file="$(mcp_elicitation_response_path_for_worker "${elicit_key}")"
 			rm -f "${elicit_request_file}" "${elicit_response_file}"
 		fi
 	fi

@@ -684,6 +684,9 @@ mcp_core_worker_entry() {
 	# shellcheck disable=SC2031
 	local log_stream="${MCP_LOG_STREAM:-}"
 
+	MCPBASH_WORKER_KEY="${key}"
+	export MCPBASH_WORKER_KEY
+
 	trap 'mcp_core_worker_cleanup "${key}" "${stderr_file}"' EXIT
 
 	if ! mcp_core_invoke_handler "${handler}" "${method}" "${json_line}"; then

@@ -186,7 +186,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 ### 6.5 Discovery hygiene
 - Keep `.registry/` out of version control (already `.gitignore`d) and monitor growth.
 - Run a nightly job that executes `bin/mcp-bash registry refresh --no-notify` to rebuild registries; use `--project-root` in CI/offline contexts.
-- Validate metadata via `scripts/verify-metadata.sh` (when available) before merging large batches of tools/resources.
+- Validate metadata via project-local checks before merging large batches of tools/resources.
 
 ## 7. Security & compliance
 - Start with [docs/SECURITY.md](SECURITY.md) for threat model context. Apply principle of least privilege by scoping `MCP_RESOURCES_ROOTS` and keeping tool environments minimal (`MCPBASH_TOOL_ENV_MODE`).
@@ -221,7 +221,7 @@ sequenceDiagram
 - **Full vs minimal mode** – Document which commands require full JSON tooling. For example, completing resource list pagination depends on `jq` or `gojq` for canonicalisation; clients should handle `minimal` capability flags gracefully.
 - **Backward compatibility** – Gate legacy JSON-RPC array batches via `MCPBASH_COMPAT_BATCHES`. Default remains strict single-object per line to keep stdout predictable.
 - **Transport considerations** – When tunnelling through gateways, preserve stdio framing (one JSON object per line) and forward `Mcp-Session-Id`. Reference [docs/REMOTE.md](REMOTE.md) for gateway-specific nuances.
-- **Example transcripts** – Capture happy-path sequences (initialize → tools/list → tool invocation) using `bin/mcp-bash --transcript transcripts/tool-basic.jsonl` (recording command to be added) and store sanitized transcripts under `examples/run/`.
+- **Example transcripts** – Capture happy-path sequences (initialize → tools/list → tool invocation) using your recording method of choice and store sanitized transcripts under `examples/run/`. (No built-in `--transcript` flag today.)
 
 ## 10. Contribution workflow
 
