@@ -4,6 +4,9 @@
 
 mcp-bash follows one rule: do the minimum necessary to translate MCP messages into predictable script executions. No daemons, no servers, no hidden state. The surface area stays small so every part can be inspected and understood.
 
+![MCP bash architecture diagram showing JSON-RPC between MCP client and core, core dispatch to user tools/resources/prompts, jq/gojq processing, and system command execution paths](../assets/architecture_diagram.png)
+_Figure: High-level dataflow—MCP client sends JSON-RPC over stdio to mcp-bash core, which queries jq/gojq, dispatches into project tools/resources/prompts, and executes system commands._
+
 ## Repository layout
 ```
 mcp-bash-framework/
