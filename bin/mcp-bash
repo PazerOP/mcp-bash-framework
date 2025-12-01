@@ -16,6 +16,8 @@ Usage:
   mcp-bash scaffold prompt <name>
   mcp-bash scaffold resource <name>
   mcp-bash registry refresh [--project-root DIR] [--no-notify] [--quiet] [--filter PATH]
+
+Note: running without MCPBASH_PROJECT_ROOT starts a temporary getting-started helper tool.
 EOF
 }
 
@@ -425,7 +427,7 @@ main() {
 	mcp_runtime_detect_json_tool
 	mcp_runtime_log_batch_mode
 
-	trap 'mcp_runtime_cleanup' EXIT INT TERM
+	trap 'mcp_runtime_cleanup' EXIT INT TERM HUP
 
 	if mcp_runtime_is_minimal_mode; then
 		# Warn about reduced capability surface.

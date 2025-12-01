@@ -88,6 +88,7 @@ test_stage_workspace() {
 	cp -a "${MCPBASH_HOME}/handlers" "${dest}/"
 	cp -a "${MCPBASH_HOME}/providers" "${dest}/"
 	cp -a "${MCPBASH_HOME}/sdk" "${dest}/"
+	cp -a "${MCPBASH_HOME}/bootstrap" "${dest}/" 2>/dev/null || true
 	cp -a "${MCPBASH_HOME}/scaffold" "${dest}/" 2>/dev/null || true
 	# Create project directories (may be populated by tests)
 	mkdir -p "${dest}/tools"

@@ -15,6 +15,9 @@
 : "${MCPBASH_JOB_CONTROL_ENABLED:=false}"
 : "${MCPBASH_PROCESS_GROUP_WARNED:=false}"
 : "${MCPBASH_LOG_JSON_TOOL:=log}"
+: "${MCPBASH_BOOTSTRAP_STAGED:=false}"
+: "${MCPBASH_BOOTSTRAP_TMP_DIR:=}"
+: "${MCPBASH_HOME:=}"
 
 # Provide a no-op verbose check when logging.sh is not loaded (unit tests source runtime directly).
 if ! command -v mcp_logging_verbose_enabled >/dev/null 2>&1; then
@@ -40,16 +43,64 @@ mcp_runtime_log_allowed() {
 	return 0
 }
 
+mcp_runtime_stage_bootstrap_project() {
+	if [ "${MCPBASH_BOOTSTRAP_STAGED}" = "true" ]; then
+		return 0
+	fi
+
+	local bootstrap_dir="${MCPBASH_HOME}/bootstrap"
+	if [ ! -d "${bootstrap_dir}" ]; then
+		printf 'mcp-bash: bootstrap project missing at %s\n' "${bootstrap_dir}" >&2
+		exit 1
+	fi
+
+	local tmp_base tmp_root
+	tmp_base="${TMPDIR:-/tmp}"
+	tmp_base="${tmp_base%/}"
+	tmp_root="$(mktemp -d "${tmp_base}/mcpbash.bootstrap.XXXXXX")"
+	if [ -z "${tmp_root}" ] || [ ! -d "${tmp_root}" ]; then
+		printf 'mcp-bash: unable to create temporary bootstrap workspace\n' >&2
+		exit 1
+	fi
+
+	# Copy helper content into a disposable workspace.
+	cp -a "${bootstrap_dir}/." "${tmp_root}/" 2>/dev/null || true
+	mkdir -p "${tmp_root}/tools" "${tmp_root}/resources" "${tmp_root}/prompts" "${tmp_root}/server.d"
+
+	MCPBASH_PROJECT_ROOT="${tmp_root}"
+	export MCPBASH_PROJECT_ROOT
+
+	# Override registry dir to avoid reusing caller-provided caches.
+	MCPBASH_REGISTRY_DIR="${tmp_root}/.registry"
+	export MCPBASH_REGISTRY_DIR
+	mkdir -p "${MCPBASH_REGISTRY_DIR}" >/dev/null 2>&1 || true
+
+	MCPBASH_BOOTSTRAP_TMP_DIR="${tmp_root}"
+	MCPBASH_BOOTSTRAP_STAGED="true"
+
+	if mcp_runtime_log_allowed; then
+		printf 'mcp-bash: no project configured; starting getting-started helper (temporary workspace %s)\n' "${tmp_root}" >&2
+	fi
+}
+
 # Validate that MCPBASH_PROJECT_ROOT is set and exists.
 # Called early in startup; exits with helpful error if not configured.
 mcp_runtime_require_project_root() {
+	local bootstrap_hint="${1:-false}"
+
 	if [ -z "${MCPBASH_PROJECT_ROOT:-}" ]; then
 		cat >&2 <<'EOF'
 mcp-bash: MCPBASH_PROJECT_ROOT is not set.
 
 mcp-bash requires a project directory separate from the framework.
 Set MCPBASH_PROJECT_ROOT to your project directory containing tools/, prompts/, resources/.
-
+EOF
+		if [ "${bootstrap_hint}" = "true" ]; then
+			cat >&2 <<'EOF'
+Tip: run mcp-bash without MCPBASH_PROJECT_ROOT to open a temporary getting-started helper with setup instructions.
+EOF
+		fi
+		cat >&2 <<'EOF'
 Example (Claude Desktop config):
 {
   "mcpServers": {
@@ -69,15 +120,29 @@ EOF
 
 	if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
 		printf 'mcp-bash: MCPBASH_PROJECT_ROOT directory does not exist: %s\n' "${MCPBASH_PROJECT_ROOT}" >&2
+		printf 'Set MCPBASH_PROJECT_ROOT to an existing project directory or create it first.\n' >&2
 		exit 1
 	fi
 }
 
 mcp_runtime_init_paths() {
 	local mode="${1:-server}"
+	local allow_bootstrap="${2:-}"
+
+	if [ -z "${allow_bootstrap}" ]; then
+		if [ "${mode}" = "server" ]; then
+			allow_bootstrap="true"
+		else
+			allow_bootstrap="false"
+		fi
+	fi
+
+	if [ "${allow_bootstrap}" = "true" ] && [ -z "${MCPBASH_PROJECT_ROOT:-}" ]; then
+		mcp_runtime_stage_bootstrap_project
+	fi
 
 	# Require MCPBASH_PROJECT_ROOT to be set
-	mcp_runtime_require_project_root
+	mcp_runtime_require_project_root "${allow_bootstrap}"
 
 	# Normalize PROJECT_ROOT (strip trailing slash for consistent path construction)
 	MCPBASH_PROJECT_ROOT="${MCPBASH_PROJECT_ROOT%/}"
@@ -192,6 +257,7 @@ mcp_runtime_cleanup() {
 		if [ -n "${MCPBASH_STATE_DIR}" ]; then
 			printf 'mcp-bash: state preserved at %s\n' "${MCPBASH_STATE_DIR}" >&2
 		fi
+		mcp_runtime_cleanup_bootstrap
 		return
 	fi
 
@@ -202,6 +268,8 @@ mcp_runtime_cleanup() {
 	if [ -n "${MCPBASH_LOCK_ROOT}" ] && [ -d "${MCPBASH_LOCK_ROOT}" ]; then
 		mcp_runtime_safe_rmrf "${MCPBASH_LOCK_ROOT}"
 	fi
+
+	mcp_runtime_cleanup_bootstrap
 }
 
 mcp_runtime_safe_rmrf() {
@@ -211,7 +279,7 @@ mcp_runtime_safe_rmrf() {
 		return 1
 	fi
 	case "${target}" in
-	"${MCPBASH_TMP_ROOT}"/mcpbash.state.* | "${MCPBASH_TMP_ROOT}"/mcpbash.locks*)
+	"${MCPBASH_TMP_ROOT}"/mcpbash.state.* | "${MCPBASH_TMP_ROOT}"/mcpbash.locks* | "${MCPBASH_TMP_ROOT}"/mcpbash.bootstrap.*)
 		rm -rf "${target}"
 		;;
 	*)
@@ -219,6 +287,19 @@ mcp_runtime_safe_rmrf() {
 		return 1
 		;;
 	esac
+}
+
+mcp_runtime_cleanup_bootstrap() {
+	if [ "${MCPBASH_BOOTSTRAP_STAGED:-false}" != "true" ]; then
+		return
+	fi
+	if [ -z "${MCPBASH_BOOTSTRAP_TMP_DIR:-}" ]; then
+		return
+	fi
+	if [ ! -d "${MCPBASH_BOOTSTRAP_TMP_DIR}" ]; then
+		return
+	fi
+	mcp_runtime_safe_rmrf "${MCPBASH_BOOTSTRAP_TMP_DIR}"
 }
 
 mcp_runtime_detect_json_tool() {

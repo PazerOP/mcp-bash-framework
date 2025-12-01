@@ -30,6 +30,8 @@ Most MCP servers assume you’re willing to spin up heavyweight runtimes and fra
 
 ## Quick Start
 
+If you launch `mcp-bash` without `MCPBASH_PROJECT_ROOT`, it will start a temporary getting-started helper tool that explains how to configure your project. Set `MCPBASH_PROJECT_ROOT` to build a real server.
+
 ### 1. Install the Framework
 
 ```bash
