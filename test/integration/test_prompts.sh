@@ -209,7 +209,7 @@ if [ "${IS_WINDOWS}" = "true" ]; then
 fi
 
 POLL_ROOT="${TEST_TMPDIR}/poll"
-stage_workspace "${POLL_ROOT}"
+test_stage_workspace "${POLL_ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${POLL_ROOT}/server.d/register.sh"
 mkdir -p "${POLL_ROOT}/prompts"

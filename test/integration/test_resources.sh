@@ -147,7 +147,7 @@ jq -s '
 
 # --- Resource templates contract ---
 TEMPLATE_ROOT="${TEST_TMPDIR}/templates"
-stage_workspace "${TEMPLATE_ROOT}"
+test_stage_workspace "${TEMPLATE_ROOT}"
 # Remove register.sh to mirror auto-discovery baseline
 rm -f "${TEMPLATE_ROOT}/server.d/register.sh"
 
@@ -173,7 +173,7 @@ jq -s '
 
 # --- Subscription updates ---
 SUB_ROOT="${TEST_TMPDIR}/subscribe"
-stage_workspace "${SUB_ROOT}"
+test_stage_workspace "${SUB_ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${SUB_ROOT}/server.d/register.sh"
 mkdir -p "${SUB_ROOT}/resources"
