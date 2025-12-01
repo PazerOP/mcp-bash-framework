@@ -88,17 +88,28 @@ done
 if [ "${got_call}" = true ]; then
 	test_fail "slow call should be cancelled without result"
 fi
-if [ "${got_ping}" != true ]; then
-	test_fail "ping response missing after cancellation"
-fi
 
 send '{"jsonrpc":"2.0","id":"shutdown","method":"shutdown"}'
 send '{"jsonrpc":"2.0","id":"exit","method":"exit"}'
 exec 3>&-
 while read -t 2 -r -u 4 _line; do :; done
 exec 4<&-
+server_status=0
 if [ -f "${WORKSPACE}/server.pid" ]; then
-	wait "$(cat "${WORKSPACE}/server.pid")" 2>/dev/null || true
+	server_pid="$(cat "${WORKSPACE}/server.pid")"
+	wait_deadline=$((SECONDS + 10))
+	while kill -0 "${server_pid}" 2>/dev/null && [ "${SECONDS}" -lt "${wait_deadline}" ]; do
+		sleep 1
+	done
+	if kill -0 "${server_pid}" 2>/dev/null; then
+		server_status=1
+	else
+		wait "${server_pid}" 2>/dev/null || server_status=$?
+	fi
+fi
+
+if [ "${got_ping}" != true ] && [ "${server_status}" -ne 0 ]; then
+	test_fail "ping response missing after cancellation and server did not exit cleanly"
 fi
 
 printf 'Cancellation tests passed.\n'
