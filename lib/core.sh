@@ -36,6 +36,7 @@ mcp_register_prompt() {
 }
 
 mcp_core_run() {
+	# Args: (none) - sets up handlers, state, main read loop, and waits for workers.
 	mcp_core_require_handlers
 	mcp_core_bootstrap_state
 	mcp_core_read_loop
@@ -385,6 +386,8 @@ mcp_core_handle_line() {
 	local normalized_line
 	local method
 
+	# Args:
+	#   raw_line - raw JSON-RPC line from stdin (may contain arrays or responses).
 	# Log incoming request for debugging
 	if mcp_io_debug_enabled; then
 		mcp_io_debug_log "request" "-" "recv" "${raw_line}"
@@ -446,6 +449,9 @@ mcp_core_dispatch_object() {
 	local async="false"
 	local id_json
 
+	# Args:
+	#   json_line - normalized JSON-RPC object (single request/notification).
+	#   method    - extracted method name used to resolve handler.
 	if [ "${method}" = "notifications/cancelled" ]; then
 		mcp_core_handle_cancel_notification "${json_line}"
 		return
@@ -637,6 +643,9 @@ mcp_core_timeout_for_method() {
 	local json_line="$2"
 	local timeout_value=""
 
+	# Args:
+	#   method     - JSON-RPC method name (tools/*, resources/*, etc.).
+	#   json_line  - full request payload for extracting per-call timeout.
 	case "${method}" in
 	tools/call)
 		# Tool-level timeouts are enforced inside mcp_tools_call; avoid double-wrapping

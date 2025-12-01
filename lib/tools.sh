@@ -597,6 +597,9 @@ mcp_tools_decode_cursor() {
 mcp_tools_list() {
 	local limit="$1"
 	local cursor="$2"
+	# Args:
+	#   limit  - optional max items per page (stringified number).
+	#   cursor - opaque pagination cursor from previous response.
 	# shellcheck disable=SC2034
 	_MCP_TOOLS_ERROR_CODE=0
 	# shellcheck disable=SC2034
@@ -666,6 +669,10 @@ mcp_tools_call() {
 	local name="$1"
 	local args_json="$2"
 	local timeout_override="$3"
+	# Args:
+	#   name             - tool name as registered.
+	#   args_json        - JSON string of parameters (object shape, possibly "{}").
+	#   timeout_override - optional numeric seconds to override metadata timeout.
 	# shellcheck disable=SC2034
 	_MCP_TOOLS_ERROR_CODE=0
 	# shellcheck disable=SC2034
