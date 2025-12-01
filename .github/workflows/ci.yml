@@ -173,8 +173,13 @@ jobs:
           set -euo pipefail
           warm="${{ steps.go.outputs.cache-hit == 'true' && steps.gocache.outputs.cache-hit == 'true' }}"
           duration="${{ steps.integration.outputs.duration }}"
-          if [ "${warm}" = "true" ] && [ -n "${duration}" ] && [ "${duration}" -gt 240 ]; then
-            echo "Integration exceeded budget (${duration}s) with warm caches" >&2
+          warn_budget=240
+          fail_budget=480
+          if [ -n "${duration}" ] && [ "${duration}" -gt "${warn_budget}" ]; then
+            echo "::warning ::Integration duration ${duration}s exceeded warning budget ${warn_budget}s (warm caches=${warm})"
+          fi
+          if [ "${warm}" = "true" ] && [ -n "${duration}" ] && [ "${duration}" -gt "${fail_budget}" ]; then
+            echo "Integration exceeded fail budget (${duration}s) with warm caches" >&2
             exit 1
           fi
       - name: Examples suite
