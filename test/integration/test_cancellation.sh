@@ -40,7 +40,7 @@ mkfifo "${PIPE_IN}" "${PIPE_OUT}"
 
 (
 	cd "${WORKSPACE}" || exit 1
-	MCPBASH_PROJECT_ROOT="${WORKSPACE}" ./bin/mcp-bash <"${PIPE_IN}" >"${PIPE_OUT}" &
+	MCPBASH_SKIP_PROCESS_GROUP_LOOKUP=1 MCPBASH_PROJECT_ROOT="${WORKSPACE}" ./bin/mcp-bash <"${PIPE_IN}" >"${PIPE_OUT}" &
 	echo $! >"${WORKSPACE}/server.pid"
 ) || exit 1
 
