@@ -339,6 +339,9 @@ mcp_core_rate_limit() {
 
 	[ -z "${key}" ] && return 0
 
+	# Simple sliding window: track timestamps per key/kind in a local file and drop
+	# events once the per-minute quota is exhausted. Uses coarse locking because
+	# rate limiting is best-effort and should not block the main loop for long.
 	case "${kind}" in
 	progress) limit="${MCPBASH_MAX_PROGRESS_PER_MIN:-100}" ;;
 	log) limit="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN:-100}}" ;;
@@ -577,6 +580,9 @@ mcp_core_spawn_worker() {
 
 	mcp_core_wait_for_available_slot
 
+	# Each async request runs in its own background worker with dedicated stderr
+	# capture, optional timeout wrapper, and isolated progress/log streams so
+	# cancellation or noisy tools cannot interfere with other requests.
 	key="$(mcp_core_get_id_key "${id_json}")"
 
 	if [ -n "${key}" ]; then
@@ -689,6 +695,9 @@ mcp_core_worker_entry() {
 
 	trap 'mcp_core_worker_cleanup "${key}" "${stderr_file}"' EXIT
 
+	# Worker functions emit their response via stdout into a temp file; this shim
+	# folds empty/no-response cases into JSON-RPC errors and handles stream flush
+	# so handlers stay minimal.
 	if ! mcp_core_invoke_handler "${handler}" "${method}" "${json_line}"; then
 		response="$(mcp_core_build_error_response "${id_json}" -32601 "Handler not implemented" "")"
 	else
@@ -1053,6 +1062,8 @@ mcp_core_flush_stream() {
 	if [ "${size}" -eq "${last_offset}" ]; then
 		return 0
 	fi
+	# Continue emitting from the last offset so progress/log lines survive worker
+	# restarts without replaying already-sent messages.
 	tail -c +$((last_offset + 1)) "${stream}" 2>/dev/null \
 		| while IFS= read -r line || [ -n "${line}" ]; do
 			[ -z "${line}" ] && continue
@@ -1096,6 +1107,8 @@ mcp_core_start_progress_flusher() {
 			if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
 				mcp_elicitation_process_requests || true
 			fi
+			# Polling tick drives live progress/log emission and pending
+			# elicitation prompts without blocking request handlers.
 			# Windows Git Bash may reject fractional sleep intervals; fall back to
 			# a 1s tick instead of exiting the flusher.
 			sleep "${MCPBASH_PROGRESS_FLUSH_INTERVAL:-0.5}" 2>/dev/null || sleep 1

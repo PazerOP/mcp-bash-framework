@@ -331,6 +331,9 @@ mcp_tools_refresh_registry() {
 	local scan_root
 	scan_root="$(mcp_tools_scan_root)"
 	mcp_tools_init
+	# Registry refresh order: prefer user-provided server.d/register.sh output,
+	# then reuse cached JSON if TTL has not expired, finally fall back to a full
+	# filesystem scan (with fastpath snapshot to avoid rescanning unchanged trees).
 	if mcp_registry_register_apply "tools"; then
 		return 0
 	else
@@ -767,6 +770,13 @@ mcp_tools_call() {
 		has_json_tool="true"
 	fi
 
+	# Tool invocation lifecycle:
+	# 1) Build an isolated env (respecting allowlist/minimal/inherit) and ship
+	#    args/metadata via env or temp files to avoid huge env blobs.
+	# 2) Run the tool with optional timeout and collect stdout/stderr into temp
+	#    files so we can post-process them safely.
+	# 3) Prefer structured errors emitted by the tool, enforce size limits, then
+	#    validate outputSchema and produce the structured MCP response object.
 	# Elicitation environment
 	local elicit_supported="0"
 	local elicit_request_file=""
