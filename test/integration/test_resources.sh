@@ -22,23 +22,6 @@ test_create_tmpdir
 
 echo "Resources integration temp root: ${TEST_TMPDIR}"
 
-stage_workspace() {
-	local dest="$1"
-	mkdir -p "${dest}"
-	# Copy framework files
-	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
-	cp -a "${MCPBASH_HOME}/lib" "${dest}/"
-	cp -a "${MCPBASH_HOME}/handlers" "${dest}/"
-	cp -a "${MCPBASH_HOME}/providers" "${dest}/"
-	cp -a "${MCPBASH_HOME}/sdk" "${dest}/"
-	cp -a "${MCPBASH_HOME}/scaffold" "${dest}/" 2>/dev/null || true
-	# Create project directories
-	mkdir -p "${dest}/tools"
-	mkdir -p "${dest}/resources"
-	mkdir -p "${dest}/prompts"
-	mkdir -p "${dest}/server.d"
-}
-
 run_server() {
 	local workdir="$1"
 	local request_file="$2"
@@ -51,7 +34,7 @@ run_server() {
 
 # --- Auto-discovery and pagination ---
 AUTO_ROOT="${TEST_TMPDIR}/auto"
-stage_workspace "${AUTO_ROOT}"
+test_stage_workspace "${AUTO_ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/resources"
@@ -103,7 +86,7 @@ jq -s '
 
 # --- Manual registration overrides ---
 MANUAL_ROOT="${TEST_TMPDIR}/manual"
-stage_workspace "${MANUAL_ROOT}"
+test_stage_workspace "${MANUAL_ROOT}"
 mkdir -p "${MANUAL_ROOT}/resources/manual"
 
 echo "  • Manual override workspace: ${MANUAL_ROOT}"
