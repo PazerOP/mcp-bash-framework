@@ -30,8 +30,11 @@ echo "done"
 SH
 chmod +x "${WORKSPACE}/tools/slow.sh"
 
-PIPE_IN="${WORKSPACE}/in"
-PIPE_OUT="${WORKSPACE}/out"
+# Use a temp dir for pipes; some runners dislike mkfifo directly under /tmp.
+FIFO_ROOT="${WORKSPACE}/pipes"
+mkdir -p "${FIFO_ROOT}"
+PIPE_IN="${FIFO_ROOT}/in"
+PIPE_OUT="${FIFO_ROOT}/out"
 rm -f "${PIPE_IN}" "${PIPE_OUT}"
 mkfifo "${PIPE_IN}" "${PIPE_OUT}"
 
