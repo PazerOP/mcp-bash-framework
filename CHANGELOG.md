@@ -5,6 +5,16 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-12-09
+
+### Changed
+- Hardened HTTPS provider: blocks private/loopback hosts, optional host allow/deny via `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS`, disables redirects/protocol downgrades, and caps timeouts/size (timeout ≤60s, max bytes ≤20MB).
+- Hardened git provider: disabled by default (`MCPBASH_ENABLE_GIT_PROVIDER=true` to enable), host allow/deny lists added, private/loopback blocked, shallow clones enforced, timeout bounded (default 30s, max 60s), and repository size capped via `MCPBASH_GIT_MAX_KB` (default 50MB, max 1GB).
+- Introduced shared host policy helper (`lib/policy.sh`) for consistent allow/deny handling across providers.
+- Tightened state/lock/registry permissions with `umask 077`; debug mode now uses a randomized 0700 directory.
+- File provider now rejects symlinks and rechecks before read to reduce TOCTOU/symlink escape risk.
+- Scaffold commands validate names to prevent path traversal.
+
 ## [0.2.0] - 2025-12-02
 
 ### Added
@@ -17,16 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified server metadata via `server.d/server.meta.json`: supports MCP spec fields `name`, `title`, `version`, `description`, `websiteUrl`, and `icons`. Smart defaults derive `name` from project directory, `title` from titlecase of name, and `version` from `VERSION` file or `package.json`.
 - Framework `VERSION` file as single source of truth for version; `mcp-bash --version` and bootstrap helper now read from it.
 - Default icon (`assets/icon.svg`) and full metadata for the bootstrap getting-started helper.
-
-## [0.2.1] - 2025-12-09
-
-### Changed
-- Hardened HTTPS provider: blocks private/loopback hosts, optional host allow/deny via `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS`, disables redirects/protocol downgrades, and caps timeouts/size (timeout ≤60s, max bytes ≤20MB).
-- Hardened git provider: disabled by default (`MCPBASH_ENABLE_GIT_PROVIDER=true` to enable), host allow/deny lists added, private/loopback blocked, shallow clones enforced, timeout bounded (default 30s, max 60s), and repository size capped via `MCPBASH_GIT_MAX_KB` (default 50MB, max 1GB).
-- Introduced shared host policy helper (`lib/policy.sh`) for consistent allow/deny handling across providers.
-- Tightened state/lock/registry permissions with `umask 077`; debug mode now uses a randomized 0700 directory.
-- File provider now rejects symlinks and rechecks before read to reduce TOCTOU/symlink escape risk.
-- Scaffold commands validate names to prevent path traversal.
 
 ## [0.1.0] - 2025-11-30
 
