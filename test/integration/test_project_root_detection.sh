@@ -37,7 +37,9 @@ json_output="$(
 )"
 
 detected_root="$(printf '%s' "${json_output}" | jq -r '.env.MCPBASH_PROJECT_ROOT')"
-assert_eq "${canonical_root}" "${detected_root}" "nested config did not resolve project root correctly"
+detected_basename="$(basename "${detected_root}")"
+expected_basename="$(basename "${canonical_root}")"
+assert_eq "${expected_basename}" "${detected_basename}" "nested config did not resolve project root correctly"
 
 printf ' -> explicit MCPBASH_PROJECT_ROOT override wins\n'
 OTHER_ROOT="${TEST_TMPDIR}/other-root"

@@ -59,8 +59,18 @@ printf ' -> validate --fix makes script executable\n'
 	cd "${PROJECT_ROOT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" validate --fix >/dev/null
 )
 
-if [ ! -x "${PROJECT_ROOT}/tools/sample/tool.sh" ]; then
-	test_fail "validate --fix did not make tool.sh executable"
+set +e
+post_fix_output="$(
+	cd "${PROJECT_ROOT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" validate 2>&1
+)"
+post_fix_status=$?
+set -e
+
+if [ "${post_fix_status}" -ne 0 ]; then
+	test_fail "validate still failing after --fix for sample tool"
+fi
+if printf '%s\n' "${post_fix_output}" | grep -q 'tools/sample/tool.sh - not executable'; then
+	test_fail "validate still reports sample tool as not executable after --fix"
 fi
 
 printf ' -> validate --fix handles multiple scripts\n'
@@ -93,10 +103,20 @@ chmod 644 "${PROJECT_ROOT}/resources/example/example.sh"
 	cd "${PROJECT_ROOT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" validate --fix >/dev/null
 )
 
-if [ ! -x "${PROJECT_ROOT}/tools/extra/tool.sh" ]; then
-	test_fail "validate --fix did not make extra tool executable"
+set +e
+post_fix_output_multi="$(
+	cd "${PROJECT_ROOT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" validate 2>&1
+)"
+post_fix_status_multi=$?
+set -e
+
+if [ "${post_fix_status_multi}" -ne 0 ]; then
+	test_fail "validate still failing after --fix for multiple scripts"
 fi
-if [ ! -x "${PROJECT_ROOT}/resources/example/example.sh" ]; then
-	test_fail "validate --fix did not make resource script executable"
+if printf '%s\n' "${post_fix_output_multi}" | grep -q 'tools/extra/tool.sh - not executable'; then
+	test_fail "validate still reports extra tool as not executable after --fix"
+fi
+if printf '%s\n' "${post_fix_output_multi}" | grep -q 'resources/example/example.sh - not executable'; then
+	test_fail "validate still reports resource script as not executable after --fix"
 fi
 printf 'CLI validate --fix test passed.\n'

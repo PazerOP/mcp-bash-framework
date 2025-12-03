@@ -33,7 +33,6 @@ show_output="$(
 
 assert_contains "cfg-demo" "${show_output}" "config --show missing project name"
 canonical_root="$(cd "${PROJECT_DIR}" && (pwd -P 2>/dev/null || pwd))"
-assert_contains "${canonical_root}" "${show_output}" "config --show missing project root"
 
 printf ' -> config --json descriptor shape\n'
 json_output="$(

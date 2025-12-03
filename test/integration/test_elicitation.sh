@@ -3,6 +3,15 @@
 TEST_DESC="Elicitation confirm flow for tools/call."
 set -euo pipefail
 
+# Named FIFOs and timing assumptions are flaky on Windows Git Bash;
+# skip this test there and rely on Unix CI for coverage.
+case "$(uname -s 2>/dev/null)" in
+MINGW* | MSYS* | CYGWIN*)
+	printf 'Skipping elicitation test on Windows environment\n'
+	exit 0
+	;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../common/env.sh
 # shellcheck disable=SC1091
