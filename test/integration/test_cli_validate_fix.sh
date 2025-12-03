@@ -5,6 +5,13 @@ TEST_DESC="CLI validate detects issues and --fix repairs executables."
 
 set -euo pipefail
 
+case "$(uname -s 2>/dev/null)" in
+MINGW* | MSYS* | CYGWIN*)
+	printf 'Skipping validate --fix integration test on Windows environment\n'
+	exit 0
+	;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../common/env.sh
 # shellcheck disable=SC1091

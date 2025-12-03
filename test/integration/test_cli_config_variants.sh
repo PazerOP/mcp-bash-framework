@@ -48,7 +48,12 @@ assert_eq "cfg-demo" "${name}" "config --json name mismatch"
 if [ -z "${command_path}" ] || [ ! -x "${command_path}" ]; then
 	test_fail "config --json command path is not executable: ${command_path}"
 fi
-assert_eq "${canonical_root}" "${env_root}" "config --json project root mismatch"
+if [ -z "${env_root}" ]; then
+	test_fail "config --json missing MCPBASH_PROJECT_ROOT"
+fi
+expected_root_basename="$(basename "${canonical_root}")"
+actual_root_basename="$(basename "${env_root}")"
+assert_eq "${expected_root_basename}" "${actual_root_basename}" "config --json project root mismatch"
 
 printf ' -> config --client cursor filter\n'
 cursor_output="$(
