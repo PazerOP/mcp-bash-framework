@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Defaults
 INSTALL_DIR="${HOME}/mcp-bash-framework"
-REPO_URL="https://github.com/yaniv-golan/mcp-bash-framework.git"
+REPO_URL="${MCPBASH_INSTALL_REPO_URL:-https://github.com/yaniv-golan/mcp-bash-framework.git}"
 BRANCH="main"
 
 # Colors (if terminal supports)
@@ -139,13 +139,32 @@ if [ -d "${INSTALL_DIR}" ]; then
 	rm -rf "${INSTALL_DIR}"
 fi
 
-# Clone repository
+# Clone or copy repository
 info "Downloading mcp-bash framework..."
-if git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" 2>/dev/null; then
-	success "Cloned from GitHub"
+if [ -n "${MCPBASH_INSTALL_LOCAL_SOURCE:-}" ]; then
+	LOCAL_SRC="${MCPBASH_INSTALL_LOCAL_SOURCE}"
+	if [ ! -d "${LOCAL_SRC}" ]; then
+		error "Local source directory not found: ${LOCAL_SRC}"
+		exit 1
+	fi
+	if [ ! -f "${LOCAL_SRC}/bin/mcp-bash" ]; then
+		error "Local source ${LOCAL_SRC} does not look like an mcp-bash checkout (missing bin/mcp-bash)"
+		exit 1
+	fi
+	mkdir -p "${INSTALL_DIR}"
+	if cp -a "${LOCAL_SRC}/." "${INSTALL_DIR}/"; then
+		success "Copied from local source"
+	else
+		error "Failed to copy from local source"
+		exit 1
+	fi
 else
-	error "Failed to clone repository"
-	exit 1
+	if git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" 2>/dev/null; then
+		success "Cloned from GitHub"
+	else
+		error "Failed to clone repository"
+		exit 1
+	fi
 fi
 
 # Detect shell and configure PATH
