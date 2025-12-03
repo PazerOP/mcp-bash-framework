@@ -199,6 +199,9 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 - Secrets management: rely on OS keychains or inject short-lived tokens at launch. Avoid long-lived tokens in `.env` files that might leak through scaffolds.
 - Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers.
 - For compliance regimes, map MCP logs and payload dumps to your retention policies; scrub `mcpbash.state.*` directories after incidents.
+- Treat local validation helpers as privileged operations:
+  - `mcp-bash validate --fix` is intended for trusted project trees; it will make scripts executable but deliberately skips auto-fixing symlinked scripts and warns instead so you can audit the targets.
+  - `mcp-bash doctor` surfaces framework location, version, PATH wiring, and basic project layout for quick diagnosis; it is designed for local operators and should not be exposed as a public-facing tool in multi-tenant environments.
 
 ## 8. Performance & limits
 - Consult [docs/LIMITS.md](LIMITS.md) before tuning concurrency, payload sizes, or progress frequency.

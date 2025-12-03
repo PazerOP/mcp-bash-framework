@@ -4,7 +4,7 @@
 
 mcp-bash keeps the framework and your project separate so upgrades stay painless and your code stays yours. The project tree is intentionally small: tools, resources, prompts, optional server hooks, nothing else.
 
-If you run `mcp-bash` without `MCPBASH_PROJECT_ROOT` set, it will launch a temporary getting-started helper project with a single tool that points you back to these docs. Set `MCPBASH_PROJECT_ROOT` to your own project to run a real server.
+When you run `mcp-bash` from inside a project directory (one that contains `server.d/server.meta.json`), the framework automatically detects the project root. If no project can be detected, running `mcp-bash` without `MCPBASH_PROJECT_ROOT` launches a temporary getting-started helper project with a single tool that points you back to these docs. For MCP clients, you should still set `MCPBASH_PROJECT_ROOT` explicitly so the server can find the right project regardless of working directory.
 
 ## Overview
 
@@ -28,7 +28,14 @@ MCPBASH_HOME (Read-Only)                   MCPBASH_PROJECT_ROOT (Your Code)
 
 ## Required configuration
 
-Set `MCPBASH_PROJECT_ROOT` to your project directory; the server refuses to start without it.
+For **MCP clients** (Claude Desktop, Cursor, Windsurf, etc.), set `MCPBASH_PROJECT_ROOT` to your project directory so the server can locate your tools/prompts/resources no matter where the client launches it from. The recommended way to obtain a correct configuration block is:
+
+```bash
+cd /path/to/my-mcp-server
+mcp-bash config --show
+```
+
+CLI commands (`mcp-bash init`, `mcp-bash scaffold`, `mcp-bash validate`, etc.) automatically detect the project root when you run them from inside a project directory and do not require `MCPBASH_PROJECT_ROOT` for local development.
 
 ### Example: Claude Desktop configuration
 

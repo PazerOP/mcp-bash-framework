@@ -717,7 +717,10 @@ EOF
 					printf '✓ %s - executable\n' "${rel_script}"
 				else
 					if [ "${fix}" = "true" ]; then
-						if chmod +x "${script_path}"; then
+						if [ -L "${script_path}" ]; then
+							printf '⚠ %s - not executable (symlink; skipped auto-fix, please inspect target)\n' "${rel_script}"
+							warnings=$((warnings + 1))
+						elif chmod +x "${script_path}"; then
 							printf '✓ %s - fixed: made executable\n' "${rel_script}"
 							fixes_applied=$((fixes_applied + 1))
 						else
@@ -798,7 +801,10 @@ EOF
 					printf '✓ prompts/%s/%s.sh - executable\n' "${prompt_name}" "${prompt_name}"
 				else
 					if [ "${fix}" = "true" ]; then
-						if chmod +x "${sh_path}"; then
+						if [ -L "${sh_path}" ]; then
+							printf '⚠ prompts/%s/%s.sh - not executable (symlink; skipped auto-fix, please inspect target)\n' "${prompt_name}" "${prompt_name}"
+							warnings=$((warnings + 1))
+						elif chmod +x "${sh_path}"; then
 							printf '✓ prompts/%s/%s.sh - fixed: made executable\n' "${prompt_name}" "${prompt_name}"
 							fixes_applied=$((fixes_applied + 1))
 						else
@@ -869,7 +875,10 @@ EOF
 					printf '✓ resources/%s/%s.sh - executable\n' "${res_name}" "${res_name}"
 				else
 					if [ "${fix}" = "true" ]; then
-						if chmod +x "${sh_path}"; then
+						if [ -L "${sh_path}" ]; then
+							printf '⚠ resources/%s/%s.sh - not executable (symlink; skipped auto-fix, please inspect target)\n' "${res_name}" "${res_name}"
+							warnings=$((warnings + 1))
+						elif chmod +x "${sh_path}"; then
 							printf '✓ resources/%s/%s.sh - fixed: made executable\n' "${res_name}" "${res_name}"
 							fixes_applied=$((fixes_applied + 1))
 						else
