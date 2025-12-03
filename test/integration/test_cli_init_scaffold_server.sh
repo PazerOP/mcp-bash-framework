@@ -97,6 +97,4 @@ if [ "${status}" -eq 0 ]; then
 	test_fail "scaffold server succeeded despite existing target directory"
 fi
 assert_contains "already exists" "${existing_output}" "scaffold server did not report existing target"
-
 printf 'CLI init/scaffold server test passed.\n'
-

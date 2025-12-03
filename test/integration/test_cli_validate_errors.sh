@@ -96,6 +96,4 @@ assert_contains "tools/invalid/tool.meta.json - invalid JSON" "${output}" "expec
 assert_contains "tools/no-name/tool.meta.json - missing required \"name\"" "${output}" "expected missing name error"
 assert_contains "tools/mismatch - directory name does not match tool.meta.json name \"other-name\"" "${output}" "expected name mismatch warning"
 assert_contains "tools/no-shebang/tool.sh - missing shebang" "${output}" "expected missing shebang warning"
-
 printf 'CLI validate errors test passed.\n'
-

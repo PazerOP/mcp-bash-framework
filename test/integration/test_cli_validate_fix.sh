@@ -99,6 +99,4 @@ fi
 if [ ! -x "${PROJECT_ROOT}/resources/example/example.sh" ]; then
 	test_fail "validate --fix did not make resource script executable"
 fi
-
 printf 'CLI validate --fix test passed.\n'
-
