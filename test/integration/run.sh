@@ -60,6 +60,7 @@ TESTS=(
 	"test_notification_dedup.sh"
 	"test_cancellation.sh"
 	"test_cli_guards.sh"
+	"test_cli_init_config_doctor.sh"
 	"test_elicitation.sh"
 )
 

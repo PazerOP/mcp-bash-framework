@@ -106,7 +106,7 @@ Paths in `path` are resolved relative to `MCPBASH_PROJECT_ROOT`. Registry refres
 
 ## Tool SDK discovery
 
-`lib/tools.sh` exports `MCP_SDK` to the framework's `sdk/` directory so tools can `source "${MCP_SDK}/tool-sdk.sh"`. Templates fall back to resolving `sdk/` relative to the script when executed directly. When copying tools into another tree, set `MCP_SDK` yourself (see [SDK Discovery](../README.md#sdk-discovery)) to keep helpers locatable.
+`lib/tools.sh` exports `MCP_SDK` to the framework's `sdk/` directory so tools can `source "${MCP_SDK}/tool-sdk.sh"`. When copying tools into another tree (or running them directly), set `MCP_SDK` yourself (see [SDK Discovery](../README.md#sdk-discovery)) to keep helpers locatable.
 
 ## Example project layouts
 
@@ -114,6 +114,8 @@ Paths in `path` are resolved relative to `MCPBASH_PROJECT_ROOT`. Registry refres
 
 ```
 my-server/
+├── server.d/
+│   └── server.meta.json
 ├── tools/
 │   └── hello/
 │       ├── tool.sh
@@ -124,9 +126,9 @@ my-server/
 Create this structure:
 
 ```bash
-mkdir -p my-server/tools
-export MCPBASH_PROJECT_ROOT=$(pwd)/my-server
-~/mcp-bash-framework/bin/mcp-bash scaffold tool hello
+mkdir my-server
+cd my-server
+mcp-bash init --name my-server
 ```
 
 ### Full-featured project
