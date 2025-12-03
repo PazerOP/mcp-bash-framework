@@ -52,7 +52,11 @@ mkfifo "${IN_FIFO}" "${OUT_FIFO}"
 
 (
 	cd "${WORKROOT}" || exit 1
-	MCPBASH_PROJECT_ROOT="${WORKROOT}" MCPBASH_ELICITATION_TIMEOUT=5 ./bin/mcp-bash <"${IN_FIFO}" >"${OUT_FIFO}"
+	# Use the SDK default elicitation timeout (30s). Some environments
+	# (notably Windows CI) can take longer to spin up background workers,
+	# so forcing a very short MCPBASH_ELICITATION_TIMEOUT risks the tool
+	# timing out before the server has a chance to emit elicitation/create.
+	MCPBASH_PROJECT_ROOT="${WORKROOT}" ./bin/mcp-bash <"${IN_FIFO}" >"${OUT_FIFO}"
 ) &
 SERVER_PID=$!
 
@@ -71,7 +75,7 @@ start_ts=$(date +%s)
 
 while :; do
 	now=$(date +%s)
-	if [ $((now - start_ts)) -gt 20 ]; then
+	if [ $((now - start_ts)) -gt 30 ]; then
 		test_fail "timed out waiting for elicitation flow"
 		break
 	fi
