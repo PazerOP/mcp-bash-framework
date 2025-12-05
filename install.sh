@@ -82,9 +82,16 @@ printf '\n%s\n' "${BLUE}mcp-bash Installer${NC}"
 printf '==================\n\n'
 
 # Canonicalize INSTALL_DIR to prevent path traversal bypasses (e.g., "$HOME/..")
-# Note: On systems without realpath -m or readlink -f, path protection is weaker
-# (relies on literal string comparison only).
-if command -v realpath >/dev/null 2>&1 && realpath -m / >/dev/null 2>&1; then
+# Note: On systems without resolvers, path protection is weaker (string compare only).
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_ROOT}/lib/path.sh" ]; then
+	# shellcheck source=lib/path.sh disable=SC1090,SC1091
+	. "${SCRIPT_ROOT}/lib/path.sh"
+fi
+
+if command -v mcp_path_normalize >/dev/null 2>&1; then
+	INSTALL_DIR="$(mcp_path_normalize --physical "${INSTALL_DIR}")"
+elif command -v realpath >/dev/null 2>&1 && realpath -m / >/dev/null 2>&1; then
 	# realpath -m works even if path doesn't exist yet
 	INSTALL_DIR="$(realpath -m "${INSTALL_DIR}" 2>/dev/null || printf '%s' "${INSTALL_DIR}")"
 elif command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
