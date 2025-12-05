@@ -105,6 +105,13 @@ _Asciinema tip_: Record a short run of `bin/mcp-bash scaffold tool sample.hello`
 - **Progress & cancellation** – Emit throttled `mcp_progress` calls (10–20 updates/request) and exit early when `mcp_is_cancelled` flips true as shown in `examples/03-progress-and-cancellation/tools/slow/tool.sh:5`. Enable streaming progress mid-flight with `MCPBASH_ENABLE_LIVE_PROGRESS=true` and tune cadence via `MCPBASH_PROGRESS_FLUSH_INTERVAL`.
 - **Logging** – Prefer `mcp_log_info`/`mcp_log_warn` so entries pass through the logging handler filters; avoid `echo` unless writing to stderr for fatal errors.
 - **Timeouts** – Set per-tool `timeoutSecs` inside `<tool>.meta.json` when default (30 seconds) is too high/low. Align metadata with `lib/timeout.sh` expectations.
+- **Shared code** – Place reusable scripts under `lib/` in your project and source them via `MCPBASH_PROJECT_ROOT`, for example:
+  ```bash
+  # tools/my-tool/tool.sh
+  # shellcheck source=../../lib/helpers.sh disable=SC1091
+  source "${MCPBASH_PROJECT_ROOT}/lib/helpers.sh"
+  ```
+  Keep shared code under project roots to avoid leaking out-of-scope paths; consider a `lib/` README to describe available helpers.
 
 ### 4.3 Error handling patterns
 - Use `mcp_fail` (or `mcp_fail_invalid_args`) to return structured JSON-RPC errors with proper `code/message/data` directly from tools; it survives `tool_env_mode=minimal/allowlist` via the injected `MCP_TOOL_ERROR_FILE`.
