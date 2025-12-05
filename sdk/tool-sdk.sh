@@ -282,17 +282,62 @@ mcp_roots_count() {
 	printf '%s' "${MCP_ROOTS_COUNT:-0}"
 }
 
+__mcp_sdk_manual_normalize() {
+	local raw="$1"
+	local abs_path
+	if [[ "${raw}" != /* ]]; then
+		local base="${PWD:-.}"
+		abs_path="${base%/}/${raw}"
+	else
+		abs_path="${raw}"
+	fi
+
+	local IFS='/'
+	read -r -a parts <<<"${abs_path}"
+	local -a stack=()
+	local comp
+	for comp in "${parts[@]}"; do
+		case "${comp}" in
+		"" | ".") continue ;;
+		"..")
+			if [ "${#stack[@]}" -gt 0 ]; then
+				unset 'stack[${#stack[@]}-1]'
+			fi
+			;;
+		*)
+			stack+=("${comp}")
+			;;
+		esac
+	done
+
+	local joined="/"
+	for comp in "${stack[@]}"; do
+		joined="${joined%/}/${comp}"
+	done
+	printf '%s' "${joined}"
+}
+
 mcp_roots_contains() {
 	local path="$1"
 	local canonical
+	local normalize_root="true"
 
 	if command -v realpath >/dev/null 2>&1; then
-		canonical="$(realpath -m "${path}" 2>/dev/null)" || canonical="$(realpath "${path}" 2>/dev/null)" || canonical="${path}"
+		canonical="$(realpath -m "${path}" 2>/dev/null)" || canonical="$(realpath "${path}" 2>/dev/null)" || canonical=""
 	else
 		if [[ "${path}" != /* ]]; then
 			canonical="$(cd "$(dirname "${path}")" 2>/dev/null && pwd)/$(basename "${path}")"
 		else
 			canonical="${path}"
+		fi
+	fi
+
+	if [ -z "${canonical}" ]; then
+		canonical="$(__mcp_sdk_manual_normalize "${path}")"
+		if command -v realpath >/dev/null 2>&1; then
+			local canonical_real
+			canonical_real="$(realpath "${canonical}" 2>/dev/null || true)"
+			[ -n "${canonical_real}" ] && canonical="${canonical_real}"
 		fi
 	fi
 
@@ -303,12 +348,130 @@ mcp_roots_contains() {
 	local root
 	while IFS= read -r root; do
 		[ -n "${root}" ] || continue
-		if [[ "${canonical}" == "${root}" ]] || [[ "${canonical}" == "${root}/"* ]]; then
+		local root_canonical="${root}"
+		if [ "${normalize_root}" = "true" ] && command -v realpath >/dev/null 2>&1; then
+			root_canonical="$(realpath -m "${root}" 2>/dev/null || realpath "${root}" 2>/dev/null || printf '%s' "${root}")"
+		fi
+		if [[ "${root_canonical}" != "/" ]]; then
+			root_canonical="${root_canonical%/}"
+		fi
+		if [[ "${canonical}" == "${root_canonical}" ]] || [[ "${canonical}" == "${root_canonical}/"* ]]; then
 			return 0
 		fi
 	done <<<"${MCP_ROOTS_PATHS:-}"
 
 	return 1
+}
+
+__mcp_sdk_normalize_path() {
+	local path="$1"
+	__MCP_SDK_NORMALIZE_UNCERTAIN="true"
+	local normalized=""
+	local realpath_supports_m="false"
+	if command -v realpath >/dev/null 2>&1; then
+		if realpath -m "/" >/dev/null 2>&1; then
+			realpath_supports_m="true"
+		fi
+	fi
+
+	if command -v realpath >/dev/null 2>&1; then
+		if [ "${realpath_supports_m}" = "true" ]; then
+			normalized="$(realpath -m "${path}" 2>/dev/null || realpath "${path}" 2>/dev/null || true)"
+		else
+			normalized="$(realpath "${path}" 2>/dev/null || true)"
+		fi
+		if [ -n "${normalized}" ]; then
+			__MCP_SDK_NORMALIZE_UNCERTAIN="false"
+		fi
+	fi
+
+	if [ -z "${normalized}" ]; then
+		normalized="$(__mcp_sdk_manual_normalize "${path}")"
+	fi
+
+	if [ -n "${normalized}" ] && command -v realpath >/dev/null 2>&1; then
+		local normalized_real
+		normalized_real="$(realpath "${normalized}" 2>/dev/null || true)"
+		if [ -n "${normalized_real}" ]; then
+			normalized="${normalized_real}"
+			__MCP_SDK_NORMALIZE_UNCERTAIN="false"
+		fi
+	fi
+
+	if [ -z "${normalized}" ]; then
+		normalized="${path}"
+	fi
+
+	if [[ "${normalized}" != "/" ]]; then
+		normalized="${normalized%/}"
+	fi
+
+	printf '%s' "${normalized}"
+}
+
+mcp_require_path() {
+	local pointer="${1-}"
+	shift || true
+
+	local default_single_root="false"
+	local allow_empty="false"
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--default-to-single-root) default_single_root="true" ;;
+		--allow-empty) allow_empty="true" ;;
+		--)
+			shift
+			break
+			;;
+		*) break ;;
+		esac
+		shift
+	done
+
+	if [ -z "${pointer}" ]; then
+		mcp_fail_invalid_args "mcp_require_path: argument pointer is required"
+	fi
+
+	local raw_value
+	raw_value="$(mcp_args_get "${pointer}" 2>/dev/null || true)"
+	if [ "${raw_value}" = "null" ]; then
+		raw_value=""
+	fi
+
+	if [ -z "${raw_value}" ] && [ "${default_single_root}" = "true" ]; then
+		local roots_count
+		roots_count="$(mcp_roots_count 2>/dev/null || printf '0')"
+		if [ "${roots_count}" -eq 1 ]; then
+			raw_value="$(mcp_roots_list | head -n1)"
+		else
+			mcp_fail_invalid_args "${pointer} is required when zero or multiple roots are configured"
+		fi
+	fi
+
+	if [ -z "${raw_value}" ]; then
+		if [ "${allow_empty}" = "true" ]; then
+			printf ''
+			return 0
+		fi
+		mcp_fail_invalid_args "${pointer} is required"
+	fi
+
+	local normalized
+	normalized="$(__mcp_sdk_normalize_path "${raw_value}")"
+	local normalized_hint=""
+	if [ "${__MCP_SDK_NORMALIZE_UNCERTAIN:-false}" = "true" ]; then
+		normalized_hint=" (path could not be fully normalized)"
+	fi
+
+	local roots_count
+	roots_count="$(mcp_roots_count 2>/dev/null || printf '0')"
+	if [ "${roots_count}" -gt 0 ]; then
+		if ! mcp_roots_contains "${normalized}"; then
+			mcp_fail_invalid_args "${pointer} is outside configured MCP roots${normalized_hint}"
+		fi
+	fi
+
+	printf '%s' "${normalized}"
 }
 
 # Elicitation helpers ---------------------------------------------------------
