@@ -31,6 +31,18 @@ normalized="$(mcp_path_normalize "../dir")"
 expected_norm="$(cd . && pwd -P)"
 assert_eq "${expected_norm}" "${normalized}" "expected normalize to resolve relative path"
 
+printf ' -> squashes multiple slashes\n'
+raw_path="${TEST_TMPDIR}//base///dir//"
+normalized_slash="$(mcp_path_normalize "${raw_path}")"
+expected_slash="$(cd "${TEST_TMPDIR}/base/dir" && pwd -P)"
+assert_eq "${expected_slash}" "${normalized_slash}" "expected multiple slashes to collapse"
+
+printf ' -> collapses parent traversal components\n'
+parent_path="${TEST_TMPDIR}/base/dir/../other"
+normalized_parent="$(mcp_path_collapse "${parent_path}")"
+expected_parent="${TEST_TMPDIR}/base/other"
+assert_eq "${expected_parent}" "${normalized_parent}" "expected parent traversal to remove previous segment"
+
 printf ' -> empty normalize resolves to PWD when resolver exists\n'
 empty_norm="$(mcp_path_normalize '')"
 assert_eq "$(pwd -P)" "${empty_norm}" "empty path should normalize to PWD"

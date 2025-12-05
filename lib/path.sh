@@ -13,10 +13,7 @@ mcp_path_collapse() {
 	local raw="${1-}"
 	[ -z "${raw}" ] && raw="."
 
-	local is_abs=0
-	if [[ "${raw}" == /* ]]; then
-		is_abs=1
-	else
+	if [[ "${raw}" != /* ]]; then
 		local base="${PWD:-.}"
 		raw="${base%/}/${raw}"
 	fi
@@ -24,15 +21,16 @@ mcp_path_collapse() {
 	# squash multiple slashes
 	raw="$(printf '%s' "${raw}" | tr -s '/')"
 
+	# read -a requires bash (not zsh); arrays are Bash 3.2-compatible.
 	IFS='/' read -r -a parts <<<"${raw}"
-	local -a stack=()
+	local -a stack=() # Bash 3.2 arrays are ok; prefer array for clarity
 	local comp
 	for comp in "${parts[@]}"; do
 		case "${comp}" in
 		"" | ".") continue ;;
 		"..")
 			if [ "${#stack[@]}" -gt 0 ]; then
-				unset 'stack[${#stack[@]}-1]'
+				unset "stack[${#stack[@]}-1]"
 			fi
 			;;
 		*)
@@ -41,17 +39,12 @@ mcp_path_collapse() {
 		esac
 	done
 
-	local joined=""
-	if [ "${is_abs}" -eq 1 ]; then
-		joined="/"
-	fi
+	local joined="/"
 	if [ "${#stack[@]}" -gt 0 ]; then
 		local idx
 		for idx in "${!stack[@]}"; do
 			joined="${joined%/}/${stack[$idx]}"
 		done
-	elif [ "${is_abs}" -ne 1 ]; then
-		joined="."
 	fi
 
 	[ -z "${joined}" ] && joined="/"
