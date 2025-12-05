@@ -47,6 +47,18 @@ mcp_tools_manual_abort() {
 	MCP_TOOLS_MANUAL_BUFFER=""
 }
 
+mcp_tools_schema_normalizer() {
+	cat <<'EOF'
+def ensure_schema:
+	if (type == "object") then
+		(if ((.type // "") | length) > 0 then . else . + {type: "object"} end)
+		| (if (.properties | type) == "object" then . else . + {properties: {}} end)
+	else
+		{type: "object", properties: {}}
+	end;
+EOF
+}
+
 mcp_tools_register_manual() {
 	local payload="$1"
 	if [ "${MCP_TOOLS_MANUAL_ACTIVE}" != "true" ]; then
@@ -97,13 +109,7 @@ mcp_tools_manual_finalize() {
 	fi
 
 	registry_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '
-		def ensure_schema:
-			if (type == "object") then
-				(if ((.type // "") | length) > 0 then . else . + {type: "object"} end)
-				| (if (.properties | type) == "object" then . else . + {properties: {}} end)
-			else
-				{type: "object", properties: {}}
-			end;
+		'"$(mcp_tools_schema_normalizer)"'
 		.items |= map(.inputSchema = (.inputSchema | ensure_schema))
 	')"
 
@@ -141,13 +147,7 @@ mcp_tools_normalize_schema() {
 	local raw="$1"
 	local normalized
 	if ! normalized="$({ printf '%s' "${raw}"; } | "${MCPBASH_JSON_TOOL_BIN}" -c '
-		def ensure_schema:
-			if (type == "object") then
-				(if ((.type // "") | length) > 0 then . else . + {type: "object"} end)
-				| (if (.properties | type) == "object" then . else . + {properties: {}} end)
-			else
-				{type: "object", properties: {}}
-			end;
+		'"$(mcp_tools_schema_normalizer)"'
 		ensure_schema
 	' 2>/dev/null)"; then
 		normalized='{"type":"object","properties":{}}'
@@ -170,6 +170,113 @@ mcp_tools_enforce_registry_limits() {
 	fi
 	if [ "${total}" -gt 500 ]; then
 		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Tools registry contains ${total} entries; consider manual registration"
+	fi
+	return 0
+}
+
+mcp_tools_apply_manual_registration() {
+	if mcp_registry_register_apply "tools"; then
+		return 0
+	fi
+	local manual_status=$?
+	if [ "${manual_status}" -eq 2 ]; then
+		local err
+		err="$(mcp_registry_register_error_for_kind "tools")"
+		if [ -z "${err}" ]; then
+			err="Manual registration script returned empty output or non-zero"
+		fi
+		mcp_logging_error "${MCP_TOOLS_LOGGER}" "${err}"
+		return 1
+	fi
+	return 2
+}
+
+mcp_tools_load_cache_if_empty() {
+	if [ -n "${MCP_TOOLS_REGISTRY_JSON}" ] || [ ! -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
+		return 0
+	fi
+
+	local tmp_json=""
+	if tmp_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}")"; then
+		if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
+			MCP_TOOLS_REGISTRY_JSON="${tmp_json}"
+			MCP_TOOLS_REGISTRY_HASH="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+			MCP_TOOLS_TOTAL="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
+			if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${MCP_TOOLS_REGISTRY_JSON}"; then
+				return 1
+			fi
+		else
+			MCP_TOOLS_REGISTRY_JSON=""
+		fi
+	else
+		MCP_TOOLS_REGISTRY_JSON=""
+	fi
+	return 0
+}
+
+mcp_tools_cache_fresh() {
+	local now="$1"
+
+	if [ -n "${MCP_TOOLS_REGISTRY_JSON}" ] && [ $((now - MCP_TOOLS_LAST_SCAN)) -lt "${MCP_TOOLS_TTL}" ]; then
+		return 0
+	fi
+	return 1
+}
+
+mcp_tools_fastpath_hit() {
+	local scan_root="$1"
+	local now="$2"
+
+	local fastpath_snapshot
+	fastpath_snapshot="$(mcp_registry_fastpath_snapshot "${scan_root}")"
+	if mcp_registry_fastpath_unchanged "tools" "${fastpath_snapshot}"; then
+		MCP_TOOLS_LAST_SCAN="${now}"
+		if [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
+			local cached_hash
+			cached_hash="$("${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
+			if [ -n "${cached_hash}" ] && [ "${cached_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
+				local cached_json cached_total
+				cached_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
+				cached_total="$("${MCPBASH_JSON_TOOL_BIN}" '.total // 0' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || printf '0')"
+				MCP_TOOLS_REGISTRY_JSON="${cached_json}"
+				MCP_TOOLS_REGISTRY_HASH="${cached_hash}"
+				MCP_TOOLS_TOTAL="${cached_total}"
+				MCP_TOOLS_CHANGED=true
+			fi
+		fi
+		return 0
+	fi
+	return 1
+}
+
+mcp_tools_perform_full_scan() {
+	local scan_root="$1"
+	local now="$2"
+
+	local previous_hash="${MCP_TOOLS_REGISTRY_HASH}"
+	if [ -z "${previous_hash}" ] && [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
+		previous_hash="$("${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
+	fi
+
+	mcp_tools_scan "${scan_root}" || return 1
+	MCP_TOOLS_LAST_SCAN="${now}"
+
+	local fastpath_snapshot
+	fastpath_snapshot="$(mcp_registry_fastpath_snapshot "${scan_root}")"
+	mcp_registry_fastpath_store "tools" "${fastpath_snapshot}" || true
+	if [ -n "${MCP_TOOLS_REGISTRY_HASH}" ] && [ -n "${fastpath_snapshot}" ]; then
+		local combined_hash
+		combined_hash="$(mcp_hash_string "${MCP_TOOLS_REGISTRY_HASH}|${fastpath_snapshot}")"
+		MCP_TOOLS_REGISTRY_HASH="${combined_hash}"
+		MCP_TOOLS_REGISTRY_JSON="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${combined_hash}" '.hash = $hash')"
+		local write_rc=0
+		mcp_registry_write_with_lock "${MCP_TOOLS_REGISTRY_PATH}" "${MCP_TOOLS_REGISTRY_JSON}" || write_rc=$?
+		if [ "${write_rc}" -ne 0 ]; then
+			return "${write_rc}"
+		fi
+	fi
+	if [ "${previous_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
+		MCP_TOOLS_CHANGED=true
 	fi
 	return 0
 }
@@ -335,90 +442,35 @@ mcp_tools_refresh_registry() {
 	# Registry refresh order: prefer user-provided server.d/register.sh output,
 	# then reuse cached JSON if TTL has not expired, finally fall back to a full
 	# filesystem scan (with fastpath snapshot to avoid rescanning unchanged trees).
-	if mcp_registry_register_apply "tools"; then
+	local manual_status
+	manual_status=2
+	if mcp_tools_apply_manual_registration; then
 		return 0
-	else
-		local manual_status=$?
-		if [ "${manual_status}" -eq 2 ]; then
-			local err
-			err="$(mcp_registry_register_error_for_kind "tools")"
-			if [ -z "${err}" ]; then
-				err="Manual registration script returned empty output or non-zero"
-			fi
-			mcp_logging_error "${MCP_TOOLS_LOGGER}" "${err}"
-			return 1
-		fi
 	fi
+	manual_status=$?
+	if [ "${manual_status}" -eq 1 ]; then
+		return 1
+	fi
+
 	local now
 	now="$(date +%s)"
 
-	if [ -z "${MCP_TOOLS_REGISTRY_JSON}" ] && [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
-		local tmp_json=""
-		if tmp_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}")"; then
-			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
-				MCP_TOOLS_REGISTRY_JSON="${tmp_json}"
-				MCP_TOOLS_REGISTRY_HASH="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
-				MCP_TOOLS_TOTAL="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
-				if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${MCP_TOOLS_REGISTRY_JSON}"; then
-					return 1
-				fi
-			else
-				MCP_TOOLS_REGISTRY_JSON=""
-			fi
-		else
-			MCP_TOOLS_REGISTRY_JSON=""
-		fi
+	if ! mcp_tools_load_cache_if_empty; then
+		return 1
 	fi
-	if [ -n "${MCP_TOOLS_REGISTRY_JSON}" ] && [ $((now - MCP_TOOLS_LAST_SCAN)) -lt "${MCP_TOOLS_TTL}" ]; then
+
+	if mcp_tools_cache_fresh "${now}"; then
 		return 0
 	fi
 
-	local fastpath_snapshot
-	fastpath_snapshot="$(mcp_registry_fastpath_snapshot "${scan_root}")"
-	if mcp_registry_fastpath_unchanged "tools" "${fastpath_snapshot}"; then
-		MCP_TOOLS_LAST_SCAN="${now}"
-		# Sync in-memory state from cache if another process refreshed the registry
-		if [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
-			local cached_hash
-			cached_hash="$("${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
-			if [ -n "${cached_hash}" ] && [ "${cached_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
-				local cached_json cached_total
-				cached_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
-				cached_total="$("${MCPBASH_JSON_TOOL_BIN}" '.total // 0' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || printf '0')"
-				MCP_TOOLS_REGISTRY_JSON="${cached_json}"
-				MCP_TOOLS_REGISTRY_HASH="${cached_hash}"
-				MCP_TOOLS_TOTAL="${cached_total}"
-				MCP_TOOLS_CHANGED=true
-			fi
-		fi
+	if mcp_tools_fastpath_hit "${scan_root}" "${now}"; then
 		return 0
 	fi
 
-	# Capture previous hash from cache file if in-memory state is empty (parent may not have run scan yet)
-	local previous_hash="${MCP_TOOLS_REGISTRY_HASH}"
-	if [ -z "${previous_hash}" ] && [ -f "${MCP_TOOLS_REGISTRY_PATH}" ]; then
-		previous_hash="$("${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' "${MCP_TOOLS_REGISTRY_PATH}" 2>/dev/null || true)"
+	if ! mcp_tools_perform_full_scan "${scan_root}" "${now}"; then
+		return 1
 	fi
-	mcp_tools_scan "${scan_root}" || return 1
-	MCP_TOOLS_LAST_SCAN="${now}"
-	# Recompute fastpath snapshot post-scan to track content changes (mtime/cksum)
-	fastpath_snapshot="$(mcp_registry_fastpath_snapshot "${scan_root}")"
-	mcp_registry_fastpath_store "tools" "${fastpath_snapshot}" || true
-	# Incorporate fastpath snapshot into registry hash so content-only changes trigger notifications
-	if [ -n "${MCP_TOOLS_REGISTRY_HASH}" ] && [ -n "${fastpath_snapshot}" ]; then
-		local combined_hash
-		combined_hash="$(mcp_hash_string "${MCP_TOOLS_REGISTRY_HASH}|${fastpath_snapshot}")"
-		MCP_TOOLS_REGISTRY_HASH="${combined_hash}"
-		MCP_TOOLS_REGISTRY_JSON="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${combined_hash}" '.hash = $hash')"
-		local write_rc=0
-		mcp_registry_write_with_lock "${MCP_TOOLS_REGISTRY_PATH}" "${MCP_TOOLS_REGISTRY_JSON}" || write_rc=$?
-		if [ "${write_rc}" -ne 0 ]; then
-			return "${write_rc}"
-		fi
-	fi
-	if [ "${previous_hash}" != "${MCP_TOOLS_REGISTRY_HASH}" ]; then
-		MCP_TOOLS_CHANGED=true
-	fi
+	return 0
 }
 
 mcp_tools_scan() {
