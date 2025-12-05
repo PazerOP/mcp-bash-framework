@@ -796,6 +796,7 @@ mcp_tools_call() {
 	if [ "${MCPBASH_MODE}" != "minimal" ] && [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
 		has_json_tool="true"
 	fi
+	local stream_stderr="${MCPBASH_TOOL_STREAM_STDERR:-false}"
 
 	# Tool invocation lifecycle:
 	# 1) Build an isolated env (respecting allowlist/minimal/inherit) and ship
@@ -943,18 +944,34 @@ mcp_tools_call() {
 
 		if [ -n "${effective_timeout}" ]; then
 			if [ "${tool_env_mode}" != "inherit" ]; then
-				with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}"
+				if [ "${stream_stderr}" = "true" ]; then
+					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
+				else
+					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+				fi
 			else
-				with_timeout "${effective_timeout}" -- "${tool_runner[@]}"
+				if [ "${stream_stderr}" = "true" ]; then
+					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
+				else
+					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>"${stderr_file}"
+				fi
 			fi
 		else
 			if [ "${tool_env_mode}" != "inherit" ]; then
-				"${env_exec[@]}" "${tool_runner[@]}"
+				if [ "${stream_stderr}" = "true" ]; then
+					"${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
+				else
+					"${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+				fi
 			else
-				"${tool_runner[@]}"
+				if [ "${stream_stderr}" = "true" ]; then
+					"${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
+				else
+					"${tool_runner[@]}" 2>"${stderr_file}"
+				fi
 			fi
 		fi
-	) >"${stdout_file}" 2>"${stderr_file}" || exit_code=$?
+	) >"${stdout_file}" || exit_code=$?
 	exit_code=${exit_code:-0}
 
 	if mcp_logging_is_enabled "debug"; then
