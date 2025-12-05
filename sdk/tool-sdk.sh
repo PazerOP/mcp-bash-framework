@@ -145,6 +145,136 @@ mcp_args_get() {
 	fi
 }
 
+mcp_args_require() {
+	local pointer="$1"
+	local message="${2:-}"
+	local raw
+	raw="$(mcp_args_get "${pointer}" 2>/dev/null || true)"
+	if [ -z "${raw}" ] || [ "${raw}" = "null" ]; then
+		if [ -z "${message}" ]; then
+			message="${pointer} is required"
+		fi
+		mcp_fail_invalid_args "${message}"
+	fi
+	printf '%s' "${raw}"
+}
+
+mcp_args_bool() {
+	local pointer="$1"
+	shift || true
+	local default_set="false"
+	local default_value="false"
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--default)
+			default_set="true"
+			default_value="$2"
+			shift
+			;;
+		*) break ;;
+		esac
+		shift
+	done
+
+	local raw
+	raw="$(mcp_args_get "${pointer}" 2>/dev/null || true)"
+	if [ -z "${raw}" ] || [ "${raw}" = "null" ]; then
+		if [ "${default_set}" = "true" ]; then
+			case "${default_value}" in
+			true | 1)
+				printf 'true'
+				return 0
+				;;
+			*)
+				printf 'false'
+				return 0
+				;;
+			esac
+		fi
+		if [ "${MCPBASH_MODE:-full}" = "minimal" ]; then
+			mcp_fail_invalid_args "${pointer} requires JSON tooling or a default"
+		else
+			mcp_fail_invalid_args "${pointer} is required"
+		fi
+	fi
+
+	case "${raw}" in
+	true | 1) printf 'true' ;;
+	*) printf 'false' ;;
+	esac
+}
+
+mcp_args_int() {
+	local pointer="$1"
+	shift || true
+	# Integer comparisons rely on bash arithmetic (64-bit signed); extremely large values are not supported.
+	local default_set="false"
+	local default_value=""
+	local min_set="false"
+	local max_set="false"
+	local min_value=""
+	local max_value=""
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--default)
+			default_set="true"
+			default_value="$2"
+			shift
+			;;
+		--min)
+			min_set="true"
+			min_value="$2"
+			shift
+			;;
+		--max)
+			max_set="true"
+			max_value="$2"
+			shift
+			;;
+		*) break ;;
+		esac
+		shift
+	done
+
+	if [ "${min_set}" = "true" ] && [ "${max_set}" = "true" ]; then
+		if ! [ "${min_value}" -le "${max_value}" ] 2>/dev/null; then
+			mcp_fail_invalid_args "mcp_args_int: --min cannot exceed --max"
+		fi
+	fi
+
+	local raw
+	raw="$(mcp_args_get "${pointer}" 2>/dev/null || true)"
+	if [ -z "${raw}" ] || [ "${raw}" = "null" ]; then
+		if [ "${default_set}" = "true" ]; then
+			raw="${default_value}"
+		else
+			if [ "${MCPBASH_MODE:-full}" = "minimal" ]; then
+				mcp_fail_invalid_args "${pointer} requires JSON tooling or a default"
+			else
+				mcp_fail_invalid_args "${pointer} is required"
+			fi
+		fi
+	fi
+
+	if ! printf '%s' "${raw}" | LC_ALL=C grep -Eq '^-?[0-9]+$'; then
+		mcp_fail_invalid_args "${pointer} must be an integer"
+	fi
+
+	if [ "${min_set}" = "true" ]; then
+		if ! [ "${raw}" -ge "${min_value}" ] 2>/dev/null; then
+			mcp_fail_invalid_args "${pointer} must be >= ${min_value}"
+		fi
+	fi
+	if [ "${max_set}" = "true" ]; then
+		if ! [ "${raw}" -le "${max_value}" ] 2>/dev/null; then
+			mcp_fail_invalid_args "${pointer} must be <= ${max_value}"
+		fi
+	fi
+
+	printf '%s' "${raw}"
+}
+
 mcp_is_cancelled() {
 	if [ -z "${MCP_TOOL_CANCELLATION_FILE}" ]; then
 		return 1

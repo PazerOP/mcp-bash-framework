@@ -100,7 +100,13 @@ The scaffolder and examples use a per-tool directory (for example `tools/hello/t
 _Asciinema tip_: Record a short run of `bin/mcp-bash scaffold tool sample.hello` plus `./test/examples/test_examples.sh` so newcomers can view the workflow end-to-end.
 
 ### 4.2 SDK usage patterns
-- **Argument parsing** – Use `mcp_args_get` with JSONPointer queries; defensively validate required fields like `examples/01-args-and-validation/tools/echo-arg/tool.sh:18-24`.
+- **Argument parsing** – Prefer coercion helpers where possible:
+  ```bash
+  name="$(mcp_args_require '.name')"
+  count="$(mcp_args_int '.count' --default 10 --min 1 --max 200)"
+  verbose="$(mcp_args_bool '.verbose' --default false)"
+  ```
+  Fall back to `mcp_args_get` for complex shapes; defensively validate required fields.
 - **Structured outputs** – Emit JSON via `mcp_emit_json` when returning typed data. For plain text, call `mcp_emit_text`.
 - **Progress & cancellation** – Emit throttled `mcp_progress` calls (10–20 updates/request) and exit early when `mcp_is_cancelled` flips true as shown in `examples/03-progress-and-cancellation/tools/slow/tool.sh:5`. Enable streaming progress mid-flight with `MCPBASH_ENABLE_LIVE_PROGRESS=true` and tune cadence via `MCPBASH_PROGRESS_FLUSH_INTERVAL`.
 - **Logging** – Prefer `mcp_log_info`/`mcp_log_warn` so entries pass through the logging handler filters; avoid `echo` unless writing to stderr for fatal errors.
