@@ -139,6 +139,23 @@ Framework (Install Once)               Your Project (Version Control This)
                                        └── .registry/ (auto-generated)
 ```
 
+## Direct Tool Execution (run-tool)
+
+Use `run-tool` to invoke a single tool without starting the full MCP server. This wires the same environment as the server (SDK path, args, metadata, roots).
+
+```bash
+# Basic invocation (project inferred from CWD or MCPBASH_PROJECT_ROOT)
+mcp-bash run-tool my.tool --args '{"value":"hello"}'
+
+# Simulate roots (comma-separated), stream stderr, override timeout
+mcp-bash run-tool my.tool --args '{"value":"hi"}' --roots /tmp/project,/data/shared --verbose --timeout 15
+
+# Dry-run validates metadata/args without executing the tool
+mcp-bash run-tool my.tool --dry-run
+```
+
+Flags: `--args` (JSON object), `--roots` (comma-separated paths), `--dry-run`, `--timeout <secs>`, `--verbose` (stream tool stderr), `--no-refresh` (reuse cached registry), `--minimal` (force degraded mode), `--project-root <dir>`. Elicitation is not supported in CLI mode.
+
 The scaffolder and examples use per-tool directories (e.g., `tools/check-disk/tool.sh`); automatic discovery requires tools to live under subdirectories of `tools/` (root-level scripts are not discovered).
 
 See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layouts, Docker deployment, and multi-environment setups.

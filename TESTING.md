@@ -24,6 +24,8 @@
 ./test/unit/run.sh
 ```
 
+Includes coverage for the CLI `run-tool` entrypoint, SDK helpers, path normalization, locking, pagination, and JSON utilities.
+
 ## Integration Tests
 
 ```

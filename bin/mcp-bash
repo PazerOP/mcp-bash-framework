@@ -1297,12 +1297,16 @@ mcp_cli_run_tool() {
 	local verbose="false"
 	local no_refresh="false"
 	local minimal="false"
+	local tool_name=""
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
 		--args)
 			shift
-			args_json="${1:-{}}"
+			args_json="${1:-}"
+			if [ -z "${args_json}" ]; then
+				args_json="{}"
+			fi
 			;;
 		--roots)
 			shift
@@ -1339,21 +1343,34 @@ Invoke a tool directly with the same env wiring used by the server.
 EOF
 			exit 0
 			;;
+		--)
+			shift
+			break
+			;;
 		-*)
 			usage
 			exit 1
 			;;
 		*)
-			break
+			if [ -z "${tool_name}" ]; then
+				tool_name="${1}"
+			else
+				printf 'run-tool: unexpected argument: %s\n' "$1" >&2
+				exit 1
+			fi
 			;;
 		esac
 		shift
 	done
 
-	local tool_name="${1:-}"
 	if [ -z "${tool_name}" ]; then
-		printf 'run-tool: tool name required\n' >&2
-		exit 1
+		if [ $# -gt 0 ]; then
+			tool_name="$1"
+			shift
+		else
+			printf 'run-tool: tool name required\n' >&2
+			exit 1
+		fi
 	fi
 
 	# Allow explicit project override
@@ -1421,7 +1438,8 @@ EOF
 	fi
 
 	local result_json=""
-	if result_json="$(mcp_tools_call "${tool_name}" "${args_json}" "${timeout_override}")"; then
+	if mcp_tools_call "${tool_name}" "${args_json}" "${timeout_override}"; then
+		result_json="${_MCP_TOOLS_RESULT:-}"
 		printf '%s\n' "${result_json}"
 		exit 0
 	else

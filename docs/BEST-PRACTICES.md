@@ -26,6 +26,7 @@ This guide distils hands-on recommendations for designing, building, and operati
 | `bin/mcp-bash scaffold tool <name>` | Create SDK-ready tool skeleton (metadata + script) | [§4.1](#41-scaffold-workflow) |
 | `bin/mcp-bash scaffold prompt <name>` | Generate prompt template + `.meta.json` | [§4.1](#41-scaffold-workflow) |
 | `bin/mcp-bash scaffold resource <name>` | Produce resource boilerplate wired to the file provider | [§4.1](#41-scaffold-workflow) |
+| `bin/mcp-bash run-tool <name>` | Invoke a tool without starting the server (supports `--dry-run`, `--roots`, `--timeout`, `--verbose`) | [§5.2](#52-local-workflow) |
 | `./test/lint.sh` | Run shellcheck + shfmt gates; wraps commands from [TESTING.md](../TESTING.md) | [§5.2](#52-local-workflow) |
 | `./test/unit/lock.bats` | Validate lock/serialization primitives (`lib/lock.sh`) | [§5.1](#51-test-pyramid) |
 | `./test/integration/test_capabilities.sh` | End-to-end lifecycle/capability checks | [§5.3](#53-ci-triage-matrix) |
@@ -151,6 +152,8 @@ _Asciinema tip_: Record a short run of `bin/mcp-bash scaffold tool sample.hello`
 3. `./test/integration/test_capabilities.sh`
 4. Focused suite(s) matching touched subsystem(s)
 5. `./test/examples/test_examples.sh`
+
+Use `bin/mcp-bash run-tool <name> --args '{}' [--roots /path/a,/path/b] [--timeout 15] [--verbose]` for fast local iterations; pair it with `--dry-run` to validate metadata and args without executing the tool. Roots are comma-separated to avoid conflicts with Windows drive letters.
 
 Cache results by exporting `MCP_TESTS_SKIP_REMOTE=1` when remote fixtures are unavailable. Document skipped suites in your PR description.
 
