@@ -35,9 +35,10 @@ if [[ "$(uname -s)" != MINGW* ]] && [[ "$(uname -s)" != MSYS* ]] && [ ! -x "${PR
 fi
 
 # Use bash explicitly to avoid execute-bit issues on Windows
-if ! MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" >/dev/null 2>&1; then
+run_output="$(MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" 2>&1)" || {
+	printf 'run.sh output:\n%s\n' "${run_output}" >&2
 	test_fail "test/run.sh should run successfully with no tests"
-fi
+}
 
 printf ' -> scaffold test guards existing run.sh\n'
 set +e
