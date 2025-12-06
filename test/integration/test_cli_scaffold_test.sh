@@ -34,14 +34,15 @@ if [[ "$(uname -s)" != MINGW* ]] && [[ "$(uname -s)" != MSYS* ]] && [ ! -x "${PR
 	test_fail "test/run.sh should be executable"
 fi
 
-# Debug: run validate directly to see what fails on Windows
-printf '  (debug) Running mcp-bash validate on empty project...\n'
-validate_output="$("${MCPBASH_HOME}/bin/mcp-bash" validate --project-root "${PROJECT}" 2>&1)" || {
-	printf '  (debug) validate failed with output:\n%s\n' "${validate_output}" >&2
-}
+# Test that validation passes on empty project (diagnostic for Windows issues)
+printf '  (checking validation on empty project)\n'
+if ! validate_output="$("${MCPBASH_HOME}/bin/mcp-bash" validate --project-root "${PROJECT}" 2>&1)"; then
+	# Validation failed - log it but don't fail the test (known Windows issue)
+	printf '  WARNING: validation failed on empty project:\n%s\n' "${validate_output}" >&2
+fi
 
 # Use bash explicitly to avoid execute-bit issues on Windows
-# Pass --force to skip validation (empty project may have warnings that vary by platform)
+# Pass --force to skip validation (empty project may have platform-specific warnings)
 run_output="$(MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" --force 2>&1)" || {
 	printf 'run.sh output:\n%s\n' "${run_output}" >&2
 	test_fail "test/run.sh should run successfully with no tests"
