@@ -168,6 +168,15 @@ EOF
 
 	mcp_cli_run_tool_prepare_roots "${roots_arg}"
 
+	if [ "${MCPBASH_JSON_TOOL:-none}" = "none" ] || [ -z "${MCPBASH_JSON_TOOL_BIN:-}" ] || [ "${MCPBASH_MODE:-full}" = "minimal" ]; then
+		if [ "${args_json}" != "{}" ]; then
+			printf 'run-tool: JSON tooling required to parse --args\n' >&2
+		else
+			printf 'run-tool: JSON tooling required (jq or gojq)\n' >&2
+		fi
+		exit 1
+	fi
+
 	if [ "${print_env}" = "true" ]; then
 		printf 'MCPBASH_PROJECT_ROOT=%s\n' "${MCPBASH_PROJECT_ROOT}"
 		printf 'MCPBASH_HOME=%s\n' "${MCPBASH_HOME}"
@@ -184,16 +193,9 @@ EOF
 		exit 0
 	fi
 
-	if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ] && [ -n "${MCPBASH_JSON_TOOL_BIN:-}" ] && [ "${MCPBASH_MODE:-full}" != "minimal" ]; then
-		if ! printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'type=="object"' >/dev/null 2>&1; then
-			printf 'run-tool: --args must be a JSON object\n' >&2
-			exit 1
-		fi
-	else
-		if [ "${args_json}" != "{}" ]; then
-			printf 'run-tool: JSON tooling required to parse --args\n' >&2
-			exit 1
-		fi
+	if ! printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'type=="object"' >/dev/null 2>&1; then
+		printf 'run-tool: --args must be a JSON object\n' >&2
+		exit 1
 	fi
 
 	local metadata=""
