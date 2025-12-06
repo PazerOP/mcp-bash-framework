@@ -107,19 +107,19 @@ EOF
 		cat <<EOF
 {
   "framework": {
-    "path": "${framework_home}",
+    "path": $(mcp_json_escape_string "${framework_home}"),
     "exists": ${framework_exists},
-    "version": "${framework_version}",
+    "version": $(mcp_json_escape_string "${framework_version}"),
     "pathConfigured": ${path_ok}
   },
   "runtime": {
-    "bashVersion": "${BASH_VERSION}",
-    "jqPath": "${jq_path}",
-    "gojqPath": "${gojq_path}",
-    "jsonTool": "${json_tool}"
+    "bashVersion": $(mcp_json_escape_string "${BASH_VERSION}"),
+    "jqPath": $(mcp_json_escape_string "${jq_path}"),
+    "gojqPath": $(mcp_json_escape_string "${gojq_path}"),
+    "jsonTool": $(mcp_json_escape_string "${json_tool}")
   },
   "project": {
-    "root": "${project_root}",
+    "root": $(mcp_json_escape_string "${project_root}"),
     "serverMetaValid": ${server_meta_valid},
     "toolsCount": ${tools_count},
     "registryExists": ${registry_exists}
