@@ -234,7 +234,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Unit: `./test/unit/run.sh`.
   - Integration: `./test/integration/run.sh`.
   - Examples: `./test/examples/run.sh` (NDJSON harness + `run-tool` smoke for hello).
-  - `run-tool` coverage: unit (`test/unit/run_tool_cli.bats`), integration (`test/integration/test_run_tool_cli.sh`).
+  - `run-tool` coverage: unit (`test/unit/run_tool_cli.bats`) and example smoke (`test/examples/test_run_tool_smoke.sh`).
   - Compatibility: `./test/compatibility/run.sh`.
   - Stress: `./test/stress/run.sh`.
 - Test runner flags:

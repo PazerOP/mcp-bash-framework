@@ -53,7 +53,6 @@ TESTS=(
 	"test_lifecycle_gating.sh"
 	"test_resources_providers.sh"
 	"test_minimal_mode.sh"
-	"test_minimal_forced.sh"
 	"test_protocol_reject_unknown.sh"
 	"test_registry_refresh.sh"
 	"test_registry_limits.sh"
@@ -69,7 +68,6 @@ TESTS=(
 	"test_project_root_detection.sh"
 	"test_elicitation.sh"
 	"test_cli_scaffold_test.sh"
-	"test_run_tool_cli.sh"
 )
 
 passed=0

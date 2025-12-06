@@ -53,6 +53,8 @@ The examples runner now includes:
 ./test/compatibility/run.sh
 ```
 
+- TypeScript client check (`sdk_typescript.sh`) is opt-in; set `MCPBASH_RUN_SDK_TYPESCRIPT=1` to enable it. Without the flag, it is skipped to avoid pulling `npx ts-node` on environments where it is not already available.
+
 ## Stress Suite
 
 ```
