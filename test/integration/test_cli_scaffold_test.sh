@@ -29,11 +29,13 @@ printf ' -> scaffold test creates harness\n'
 assert_file_exists "${PROJECT}/test/run.sh"
 assert_file_exists "${PROJECT}/test/README.md"
 
-if [ ! -x "${PROJECT}/test/run.sh" ]; then
+# On Unix, check executable bit; on Windows/Git Bash, execute bits are unreliable
+if [[ "$(uname -s)" != MINGW* ]] && [[ "$(uname -s)" != MSYS* ]] && [ ! -x "${PROJECT}/test/run.sh" ]; then
 	test_fail "test/run.sh should be executable"
 fi
 
-if ! MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" "${PROJECT}/test/run.sh" >/dev/null 2>&1; then
+# Use bash explicitly to avoid execute-bit issues on Windows
+if ! MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" >/dev/null 2>&1; then
 	test_fail "test/run.sh should run successfully with no tests"
 fi
 
