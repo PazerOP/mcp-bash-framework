@@ -1026,13 +1026,13 @@ mcp_tools_call() {
 				if [ "${stderr_streaming_enabled}" = "true" ]; then
 					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 				else
-					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>>"${stderr_file}"
 				fi
 			else
 				if [ "${stderr_streaming_enabled}" = "true" ]; then
 					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 				else
-					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>"${stderr_file}"
+					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>>"${stderr_file}"
 				fi
 			fi
 		else
@@ -1040,13 +1040,13 @@ mcp_tools_call() {
 				if [ "${stderr_streaming_enabled}" = "true" ]; then
 					"${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 				else
-					"${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+					"${env_exec[@]}" "${tool_runner[@]}" 2>>"${stderr_file}"
 				fi
 			else
 				if [ "${stderr_streaming_enabled}" = "true" ]; then
 					"${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 				else
-					"${tool_runner[@]}" 2>"${stderr_file}"
+					"${tool_runner[@]}" 2>>"${stderr_file}"
 				fi
 			fi
 		fi
