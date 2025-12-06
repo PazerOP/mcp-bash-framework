@@ -42,6 +42,14 @@ while [ $# -gt 0 ]; do
 		BRANCH="$2"
 		shift 2
 		;;
+	--version | --ref)
+		if [ -z "${2:-}" ]; then
+			error "--version/--ref requires a tag or commit"
+			exit 1
+		fi
+		BRANCH="$2"
+		shift 2
+		;;
 	--yes | -y)
 		YES=true
 		shift
@@ -55,6 +63,8 @@ Usage: install.sh [OPTIONS]
 Options:
   --dir DIR      Install location (default: ~/mcp-bash-framework)
   --branch NAME  Git branch to install (default: main)
+  --version TAG  Alias for --branch TAG (install a tagged release)
+  --ref REF      Alias for --branch REF (install any ref/tag/commit)
   --yes, -y      Non-interactive mode (overwrite without prompting)
                  Auto-enabled when stdin is not a TTY (e.g., curl | bash)
   --help         Show this help
