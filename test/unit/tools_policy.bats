@@ -45,3 +45,20 @@ mcp_tools_policy_init
 if mcp_tools_policy_check "blocked" '{"path":"tools/blocked/tool.sh"}'; then
 	test_fail "policy override should deny blocked tool"
 fi
+
+printf ' -> policy can attach error data and non-default codes\n'
+cat <<'POLICY' >"${MCPBASH_SERVER_DIR}/policy.sh"
+mcp_tools_policy_check() {
+	local tool_name="$1"
+	if [ "${tool_name}" = "auth" ]; then
+		mcp_tools_error -32600 "auth required" '{"reason":"auth"}'
+		return 1
+	fi
+	return 0
+}
+POLICY
+MCP_TOOLS_POLICY_LOADED="false"
+mcp_tools_policy_init
+if mcp_tools_policy_check "auth" '{"path":"tools/auth/tool.sh"}'; then
+	test_fail "policy override should deny auth tool"
+fi
