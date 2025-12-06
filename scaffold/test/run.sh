@@ -73,7 +73,7 @@ run_test() {
 
 	local output
 	if [[ "${VERBOSE}" == "1" ]]; then
-		if mcp-bash run-tool "${name}" --args "${args}" --verbose; then
+		if "${MCPBASH_BIN}" run-tool "${name}" --args "${args}" --verbose; then
 			printf '%sPASS%s\n' "${GREEN}" "${RESET}"
 			((passed++))
 		else
@@ -81,7 +81,7 @@ run_test() {
 			((failed++))
 		fi
 	else
-		if output=$(mcp-bash run-tool "${name}" --args "${args}" 2>&1); then
+		if output=$("${MCPBASH_BIN}" run-tool "${name}" --args "${args}" 2>&1); then
 			printf '%sPASS%s\n' "${GREEN}" "${RESET}"
 			((passed++))
 		else
@@ -106,7 +106,7 @@ run_dry_run() {
 		extra_flags+=(--verbose)
 	fi
 
-	if output=$(mcp-bash run-tool "${name}" --args "${args}" --dry-run "${extra_flags[@]}" 2>&1); then
+	if output=$("${MCPBASH_BIN}" run-tool "${name}" --args "${args}" --dry-run "${extra_flags[@]}" 2>&1); then
 		printf '%sPASS%s\n' "${GREEN}" "${RESET}"
 		((passed++))
 	else
@@ -132,7 +132,7 @@ skip_test() {
 
 # Discover and validate tools exist
 printf "Discovering tools...\n"
-if ! mcp-bash validate --project-root "${PROJECT_ROOT}" >/dev/null 2>&1; then
+if ! "${MCPBASH_BIN}" validate --project-root "${PROJECT_ROOT}" >/dev/null 2>&1; then
 	printf '%sError: Project validation failed. Run '\''mcp-bash validate'\'' for details.%s\n' "${RED}" "${RESET}" >&2
 	if [[ "${FORCE}" != "1" ]]; then
 		printf "Use --force to run tests anyway.\n" >&2
