@@ -65,14 +65,25 @@ EOF
 
 	local server_name="${MCPBASH_SERVER_NAME}"
 	local command_path="${MCPBASH_HOME}/bin/mcp-bash"
+	local server_name_json
+	local command_path_json
+	local project_root_json=""
+	local has_project_root="false"
+
+	server_name_json="$(mcp_json_escape_string "${server_name}")"
+	command_path_json="$(mcp_json_escape_string "${command_path}")"
+	if [ -n "${MCPBASH_PROJECT_ROOT}" ]; then
+		has_project_root="true"
+		project_root_json="$(mcp_json_escape_string "${MCPBASH_PROJECT_ROOT}")"
+	fi
 	if [ "${mode}" = "json" ]; then
 		printf '{\n'
-		printf '  "name": "%s",\n' "${server_name}"
-		printf '  "command": "%s",\n' "${command_path}"
+		printf '  "name": %s,\n' "${server_name_json}"
+		printf '  "command": %s,\n' "${command_path_json}"
 		printf '  "args": []'
-		if [ -n "${MCPBASH_PROJECT_ROOT}" ]; then
+		if [ "${has_project_root}" = "true" ]; then
 			printf ',\n  "env": {\n'
-			printf '    "MCPBASH_PROJECT_ROOT": "%s"\n' "${MCPBASH_PROJECT_ROOT}"
+			printf '    "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
 			printf '  }\n'
 		else
 			printf '\n'
@@ -102,19 +113,17 @@ EOF
 
 	print_client() {
 		local client="${1}"
-		local display_env=""
-		local display_command="${command_path}"
-		if [ -n "${MCPBASH_PROJECT_ROOT}" ]; then
-			display_env="\"env\": {\"MCPBASH_PROJECT_ROOT\": \"${MCPBASH_PROJECT_ROOT}\"}"
-		fi
+		local display_command="${command_path_json}"
 		case "${client}" in
 		claude-desktop)
 			printf '{\n'
 			printf '  "mcpServers": {\n'
-			printf '    "%s": {\n' "${server_name}"
-			printf '      "command": "%s"' "${display_command}"
-			if [ -n "${display_env}" ]; then
-				printf ',\n      %s' "${display_env}"
+			printf '    %s: {\n' "${server_name_json}"
+			printf '      "command": %s' "${display_command}"
+			if [ "${has_project_root}" = "true" ]; then
+				printf ',\n      "env": {\n'
+				printf '        "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
+				printf '      }'
 			fi
 			printf '\n    }\n'
 			printf '  }\n'
@@ -123,10 +132,12 @@ EOF
 		cursor)
 			printf '{\n'
 			printf '  "mcpServers": {\n'
-			printf '    "%s": {\n' "${server_name}"
-			printf '      "command": "%s"' "${display_command}"
-			if [ -n "${display_env}" ]; then
-				printf ',\n      %s' "${display_env}"
+			printf '    %s: {\n' "${server_name_json}"
+			printf '      "command": %s' "${display_command}"
+			if [ "${has_project_root}" = "true" ]; then
+				printf ',\n      "env": {\n'
+				printf '        "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
+				printf '      }'
 			fi
 			printf '\n    }\n'
 			printf '  }\n'
@@ -134,20 +145,24 @@ EOF
 			;;
 		claude-cli)
 			printf '{\n'
-			printf '  "name": "%s",\n' "${server_name}"
-			printf '  "command": "%s"' "${display_command}"
-			if [ -n "${display_env}" ]; then
-				printf ',\n  %s' "${display_env}"
+			printf '  "name": %s,\n' "${server_name_json}"
+			printf '  "command": %s' "${display_command}"
+			if [ "${has_project_root}" = "true" ]; then
+				printf ',\n  "env": {\n'
+				printf '    "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
+				printf '  }'
 			fi
 			printf '\n}\n\n'
 			;;
 		windsurf)
 			printf '{\n'
 			printf '  "mcpServers": {\n'
-			printf '    "%s": {\n' "${server_name}"
-			printf '      "command": "%s"' "${display_command}"
-			if [ -n "${display_env}" ]; then
-				printf ',\n      %s' "${display_env}"
+			printf '    %s: {\n' "${server_name_json}"
+			printf '      "command": %s' "${display_command}"
+			if [ "${has_project_root}" = "true" ]; then
+				printf ',\n      "env": {\n'
+				printf '        "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
+				printf '      }'
 			fi
 			printf '\n    }\n'
 			printf '  }\n'
@@ -155,10 +170,12 @@ EOF
 			;;
 		librechat)
 			printf '{\n'
-			printf '  "name": "%s",\n' "${server_name}"
-			printf '  "command": "%s"' "${display_command}"
-			if [ -n "${display_env}" ]; then
-				printf ',\n  %s' "${display_env}"
+			printf '  "name": %s,\n' "${server_name_json}"
+			printf '  "command": %s' "${display_command}"
+			if [ "${has_project_root}" = "true" ]; then
+				printf ',\n  "env": {\n'
+				printf '    "MCPBASH_PROJECT_ROOT": %s\n' "${project_root_json}"
+				printf '  }'
 			fi
 			printf '\n}\n\n'
 			;;
