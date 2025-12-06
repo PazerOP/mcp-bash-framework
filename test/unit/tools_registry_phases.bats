@@ -103,3 +103,35 @@ if [ -z "${MCP_TOOLS_REGISTRY_HASH}" ]; then
 fi
 total_recorded="$("${MCPBASH_JSON_TOOL_BIN}" -r '.total' "${MCP_TOOLS_REGISTRY_PATH}")"
 assert_eq "1" "${total_recorded}" "registry should record one tool"
+
+printf ' -> refresh falls back when manual registration reports status 2\n'
+(
+	mcp_registry_register_apply() {
+		return 2
+	}
+	mcp_registry_register_error_for_kind() {
+		printf ''
+	}
+
+	MCPBASH_TOOLS_DIR="${TEST_TMPDIR}/toolsdir-manual-status"
+	mkdir -p "${MCPBASH_TOOLS_DIR}/bar"
+	cat >"${MCPBASH_TOOLS_DIR}/bar/tool.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	chmod +x "${MCPBASH_TOOLS_DIR}/bar/tool.sh"
+	MCP_TOOLS_REGISTRY_PATH="${TEST_TMPDIR}/tools-registry-manual.json"
+	MCP_TOOLS_REGISTRY_HASH=""
+	MCP_TOOLS_REGISTRY_JSON=""
+	MCP_TOOLS_TOTAL=0
+	MCP_TOOLS_LAST_SCAN=0
+	MCP_TOOLS_TTL=0
+	MCPBASH_REGISTRY_DIR="${TEST_TMPDIR}/registry"
+	mcp_lock_init
+	if ! mcp_tools_refresh_registry; then
+		test_fail "refresh should fall back to scan when manual registration returns 2"
+	fi
+	assert_file_exists "${MCP_TOOLS_REGISTRY_PATH}"
+	fallback_total="$("${MCPBASH_JSON_TOOL_BIN}" -r '.total' "${MCP_TOOLS_REGISTRY_PATH}")"
+	assert_eq "1" "${fallback_total}" "fallback scan should register tool despite manual status 2"
+)

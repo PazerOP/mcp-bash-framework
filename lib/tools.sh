@@ -185,8 +185,7 @@ mcp_tools_apply_manual_registration() {
 		if [ -z "${err}" ]; then
 			err="Manual registration script returned empty output or non-zero"
 		fi
-		mcp_logging_error "${MCP_TOOLS_LOGGER}" "${err}"
-		return 1
+		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "${err}"
 	fi
 	return 2
 }
