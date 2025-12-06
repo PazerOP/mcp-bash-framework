@@ -47,6 +47,14 @@ git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/mcp-bash-frame
 echo 'export PATH="$HOME/mcp-bash-framework/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
 ```
 
+Pin a release with the installer (auto-prefixes `v` for bare versions):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version 0.4.0
+# or with explicit tag
+curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.4.0
+```
+
 ### 1.5 (Optional) Verify Your Install
 
 ```bash

@@ -73,6 +73,7 @@ Examples:
   curl -fsSL .../install.sh | bash
   curl -fsSL .../install.sh | bash -s -- --dir ~/.local/mcp-bash
   curl -fsSL .../install.sh | bash -s -- --yes  # CI-friendly
+  curl -fsSL .../install.sh | bash -s -- --version 0.4.0  # install tagged release (auto-prefixes v)
 EOF
 		exit 0
 		;;
