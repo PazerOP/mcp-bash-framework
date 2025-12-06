@@ -33,7 +33,7 @@ if [ ! -x "${PROJECT}/test/run.sh" ]; then
 	test_fail "test/run.sh should be executable"
 fi
 
-if ! "${PROJECT}/test/run.sh" >/dev/null 2>&1; then
+if ! MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" "${PROJECT}/test/run.sh" >/dev/null 2>&1; then
 	test_fail "test/run.sh should run successfully with no tests"
 fi
 
