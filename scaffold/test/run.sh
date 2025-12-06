@@ -9,6 +9,22 @@ export MCPBASH_PROJECT_ROOT="${PROJECT_ROOT}"
 # Prevent Git Bash/MSYS path mangling on Windows (e.g., /repo -> C:/Git/repo)
 export MSYS2_ARG_CONV_EXCL="*"
 
+# Locate mcp-bash binary
+MCPBASH_BIN="${MCPBASH_BIN:-}"
+if [[ -z "${MCPBASH_BIN}" ]] && command -v mcp-bash >/dev/null 2>&1; then
+	MCPBASH_BIN="$(command -v mcp-bash)"
+fi
+if [[ -z "${MCPBASH_BIN}" ]] && [[ -n "${MCPBASH_HOME:-}" ]] && [[ -x "${MCPBASH_HOME}/bin/mcp-bash" ]]; then
+	MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash"
+fi
+if [[ -z "${MCPBASH_BIN}" ]] && [[ -x "${PROJECT_ROOT}/../bin/mcp-bash" ]]; then
+	MCPBASH_BIN="${PROJECT_ROOT}/../bin/mcp-bash"
+fi
+if [[ -z "${MCPBASH_BIN}" ]]; then
+	printf 'mcp-bash not found; add to PATH or set MCPBASH_HOME.\n' >&2
+	exit 1
+fi
+
 VERBOSE="${VERBOSE:-0}"
 FORCE="${FORCE:-0}"
 
