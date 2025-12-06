@@ -68,6 +68,7 @@ TESTS=(
 	"test_cli_validate_errors.sh"
 	"test_project_root_detection.sh"
 	"test_elicitation.sh"
+	"test_cli_scaffold_test.sh"
 	"test_run_tool_cli.sh"
 )
 
