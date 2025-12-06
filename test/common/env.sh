@@ -4,7 +4,8 @@
 set -euo pipefail
 
 # Root of the repository. Every test relies on this to locate fixtures.
-MCPBASH_TEST_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Use ${BASH_SOURCE[0]:-$0} to tolerate shells/contexts where BASH_SOURCE is unset under set -u.
+MCPBASH_TEST_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 
 # Export canonical environment variables consumed by the server and helpers.
 # MCPBASH_HOME is the framework location (read-only).
