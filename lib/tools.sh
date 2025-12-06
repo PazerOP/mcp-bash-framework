@@ -2,6 +2,11 @@
 # Tool discovery, registry generation, invocation helpers.
 
 set -euo pipefail
+
+if [[ -z "${BASH_VERSION:-}" ]]; then
+	printf 'Bash is required for mcpbash; BASH_VERSION missing\n' >&2
+	exit 1
+fi
 # shellcheck disable=SC2030,SC2031  # Subshell env mutations are intentionally isolated
 
 MCP_TOOLS_REGISTRY_JSON=""
@@ -996,7 +1001,8 @@ mcp_tools_call() {
 			fi
 		fi
 
-		# Helper to execute the tool with optional streaming; retries without streaming if process substitution fails.
+		# Helper to execute the tool with optional streaming; retries without streaming if
+		# the redirection command fails at runtime (syntax is guaranteed because this file requires bash).
 		run_with_stderr_streaming() {
 			if ! "$@"; then
 				return 1
