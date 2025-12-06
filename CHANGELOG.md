@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SDK type coercion helpers (`mcp_args_bool`, `mcp_args_int`, `mcp_args_require`) for common argument parsing patterns.
 - Shared path normalization helpers (`lib/path.sh`) with consistent fallback chain (realpath -m → realpath → readlink -f → manual collapse) used by SDK/runtime/installer; added unit coverage.
 - CLI `run-tool` command for direct tool invocation with optional roots, dry-run, timeout override, and verbose stderr streaming.
+- Installer supports `--version`/`--ref` aliases for tagged installs and auto-prefixes bare semver tags with `v`.
 - CLI `run-tool --print-env` to inspect wiring without executing tools; help/examples updated.
 - `mcp-bash validate` now supports `--json`, `--explain-defaults`, and `--strict`; tool naming validation warns on missing namespace/format/length; outputs include defaults in JSON.
 - `mcp-bash config` gains richer `--json` output, pasteable JSON for `--client`, and `--wrapper` generator for auto-install scripts.
@@ -24,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Manual tool registry refresh now respects hook exit codes: status 1 falls back to a scan, status 2 surfaces as fatal, and missing manual registry files no longer block refresh.
 - Stderr streaming no longer re-executes tools on non-zero exits; if process substitution is unavailable, stderr is buffered once with a single notice.
+- Stderr buffering now appends across retries/streams to preserve diagnostic output when streaming is unavailable.
+- `mcp-bash doctor --json` escapes values before emitting JSON, avoiding malformed output when paths contain quotes or spaces.
+- `mcp-bash config --json` escapes server names/paths, preventing invalid snippets for clients.
+- `mcp-bash run-tool --no-refresh/--args` now fails fast with a clear error when JSON tooling is unavailable instead of dying later.
 
 ### Changed
 - CLI commands (`init`, `validate`, `config`, `doctor`, `run-tool`, `registry refresh`, `scaffold`) moved into `lib/cli/*.sh` with a thin dispatcher in `bin/mcp-bash`; shared helpers live in `lib/cli/common.sh`. Behavior unchanged, startup parse overhead slightly reduced.
