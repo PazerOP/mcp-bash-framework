@@ -14,6 +14,8 @@ name="$(mcp_args_require '.name')"
 # limit="$(mcp_args_int '.limit' --default 10 --min 1 --max 100)"
 # Path (validated against MCP roots): repo_path
 # repo_path="$(mcp_require_path '.repoPath' --default-to-single-root)"
+# Git commands should send all output to stderr to keep stdout clean for JSON:
+# git commit -m "msg" >&2
 
 # Your tool logic here
 # Example progress/logging (uncomment if needed)

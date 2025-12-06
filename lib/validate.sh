@@ -93,8 +93,15 @@ mcp_validate_tools() {
 							fi
 						fi
 						if [ -n "${t_name}" ] && [ "${t_name}" != "${tool_name}" ]; then
-							printf '⚠ tools/%s - directory name does not match tool.meta.json name "%s"\n' "${tool_name}" "${t_name}"
-							warnings=$((warnings + 1))
+							# Allow namespace.camelCase names to coexist with kebab-case dirs.
+							# Normalize by stripping namespace, lowercasing, and removing non-alnum.
+							local t_norm dir_norm
+							t_norm="$(printf '%s' "${t_name##*.}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')"
+							dir_norm="$(printf '%s' "${tool_name}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')"
+							if [ "${t_norm}" != "${dir_norm}" ]; then
+								printf '⚠ tools/%s - directory name does not match tool.meta.json name "%s"\n' "${tool_name}" "${t_name}"
+								warnings=$((warnings + 1))
+							fi
 						fi
 					fi
 				else
