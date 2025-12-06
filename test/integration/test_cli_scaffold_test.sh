@@ -35,7 +35,8 @@ if [[ "$(uname -s)" != MINGW* ]] && [[ "$(uname -s)" != MSYS* ]] && [ ! -x "${PR
 fi
 
 # Use bash explicitly to avoid execute-bit issues on Windows
-run_output="$(MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" 2>&1)" || {
+# Pass --force to skip validation (empty project may have warnings that vary by platform)
+run_output="$(MCPBASH_BIN="${MCPBASH_HOME}/bin/mcp-bash" bash "${PROJECT}/test/run.sh" --force 2>&1)" || {
 	printf 'run.sh output:\n%s\n' "${run_output}" >&2
 	test_fail "test/run.sh should run successfully with no tests"
 }
