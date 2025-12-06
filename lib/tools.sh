@@ -175,19 +175,21 @@ mcp_tools_enforce_registry_limits() {
 }
 
 mcp_tools_apply_manual_registration() {
-	if mcp_registry_register_apply "tools"; then
-		return 0
-	fi
-	local manual_status=$?
-	if [ "${manual_status}" -eq 2 ]; then
-		local err
-		err="$(mcp_registry_register_error_for_kind "tools")"
-		if [ -z "${err}" ]; then
-			err="Manual registration script returned empty output or non-zero"
+	local manual_status=0
+	mcp_registry_register_apply "tools"
+	manual_status=$?
+	if [ "${manual_status}" -ne 0 ]; then
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "tools")"
+			if [ -z "${err}" ]; then
+				err="Manual registration script returned empty output or non-zero"
+			fi
+			mcp_logging_warning "${MCP_TOOLS_LOGGER}" "${err}"
 		fi
-		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "${err}"
+		return "${manual_status}"
 	fi
-	return 2
+	return 0
 }
 
 mcp_tools_load_cache_if_empty() {
@@ -443,11 +445,12 @@ mcp_tools_refresh_registry() {
 	# filesystem scan (with fastpath snapshot to avoid rescanning unchanged trees).
 	local manual_status
 	manual_status=2
-	if mcp_tools_apply_manual_registration; then
+	mcp_tools_apply_manual_registration
+	manual_status=$?
+	if [ "${manual_status}" -eq 0 ]; then
 		return 0
 	fi
-	manual_status=$?
-	if [ "${manual_status}" -eq 1 ]; then
+	if [ "${manual_status}" -eq 2 ]; then
 		return 1
 	fi
 
@@ -792,8 +795,8 @@ mcp_tools_call() {
 	0) env_limit=65536 ;;
 	esac
 
-	# Roots environment (blocks until roots ready when available)
-	local MCP_ROOTS_JSON MCP_ROOTS_PATHS MCP_ROOTS_COUNT
+	# Roots environment (server + CLI both source roots.sh; guard keeps minimal stubs happy)
+	local MCP_ROOTS_JSON="[]" MCP_ROOTS_PATHS="" MCP_ROOTS_COUNT=0
 	if declare -F mcp_roots_wait_ready >/dev/null 2>&1; then
 		mcp_roots_wait_ready
 		MCP_ROOTS_JSON="$(mcp_roots_get_json)"
@@ -996,8 +999,6 @@ mcp_tools_call() {
 		# Helper to execute the tool with optional streaming; retries without streaming if process substitution fails.
 		run_with_stderr_streaming() {
 			if ! "$@"; then
-				# If streaming failed (e.g., process substitution unavailable), retry without streaming and append a note.
-				printf 'stream-stderr unavailable; retrying without streaming\n' >>"${stderr_file}"
 				return 1
 			fi
 			return 0
@@ -1008,6 +1009,7 @@ mcp_tools_call() {
 				if [ "${stream_stderr}" = "true" ]; then
 					if ! run_with_stderr_streaming with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2); then
 						with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+						printf 'stream-stderr unavailable; retried without streaming\n' >>"${stderr_file}"
 					fi
 				else
 					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
@@ -1016,6 +1018,7 @@ mcp_tools_call() {
 				if [ "${stream_stderr}" = "true" ]; then
 					if ! run_with_stderr_streaming with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2); then
 						with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>"${stderr_file}"
+						printf 'stream-stderr unavailable; retried without streaming\n' >>"${stderr_file}"
 					fi
 				else
 					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>"${stderr_file}"
@@ -1026,6 +1029,7 @@ mcp_tools_call() {
 				if [ "${stream_stderr}" = "true" ]; then
 					if ! run_with_stderr_streaming "${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2); then
 						"${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
+						printf 'stream-stderr unavailable; retried without streaming\n' >>"${stderr_file}"
 					fi
 				else
 					"${env_exec[@]}" "${tool_runner[@]}" 2>"${stderr_file}"
@@ -1034,12 +1038,14 @@ mcp_tools_call() {
 				if [ "${stream_stderr}" = "true" ]; then
 					if ! run_with_stderr_streaming "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2); then
 						"${tool_runner[@]}" 2>"${stderr_file}"
+						printf 'stream-stderr unavailable; retried without streaming\n' >>"${stderr_file}"
 					fi
 				else
 					"${tool_runner[@]}" 2>"${stderr_file}"
 				fi
 			fi
 		fi
+		# Outer stderr append captures shell-level errors; tool stderr is redirected above.
 	) >"${stdout_file}" 2>>"${stderr_file}" || exit_code=$?
 	exit_code=${exit_code:-0}
 

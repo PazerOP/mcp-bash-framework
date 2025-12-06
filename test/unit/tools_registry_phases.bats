@@ -27,6 +27,11 @@ if ! command -v mcp_logging_is_enabled >/dev/null 2>&1; then
 		return 1
 	}
 fi
+if ! command -v mcp_logging_warning >/dev/null 2>&1; then
+	mcp_logging_warning() {
+		return 0
+	}
+fi
 
 test_create_tmpdir
 MCPBASH_TMP_ROOT="${TEST_TMPDIR}"
@@ -104,10 +109,10 @@ fi
 total_recorded="$("${MCPBASH_JSON_TOOL_BIN}" -r '.total' "${MCP_TOOLS_REGISTRY_PATH}")"
 assert_eq "1" "${total_recorded}" "registry should record one tool"
 
-printf ' -> refresh falls back when manual registration reports status 2\n'
+printf ' -> refresh falls back when manual registration reports status 1\n'
 (
 	mcp_registry_register_apply() {
-		return 2
+		return 1
 	}
 	mcp_registry_register_error_for_kind() {
 		printf ''
@@ -129,9 +134,31 @@ EOF
 	MCPBASH_REGISTRY_DIR="${TEST_TMPDIR}/registry"
 	mcp_lock_init
 	if ! mcp_tools_refresh_registry; then
-		test_fail "refresh should fall back to scan when manual registration returns 2"
+		test_fail "refresh should fall back to scan when manual registration returns 1"
 	fi
 	assert_file_exists "${MCP_TOOLS_REGISTRY_PATH}"
 	fallback_total="$("${MCPBASH_JSON_TOOL_BIN}" -r '.total' "${MCP_TOOLS_REGISTRY_PATH}")"
-	assert_eq "1" "${fallback_total}" "fallback scan should register tool despite manual status 2"
+	assert_eq "1" "${fallback_total}" "fallback scan should register tool despite manual status 1"
+)
+
+printf ' -> manual registration status 2 surfaces as fatal\n'
+(
+	mcp_registry_register_apply() {
+		return 2
+	}
+	mcp_registry_register_error_for_kind() {
+		printf 'manual failure'
+	}
+
+	MCP_TOOLS_REGISTRY_PATH="${TEST_TMPDIR}/tools-registry-manual-fatal.json"
+	MCP_TOOLS_REGISTRY_HASH=""
+	MCP_TOOLS_REGISTRY_JSON=""
+	MCP_TOOLS_TOTAL=0
+	MCP_TOOLS_LAST_SCAN=0
+	MCP_TOOLS_TTL=0
+	MCPBASH_REGISTRY_DIR="${TEST_TMPDIR}/registry-fatal"
+	mcp_lock_init
+	if mcp_tools_refresh_registry; then
+		test_fail "refresh should fail when manual registration returns 2"
+	fi
 )

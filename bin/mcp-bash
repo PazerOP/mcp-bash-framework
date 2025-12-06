@@ -1074,6 +1074,7 @@ mcp_cli_run_tool_prepare_roots() {
 		MCPBASH_ROOTS_URIS+=("file://${norm}")
 		MCPBASH_ROOTS_NAMES+=("$(basename "${norm}")")
 	done
+	# roots.sh is always sourced for CLI runs, so mcp_roots_wait_ready will see READY=1.
 	MCPBASH_ROOTS_READY=1
 }
 
