@@ -163,6 +163,8 @@ jobs:
         id: integration
         env:
           MCPBASH_INTEGRATION_TMP: ${{ runner.temp }}/mcpbash-integration
+          # Enable verbose output on Windows for easier debugging
+          VERBOSE: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
         run: |
           set -euo pipefail
           start="$(date +%s)"
