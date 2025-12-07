@@ -78,6 +78,11 @@ printf ' -> config --wrapper creates file when stdout is a TTY (script)\n'
 	if ! command -v script >/dev/null 2>&1; then
 		printf '    SKIP (script command not available)\n'
 	else
+		# Some platforms ship a script(1) variant with differing arg order; probe before asserting.
+		if ! script -q /dev/null /bin/sh -c "echo probe" </dev/null >/dev/null 2>&1; then
+			printf '    SKIP (script command incompatible on this platform)\n'
+			return
+		fi
 		rm -f "${PROJECT_ROOT}/cli-flags-test.sh"
 		script_exit=0
 		cmd_str="\"${REPO_ROOT}/bin/mcp-bash\" config --project-root \"${PROJECT_ROOT}\" --wrapper"
