@@ -9,7 +9,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `tools/`, `resources/`, `prompts/`, `server.d/`, optional `lib/`, `config/`, `.registry/` (generated).
 - Project creation & scaffolding:
   - Initialize in current directory: `bin/mcp-bash init [--name NAME] [--no-hello]`.
-  - Scaffold full project in new directory: `bin/mcp-bash scaffold server <name>`.
+  - Create new project in new directory: `bin/mcp-bash new <name> [--no-hello]`.
   - Scaffold assets in an existing project: `bin/mcp-bash scaffold tool|prompt|resource <name>`.
 - Recommended flow to create a new server:
   1) Install the framework once via the one-liner (no repo clone needed): `curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash` (or pin a version with `--version`; manual `git clone` to `$HOME/mcp-bash-framework` is the fallback).
@@ -226,7 +226,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 
 - Core commands:
   - Initialize project in current directory: `bin/mcp-bash init [--name NAME] [--no-hello]`.
-  - Scaffold full project into new directory: `bin/mcp-bash scaffold server <name>`.
+  - Create new project in new directory: `bin/mcp-bash new <name> [--no-hello]`.
   - Scaffold assets in a project: `bin/mcp-bash scaffold tool|prompt|resource <name>`.
   - Run server: `bin/mcp-bash` (auto-detects project root when run inside a project directory; for MCP clients set `MCPBASH_PROJECT_ROOT` explicitly).
   - Run a single tool without starting the server: `bin/mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run] [--timeout SECS] [--verbose] [--no-refresh] [--minimal] [--project-root DIR] [--print-env]`.

@@ -7,7 +7,7 @@ Key points:
 - **Framework/project separation**: Install the framework once (e.g., via `install.sh`), create unlimited MCP server projects. Your tools stay yours; upgrades are clean.
 - **Stdio transport only**: Standard input/output communication. No daemons, no HTTP servers, no hidden state.
 - **Auto-discovery & auto-detection**: Tools/resources/prompts are discovered from project directories; project root is auto-detected when you run `mcp-bash` inside a project (for MCP clients, set `MCPBASH_PROJECT_ROOT` explicitly).
-- **Built-in DX commands**: `mcp-bash init`, `mcp-bash scaffold server`, `mcp-bash scaffold tool|prompt|resource`, `mcp-bash validate [--json|--strict|--explain-defaults]`, `mcp-bash config [--json|--client|--wrapper]`, `mcp-bash doctor [--json]`, `mcp-bash registry status`, `mcp-bash run-tool [--print-env]`.
+- **Built-in DX commands**: `mcp-bash new`, `mcp-bash init`, `mcp-bash scaffold tool|prompt|resource`, `mcp-bash validate [--json|--strict|--explain-defaults]`, `mcp-bash config [--json|--client|--wrapper]`, `mcp-bash doctor [--json]`, `mcp-bash registry status`, `mcp-bash run-tool [--print-env]`.
 - **Tool policy hook**: Optional `server.d/policy.sh` defines `mcp_tools_policy_check()` to allow/deny tools centrally (read-only, allowlists, audit); default allows all.
 - **Protocol version**: Targets MCP `2025-06-18` with negotiated downgrades to `2025-03-26` and `2024-11-05`.
 - **Cross-platform**: macOS, Linux, and Windows (Git Bash/WSL) support.
@@ -39,7 +39,7 @@ Key points:
 ## SDK & Scaffolding
 
 - [Tool SDK](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/sdk/tool-sdk.sh): Shared helpers for argument parsing (`mcp_args_get`), output (`mcp_emit_json`, `mcp_emit_text`), JSON construction (`mcp_json_escape`, `mcp_json_obj`, `mcp_json_arr`), progress (`mcp_progress`), cancellation (`mcp_is_cancelled`), and logging (`mcp_log_info`, `mcp_log_warn`).
-- [Scaffold Templates](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/scaffold): Templates for generating compliant tools, resources, and prompts via `mcp-bash scaffold <type> <name>` and full server skeleton via `mcp-bash scaffold server <name>`.
+- [Scaffold Templates](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/scaffold): Templates for generating compliant tools, resources, and prompts via `mcp-bash scaffold <type> <name>`; create a full server skeleton via `mcp-bash new <name>`.
 
 ## Configuration & Operations
 

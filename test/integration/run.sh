@@ -65,7 +65,7 @@ TESTS=(
 	"test_notification_dedup.sh"
 	"test_cancellation.sh"
 	"test_cli_guards.sh"
-	"test_cli_init_scaffold_server.sh"
+	"test_cli_init_new.sh"
 	"test_cli_init_config_doctor.sh"
 	"test_cli_config_variants.sh"
 	"test_cli_validate_fix.sh"

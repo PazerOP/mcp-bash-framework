@@ -69,10 +69,11 @@ You should see green checks for required dependencies (or clear errors if someth
 Your server code lives in a separate project directory:
 
 ```bash
-mkdir ~/my-mcp-server
-cd ~/my-mcp-server
-mcp-bash init --name my-mcp-server
+mcp-bash new my-mcp-server
+cd my-mcp-server
 ```
+
+Already in a directory you created yourself? Run `mcp-bash init --name my-mcp-server [--no-hello]` instead.
 
 ### 3. Scaffold Your First Tool
 
