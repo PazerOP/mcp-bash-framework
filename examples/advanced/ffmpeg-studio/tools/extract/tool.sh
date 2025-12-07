@@ -30,8 +30,15 @@ fi
 full_input="$(mcp_ffmpeg_resolve_path "${input_path}" "read")"
 full_output="$(mcp_ffmpeg_resolve_path "${output_path}" "write")"
 
+# Validation: Input exists → Tool Execution Error (LLM can choose a different file)
 if [[ ! -f "${full_input}" ]]; then
-	mcp_fail -32602 "Input file not found: ${input_path}"
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Input file not found" \
+			input "${input_path}" \
+			hint "Check the file exists and is within allowed media roots"
+	)"
+	exit 1
 fi
 
 # Run ffmpeg to extract single frame

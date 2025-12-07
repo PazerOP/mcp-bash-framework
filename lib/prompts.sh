@@ -86,8 +86,10 @@ mcp_prompts_manual_finalize() {
 			path: .path,
 			arguments: (.arguments // {type: "object", properties: {}}),
 			role: (.role // null),
-			metadata: (.metadata // null)
+			metadata: (.metadata // null),
+			icons: (.icons // null)
 		}) |
+		map(if .icons == null then del(.icons) else . end) |
 		sort_by(.name)
 	')"; then
 		mcp_prompts_manual_abort
@@ -332,6 +334,7 @@ mcp_prompts_scan() {
 			local role="user"
 			local arguments='{"type": "object", "properties": {}}'
 			local metadata="null"
+			local icons="null"
 
 			if [ -f "${meta_json}" ]; then
 				local meta
@@ -347,6 +350,11 @@ mcp_prompts_scan() {
 				if printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.metadata' >/dev/null 2>&1; then
 					metadata="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.metadata')"
 				fi
+				icons="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null || printf 'null')"
+				# Convert local file paths to data URIs
+				local meta_dir
+				meta_dir="$(dirname "${meta_json}")"
+				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
 			fi
 
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
@@ -356,6 +364,7 @@ mcp_prompts_scan() {
 				--arg role "$role" \
 				--argjson args "$arguments" \
 				--argjson meta "$metadata" \
+				--argjson icons "$icons" \
 				'{
 					name: $name,
 					description: $desc,
@@ -363,7 +372,8 @@ mcp_prompts_scan() {
 					arguments: $args,
 					role: $role,
 					metadata: $meta
-				}' >>"${items_file}"
+				}
+				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
 		done
 	fi
 

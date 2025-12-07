@@ -419,6 +419,72 @@ source "${MCPBASH_PROJECT_ROOT}/lib/helpers.sh"
 Keep shared code under project roots to avoid leaking out-of-scope paths; consider a `lib/` README to describe available helpers.
 
 ### 4.3 Error handling patterns
+
+MCP distinguishes between **Protocol Errors** and **Tool Execution Errors**. This distinction is critical for enabling LLM self-correction. See [docs/ERRORS.md](ERRORS.md) for the full reference.
+
+#### Protocol Errors vs Tool Execution Errors
+
+| Error Type | When to Use | LLM Can Self-Correct? |
+|------------|-------------|----------------------|
+| Protocol Error (`-32xxx`) | Malformed request, unknown tool, server failures | ❌ No |
+| Tool Execution Error (`isError: true`) | Invalid input the LLM could fix | ✅ Yes |
+
+**Key insight:** When a tool receives valid JSON but the *values* are wrong (bad date, out-of-range number, invalid path), return a Tool Execution Error so the LLM can retry with corrected input.
+
+```bash
+#!/usr/bin/env bash
+source "${MCP_SDK:?}/tool-sdk.sh"
+
+count="$(mcp_args_get '.count // 10')"
+
+# ❌ DON'T use Protocol Error for correctable input issues
+# mcp_fail_invalid_args "count must be positive"  # Returns -32602
+
+# ✅ DO provide actionable feedback the LLM can learn from
+if [ "${count}" -lt 1 ]; then
+  mcp_emit_json "$(mcp_json_obj \
+    error "count must be between 1 and 100" \
+    received "${count}" \
+    suggestion "Try count=10 for a reasonable default"
+  )"
+  exit 1  # Non-zero exit triggers isError: true in the response
+fi
+```
+
+#### When to use each error type
+
+**Use Protocol Errors (`mcp_fail`) for:**
+- Missing required parameters that the SDK can't default
+- Truly malformed input (not JSON, wrong types)
+- Authorization/permission failures
+- Internal server errors
+
+**Use Tool Execution Errors (exit non-zero with message) for:**
+- Values out of valid range
+- Invalid formats (dates, emails, paths)
+- Business logic failures ("file not found", "API rate limited")
+- Any case where your error message teaches the LLM how to fix it
+
+#### SDK helpers
+
+```bash
+# Protocol error (tool stops, error goes to client)
+mcp_fail -32602 "authorization required"
+mcp_fail_invalid_args "targetPath is required"
+
+# Tool execution error (LLM gets actionable feedback)
+if [ ! -f "${target_path}" ]; then
+  mcp_emit_json "$(mcp_json_obj \
+    error "File not found" \
+    path "${target_path}" \
+    hint "Check available files with list-files tool"
+  )"
+  exit 1
+fi
+```
+
+#### General guidelines
+
 - Use `mcp_fail` (or `mcp_fail_invalid_args`) to return structured JSON-RPC errors with proper `code/message/data` directly from tools; it survives `tool_env_mode=minimal/allowlist` via the injected `MCP_TOOL_ERROR_FILE`.
 - Only return `-32603` (internal error) for unknown failures; otherwise map to specific JSON-RPC errors spelled out in the protocol.
 - Capture stderr and propagate actionable diagnostics; see `examples/01-args-and-validation/tools/echo-arg/tool.sh:30-36` for human-readable error surfaces.

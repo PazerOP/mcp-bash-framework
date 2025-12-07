@@ -1,5 +1,80 @@
 # Error Handling Guidelines
 
+This document covers error handling patterns in mcp-bash, including the important distinction between **Protocol Errors** and **Tool Execution Errors**.
+
+## Protocol Errors vs Tool Execution Errors
+
+MCP distinguishes between two error types. Understanding this distinction is crucial for enabling LLM self-correction.
+
+### Protocol Errors (JSON-RPC errors)
+
+Protocol errors indicate fundamental issues with the request structure or server state. They are returned as JSON-RPC error objects with standard codes:
+
+```json
+{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Unknown tool: invalid_tool_name"}}
+```
+
+**When to use Protocol Errors:**
+- Unknown or missing tool name
+- Malformed request that fails schema validation
+- Server errors (internal failures, timeouts, cancellation)
+- Invalid cursors or pagination tokens
+
+Protocol errors are **not actionable by the LLM** in most cases—the model cannot easily self-correct from "unknown tool" or "server error".
+
+### Tool Execution Errors (isError: true)
+
+Tool execution errors occur during tool execution and are returned as **successful results** with `isError: true`. These provide actionable feedback that LLMs can use to self-correct:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [{"type": "text", "text": "Invalid date: must be in the future (received: 2020-01-01)"}],
+    "isError": true
+  }
+}
+```
+
+**When to use Tool Execution Errors:**
+- Input validation failures the LLM could correct (bad date format, value out of range)
+- Business logic errors (file not found, permission denied)
+- API failures with actionable details
+- Any error where the message helps the LLM retry with better inputs
+
+### Choosing the Right Error Type
+
+| Scenario | Error Type | Why |
+|----------|------------|-----|
+| Tool name missing | Protocol (`-32602`) | Request structure issue |
+| Tool not found | Protocol (`-32601`) | Server-side resolution failure |
+| Date format invalid | Tool Execution (`isError: true`) | LLM can retry with correct format |
+| Value out of range | Tool Execution (`isError: true`) | LLM can adjust the value |
+| File path outside roots | Tool Execution (`isError: true`) | LLM can choose allowed path |
+| Tool timeout | Protocol (`-32603`) | Server-side resource limit |
+| API rate limited | Tool Execution (`isError: true`) | LLM can retry later |
+
+### SDK Support
+
+Use the SDK helpers to return the appropriate error type:
+
+```bash
+# Tool Execution Error (LLM can self-correct)
+# Return exit 0 but with error in output
+mcp_emit_json '{"error": "Date must be in the future", "received": "2020-01-01"}'
+# The framework wraps this with isError: true on non-zero exit
+
+# OR use mcp_fail for structured errors that terminate the tool
+mcp_fail -32602 "count must be between 1 and 100" '{"received": -5}'
+```
+
+For validation that happens early in a tool (before doing real work), prefer returning `isError: true` so the LLM learns from the feedback.
+
+---
+
+## General Error Handling
+
 - Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; timeouts and cancellation surface as JSON-RPC errors before tool output is returned.
 - Resource failures use JSON-RPC errors (no `isError` flag) consistent with the MCP spec: invalid cursors/params return `-32602`, provider failures and oversized payloads return `-32603`.
 - Malformed tool output triggers a substitution with an error payload and a logged incident.

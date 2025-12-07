@@ -15,6 +15,7 @@
 : "${MCPBASH_JOB_CONTROL_ENABLED:=false}"
 : "${MCPBASH_PROCESS_GROUP_WARNED:=false}"
 : "${MCPBASH_LOG_JSON_TOOL:=quiet}"
+: "${MCPBASH_LOG_STARTUP:=false}"
 : "${MCPBASH_BOOTSTRAP_STAGED:=false}"
 : "${MCPBASH_BOOTSTRAP_TMP_DIR:=}"
 : "${MCPBASH_HOME:=}"
@@ -426,6 +427,9 @@ mcp_runtime_log_startup_summary() {
 		return 0
 	fi
 	if ! mcp_runtime_log_allowed; then
+		return 0
+	fi
+	if [ "${MCPBASH_LOG_STARTUP:-false}" != "true" ] && ! mcp_logging_verbose_enabled; then
 		return 0
 	fi
 

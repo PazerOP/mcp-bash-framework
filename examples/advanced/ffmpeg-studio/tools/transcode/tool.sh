@@ -43,15 +43,28 @@ fi
 full_input="$(mcp_ffmpeg_resolve_path "${input_path}" "read")"
 full_output="$(mcp_ffmpeg_resolve_path "${output_path}" "write")"
 
-# Validation: Input exists
+# Validation: Input exists → Tool Execution Error (LLM can choose a different file)
 if [[ ! -f "${full_input}" ]]; then
-	mcp_fail -32602 "Input file not found: ${input_path}"
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Input file not found" \
+			input "${input_path}" \
+			hint "Check the file exists and is within allowed media roots"
+	)"
+	exit 1
 fi
 
 # Validation: Output collision with elicitation-based confirmation
 if [[ -f "${full_output}" ]]; then
 	if [[ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]]; then
-		mcp_fail -32602 "Output file exists and elicitation is not supported; refusing to overwrite ${output_path}"
+		# Tool Execution Error: LLM can choose a different output path
+		mcp_emit_json "$(
+			mcp_json_obj \
+				error "Output file already exists" \
+				output "${output_path}" \
+				hint "Choose a different output path or enable elicitation to confirm overwrite"
+		)"
+		exit 1
 	fi
 	if [[ -z "${json_bin}" ]]; then
 		mcp_fail -32603 "JSON tooling unavailable for elicitation parsing"
@@ -60,11 +73,15 @@ if [[ -f "${full_output}" ]]; then
 	overwrite_fields="$("${json_bin}" -r '[.action, (.content.confirmed // false)] | @tsv' <<<"${overwrite_resp}")"
 	overwrite_action="${overwrite_fields%%$'\t'*}"
 	overwrite_confirmed="${overwrite_fields#*$'\t'}"
-	if [[ "${overwrite_action}" != "accept" ]]; then
-		mcp_fail -32602 "Overwrite declined for ${output_path}"
-	fi
-	if [[ "${overwrite_confirmed}" != "true" ]]; then
-		mcp_fail -32602 "Overwrite not confirmed for ${output_path}"
+	if [[ "${overwrite_action}" != "accept" ]] || [[ "${overwrite_confirmed}" != "true" ]]; then
+		# Tool Execution Error: User declined, LLM can try different output
+		mcp_emit_json "$(
+			mcp_json_obj \
+				error "Overwrite declined" \
+				output "${output_path}" \
+				hint "Choose a different output path"
+		)"
+		exit 1
 	fi
 fi
 
@@ -95,7 +112,14 @@ case "${preset}" in
 	output_opts+=("-vf" "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
 	;;
 *)
-	mcp_fail -32602 "Invalid preset: ${preset}"
+	# Tool Execution Error: LLM can choose a valid preset
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Invalid preset" \
+			preset "${preset}" \
+			hint "Valid presets: 1080p, 720p, audio-only, gif"
+	)"
+	exit 1
 	;;
 esac
 

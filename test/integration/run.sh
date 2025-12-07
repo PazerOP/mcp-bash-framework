@@ -72,6 +72,8 @@ TESTS=(
 	"test_cli_validate_errors.sh"
 	"test_project_root_detection.sh"
 	"test_elicitation.sh"
+	"test_elicitation_modes.sh"
+	"test_icons.sh"
 	"test_cli_scaffold_test.sh"
 	"test_scaffold_smoke.sh"
 )

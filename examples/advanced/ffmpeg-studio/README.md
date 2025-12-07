@@ -37,6 +37,25 @@
 ```
 Include `_meta.progressToken` to receive progress updates.
 
+**Error handling best practices**
+
+This example demonstrates the MCP pattern for error handling:
+
+| Scenario | Error Type | Why |
+|----------|------------|-----|
+| Missing arguments | Protocol Error (`-32602`) | Request structure issue |
+| File not found | Tool Execution Error (`isError: true`) | LLM can choose another file |
+| Invalid preset | Tool Execution Error (`isError: true`) | LLM can choose a valid preset |
+| Overwrite declined | Tool Execution Error (`isError: true`) | LLM can choose different output |
+| ffmpeg/ffprobe failure | Protocol Error (`-32603`) | Server-side process failure |
+
+Tool Execution Errors include actionable hints:
+```json
+{"error": "Invalid preset", "preset": "webm", "hint": "Valid presets: 1080p, 720p, audio-only, gif"}
+```
+
+See `docs/ERRORS.md` for full guidance.
+
 **Success criteria**
 - Media roots created (runner calls `check-env` to provision `media/` with `example.mp4` ready to use)
 - Progress notifications arrive during long runs; cancellation returns `-32001`

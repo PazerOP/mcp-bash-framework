@@ -4,8 +4,8 @@
 set -euo pipefail
 
 mcp_spec_supported_protocols() {
-	# Default protocol 2025-06-18 with explicit back-compat for earlier releases.
-	printf '%s' "2025-06-18 2025-03-26 2024-11-05"
+	# Default protocol 2025-11-25 with explicit back-compat for earlier releases.
+	printf '%s' "2025-11-25 2025-06-18 2025-03-26 2024-11-05"
 }
 
 mcp_spec_resolve_protocol_version() {

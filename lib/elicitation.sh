@@ -3,10 +3,17 @@
 
 set -euo pipefail
 
-# Track client elicitation capability
+# Track client elicitation capability (SEP-1036: form vs URL modes)
 MCPBASH_CLIENT_SUPPORTS_ELICITATION="${MCPBASH_CLIENT_SUPPORTS_ELICITATION:-0}"
+MCPBASH_CLIENT_ELICIT_FORM="${MCPBASH_CLIENT_ELICIT_FORM:-0}"
+MCPBASH_CLIENT_ELICIT_URL="${MCPBASH_CLIENT_ELICIT_URL:-0}"
+
 mcp_elicitation_support_flag_path() {
 	printf '%s/elicitation.support' "${MCPBASH_STATE_DIR}"
+}
+
+mcp_elicitation_modes_flag_path() {
+	printf '%s/elicitation.modes' "${MCPBASH_STATE_DIR}"
 }
 
 mcp_elicitation_write_support_flag() {
@@ -14,18 +21,52 @@ mcp_elicitation_write_support_flag() {
 	printf '%s' "${value}" >"$(mcp_elicitation_support_flag_path 2>/dev/null)" 2>/dev/null || true
 }
 
+mcp_elicitation_write_modes_flag() {
+	local form="$1"
+	local url="$2"
+	printf '%s %s' "${form}" "${url}" >"$(mcp_elicitation_modes_flag_path 2>/dev/null)" 2>/dev/null || true
+}
+
 mcp_elicitation_init() {
 	local client_caps="${1:-{}}"
 	MCPBASH_CLIENT_SUPPORTS_ELICITATION=0
-	if mcp_json_has_key "${client_caps}" "elicitation"; then
-		MCPBASH_CLIENT_SUPPORTS_ELICITATION=1
-	else
+	MCPBASH_CLIENT_ELICIT_FORM=0
+	MCPBASH_CLIENT_ELICIT_URL=0
+
+	if ! mcp_json_has_key "${client_caps}" "elicitation"; then
 		# Fallback for environments without JSON tooling: string match
 		case "${client_caps}" in
-		*\"elicitation\"*) MCPBASH_CLIENT_SUPPORTS_ELICITATION=1 ;;
+		*\"elicitation\"*)
+			MCPBASH_CLIENT_SUPPORTS_ELICITATION=1
+			# Legacy format without modes → assume form support
+			MCPBASH_CLIENT_ELICIT_FORM=1
+			;;
 		esac
+	else
+		MCPBASH_CLIENT_SUPPORTS_ELICITATION=1
+
+		# SEP-1036: Check for form/url mode support
+		# New format: {"elicitation": {"form": {}, "url": {}}}
+		# Legacy format: {"elicitation": {}} → implies form
+		local elicit_caps
+		elicit_caps="$(printf '%s' "${client_caps}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.elicitation // {}' 2>/dev/null || printf '{}')"
+
+		if mcp_json_has_key "${elicit_caps}" "form"; then
+			MCPBASH_CLIENT_ELICIT_FORM=1
+		fi
+		# "url" or "oob" both mean URL mode
+		if mcp_json_has_key "${elicit_caps}" "url" || mcp_json_has_key "${elicit_caps}" "oob"; then
+			MCPBASH_CLIENT_ELICIT_URL=1
+		fi
+
+		# Legacy: empty elicitation object → assume form support
+		if [ "${MCPBASH_CLIENT_ELICIT_FORM}" = "0" ] && [ "${MCPBASH_CLIENT_ELICIT_URL}" = "0" ]; then
+			MCPBASH_CLIENT_ELICIT_FORM=1
+		fi
 	fi
+
 	mcp_elicitation_write_support_flag "${MCPBASH_CLIENT_SUPPORTS_ELICITATION}"
+	mcp_elicitation_write_modes_flag "${MCPBASH_CLIENT_ELICIT_FORM}" "${MCPBASH_CLIENT_ELICIT_URL}"
 }
 
 mcp_elicitation_is_supported() {
@@ -35,6 +76,24 @@ mcp_elicitation_is_supported() {
 	local flag
 	flag="$(cat "$(mcp_elicitation_support_flag_path 2>/dev/null)" 2>/dev/null || true)"
 	[ "${flag}" = "1" ]
+}
+
+mcp_elicitation_form_supported() {
+	if [ "${MCPBASH_CLIENT_ELICIT_FORM}" = "1" ]; then
+		return 0
+	fi
+	local modes
+	modes="$(cat "$(mcp_elicitation_modes_flag_path 2>/dev/null)" 2>/dev/null || true)"
+	[ "${modes%% *}" = "1" ]
+}
+
+mcp_elicitation_url_supported() {
+	if [ "${MCPBASH_CLIENT_ELICIT_URL}" = "1" ]; then
+		return 0
+	fi
+	local modes
+	modes="$(cat "$(mcp_elicitation_modes_flag_path 2>/dev/null)" 2>/dev/null || true)"
+	[ "${modes##* }" = "1" ]
 }
 
 mcp_elicitation_clear_request_id() {
@@ -112,9 +171,19 @@ mcp_elicitation_handle_tool_request() {
 		return 0
 	fi
 
-	local message schema
+	local message mode
 	message="$(printf '%s' "${request_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.message')" || message=""
-	schema="$(printf '%s' "${request_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.schema')" || schema='{"type":"object","properties":{}}'
+	mode="$(printf '%s' "${request_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mode // "form"')" || mode="form"
+
+	# SEP-1036: Check if client supports the requested mode
+	if [ "${mode}" = "form" ] && ! mcp_elicitation_form_supported; then
+		printf '{"action":"decline","content":null}' >"${response_file}"
+		return 0
+	fi
+	if [ "${mode}" = "url" ] && ! mcp_elicitation_url_supported; then
+		printf '{"action":"decline","content":null}' >"${response_file}"
+		return 0
+	fi
 
 	local request_id
 	request_id="$(mcp_rpc_next_outgoing_id)"
@@ -122,9 +191,23 @@ mcp_elicitation_handle_tool_request() {
 	local message_json
 	message_json="$(mcp_json_quote_text "${message}")"
 
+	# SEP-1036: Build elicitation request based on mode
 	local elicit_request
-	elicit_request="$(printf '{"jsonrpc":"2.0","id":%s,"method":"elicitation/create","params":{"message":%s,"requestedSchema":%s}}' \
-		"${request_id}" "${message_json}" "${schema}")"
+	if [ "${mode}" = "url" ]; then
+		# URL mode: send url field instead of requestedSchema
+		local url
+		url="$(printf '%s' "${request_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.url // ""')" || url=""
+		local url_json
+		url_json="$(mcp_json_quote_text "${url}")"
+		elicit_request="$(printf '{"jsonrpc":"2.0","id":%s,"method":"elicitation/create","params":{"mode":"url","message":%s,"url":%s}}' \
+			"${request_id}" "${message_json}" "${url_json}")"
+	else
+		# Form mode: send requestedSchema
+		local schema
+		schema="$(printf '%s' "${request_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.schema')" || schema='{"type":"object","properties":{}}'
+		elicit_request="$(printf '{"jsonrpc":"2.0","id":%s,"method":"elicitation/create","params":{"mode":"form","message":%s,"requestedSchema":%s}}' \
+			"${request_id}" "${message_json}" "${schema}")"
+	fi
 
 	printf '%s' "${request_id}" >"$(mcp_elicitation_request_id_path_for_worker "${key}")"
 	mcp_rpc_register_pending "${request_id}" "${response_file}"

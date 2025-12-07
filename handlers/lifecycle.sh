@@ -24,7 +24,12 @@ mcp_handle_lifecycle() {
 		requested_version="$(mcp_json_extract_protocol_version "${json_payload}")"
 		local negotiated_version=""
 		if ! negotiated_version="$(mcp_spec_resolve_protocol_version "${requested_version}")"; then
-			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":"Unsupported protocol version"}}' "${id}"
+			local supported_list
+			supported_list="$(mcp_spec_supported_protocols | tr ' ' ', ')"
+			local err_msg
+			err_msg="$(printf 'Unsupported protocol version: %s. Supported: %s' "${requested_version:-<none>}" "${supported_list}")"
+			err_msg="$(mcp_json_quote_text "${err_msg}")"
+			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${err_msg}"
 			return 0
 		fi
 

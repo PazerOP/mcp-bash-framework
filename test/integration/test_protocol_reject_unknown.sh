@@ -29,5 +29,12 @@ test_assert_eq "${init_code}" "-32602"
 if [[ "${init_message}" != *"Unsupported protocol version"* ]]; then
 	test_fail "unexpected error message for unsupported protocol: ${init_message}"
 fi
+# Should include the requested version and supported versions in the message
+if [[ "${init_message}" != *"2024-10-07"* ]]; then
+	test_fail "error message should include the unsupported version requested: ${init_message}"
+fi
+if [[ "${init_message}" != *"Supported:"* ]]; then
+	test_fail "error message should list supported versions: ${init_message}"
+fi
 
 printf 'Protocol reject unknown version test passed.\n'

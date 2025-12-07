@@ -33,9 +33,15 @@ fi
 
 full_path="$(mcp_ffmpeg_resolve_path "${path}" "read")"
 
-# Validation: File exists
+# Validation: File exists → Tool Execution Error (LLM can choose a different file)
 if [[ ! -f "${full_path}" ]]; then
-	mcp_fail -32602 "File not found: ${path}"
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "File not found" \
+			path "${path}" \
+			hint "Check the file exists and is within allowed media roots"
+	)"
+	exit 1
 fi
 
 # Run ffprobe
