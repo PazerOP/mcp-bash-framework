@@ -166,19 +166,19 @@ Framework (Install Once)               Your Project (Version Control This)
 
 ## Direct Tool Execution (run-tool)
 
-Use `run-tool` to invoke a single tool without starting the full MCP server. This wires the same environment as the server (SDK path, args, metadata, roots).
+Use `run-tool` to invoke a single tool without starting the full MCP server. This wires the same environment as the server (SDK path, args, metadata, roots). Tool names must match `^[a-zA-Z0-9_-]{1,64}$`; Some clients, including Claude Desktop, enforces this and rejects dotted names, so prefer hyphens/underscores for namespaces.
 
 ```bash
 # Basic invocation (project inferred from CWD or MCPBASH_PROJECT_ROOT)
-mcp-bash run-tool my.tool --args '{"value":"hello"}'
+mcp-bash run-tool my-tool --args '{"value":"hello"}'
 
 # Simulate roots (comma-separated), stream stderr, override timeout, or print env
-mcp-bash run-tool my.tool --args '{"value":"hi"}' --roots /tmp/project,/data/shared --verbose --timeout 15
+mcp-bash run-tool my-tool --args '{"value":"hi"}' --roots /tmp/project,/data/shared --verbose --timeout 15
 # Inspect wiring without executing
-mcp-bash run-tool my.tool --print-env --dry-run
+mcp-bash run-tool my-tool --print-env --dry-run
 
 # Dry-run validates metadata/args without executing the tool
-mcp-bash run-tool my.tool --dry-run
+mcp-bash run-tool my-tool --dry-run
 ```
 
 Flags: `--args` (JSON object), `--roots` (comma-separated paths), `--dry-run`, `--timeout <secs>`, `--verbose` (stream tool stderr), `--no-refresh` (reuse cached registry), `--minimal` (force degraded mode), `--project-root <dir>`, `--print-env` (dump wiring without executing). Elicitation is not supported in CLI mode.

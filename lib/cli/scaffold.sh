@@ -38,7 +38,7 @@ mcp_scaffold_server() {
 		exit 1
 	fi
 	if ! mcp_scaffold_validate_name "${name}"; then
-		printf 'Invalid server name: use alphanumerics, dot, underscore, dash only; no paths or traversal.\n' >&2
+		printf 'Invalid server name: use alphanumerics, underscore, dash only (1-64 chars); no dots, paths, or traversal (Some clients including Claude Desktop rejects dots).\n' >&2
 		exit 1
 	fi
 

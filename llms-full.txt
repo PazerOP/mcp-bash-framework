@@ -263,7 +263,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Always compact JSON (`-c`) before emitting; use `-r` for raw strings.
 - Naming:
   - Framework functions: `mcp_<module>_<name>`.
-  - Tool names: `namespace.toolname` (e.g., `example.hello`).
+  - Tool names: `^[a-zA-Z0-9_-]{1,64}$`, no dots (Some clients including Claude Desktop rejects them); prefer hyphenated namespaces (e.g., `example-hello`).
 - Discovery:
   - Auto-discovered: tools, resources, prompts (from configured dirs).
   - Manual-only: completions and any custom overrides via `server.d/register.sh`.

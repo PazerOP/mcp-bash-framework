@@ -30,6 +30,7 @@ Guardrails are enforced for all registries:
 ## `.registry/tools.json`
 
 Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DIR`.
+Tool names must match `^[a-zA-Z0-9_-]{1,64}$`; Some clients, including Claude Desktop, enforces this and rejects dotted names, so prefer hyphenated or underscored namespaces.
 
 ```json
 {
@@ -37,7 +38,7 @@ Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DI
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "example.hello",
+      "name": "example-hello",
       "description": "Return a friendly greeting",
       "path": "hello/tool.sh",
       "inputSchema": {
@@ -74,7 +75,7 @@ Entries describe resource templates and providers. Paths are relative to `MCPBAS
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "file.readme",
+      "name": "file-readme",
       "description": "Serve README fragments",
       "path": "readme/README.md",
       "uri": "file:///path/to/project/resources/readme/README.md",
@@ -130,7 +131,7 @@ Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "summarise.notes",
+      "name": "summarise-notes",
       "description": "Summarise meeting notes",
       "path": "summarise/summarise.txt",
       "arguments": {
