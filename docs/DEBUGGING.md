@@ -20,7 +20,7 @@ mcp-bash debug: logging to /tmp/mcpbash.debug.12345/payload.debug.log
 
 ## Claude Desktop on macOS (PATH + quarantine)
 
-Claude Desktop starts stdio servers from a minimal, non-login shell on macOS, so `~/.zshrc`/`~/.bash_profile` are skipped and PATH/env customizations (nvm/pyenv/uv/rbenv, etc.) are missing. Common symptoms: `ENOENT` / `command not found`, `transport closed unexpectedly`, missing env vars. Folder location (Desktop/Documents/etc.) does not matter; the environment does.
+Claude Desktop often execs servers directly (no login shell), so `~/.zshrc`/`~/.bash_profile` are skipped and PATH/env customizations (nvm/pyenv/uv/rbenv, etc.) are missing. Common symptoms: `ENOENT` / `command not found`, `transport closed unexpectedly`, missing env vars. Location can matter on macOS: Desktop/Documents/Downloads are TCC-protected and Downloads is frequently quarantined.
 
 Fixes:
 - Use absolute paths to runtimes (e.g., `/opt/homebrew/bin/node`) and set required vars in the MCP config `env` block.
@@ -36,7 +36,11 @@ Fixes:
   xattr -r -d com.apple.quarantine /path/to/project
   ```
   Helper: `scripts/macos-dequarantine.sh [path]` clears quarantine for the repo or a custom path. `xattr -cr` removes all extended attributes—only use it on trusted paths.
-- macOS folder permissions: Desktop/Documents/Downloads and similar are TCC-protected. If your server or data lives there, grant Claude Desktop “Full Disk Access” and “Files and Folders” in System Settings to avoid `Operation not permitted` or silent exits.
+- macOS folder permissions: Desktop/Documents/Downloads and similar are TCC-protected. If your server or data lives there, grant Claude Desktop “Full Disk Access” and “Files and Folders” in System Settings (or relocate to a neutral folder) to avoid `Operation not permitted` or silent exits.
+- Diagnostics: To see Gatekeeper/TCC blocks while launching a server, run:
+  ```bash
+  log stream --predicate 'process == "taskgated" OR process == "tccd" OR process == "syspolicyd"' --info
+  ```
 
 ## Analyzing Debug Logs
 

@@ -135,7 +135,7 @@ Every client works the same way: point it at the framework and tell it where you
     xattr -r -d com.apple.quarantine /Users/you/my-mcp-server
     ```
     Helper: `scripts/macos-dequarantine.sh [path]` will clear quarantine for the repo (or a specific path). `xattr -cr` clears all extended attributes; only use it on trusted paths.
-  - macOS folder permissions: Claude Desktop needs access to whatever folders your MCP touches. If your server or data lives under Desktop/Documents/Downloads or other TCC-protected folders, grant Claude “Full Disk Access” and “Files and Folders” in System Settings.
+  - macOS folder permissions: Desktop/Documents/Downloads are TCC-protected and Downloads is often quarantined. Move servers to a neutral folder (e.g., `~/mcp-servers`) or grant Claude “Full Disk Access” and “Files and Folders” in System Settings.
 - **Claude CLI/Claude Code**: Run once:
   ```bash
   claude mcp add --transport stdio mcp-bash \
