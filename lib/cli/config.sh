@@ -158,7 +158,11 @@ EOF
 	if [ "${mode}" = "inspector" ]; then
 		local env_arg=""
 		if [ "${has_project_root}" = "true" ]; then
-			env_arg="-e MCPBASH_PROJECT_ROOT=${MCPBASH_PROJECT_ROOT}"
+			local inspector_project_root="${MCPBASH_PROJECT_ROOT}"
+			if command -v cygpath >/dev/null 2>&1; then
+				inspector_project_root="$(cygpath -u "${inspector_project_root}")"
+			fi
+			env_arg="-e MCPBASH_PROJECT_ROOT=${inspector_project_root}"
 		fi
 		local command_escaped
 		command_escaped="$(printf '%q' "${command_path}")"
