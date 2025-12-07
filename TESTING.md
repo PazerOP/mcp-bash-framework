@@ -39,6 +39,12 @@ Includes coverage for the CLI `run-tool` entrypoint, SDK helpers, path normaliza
 - `UNICODE=1 ./test/integration/run.sh` restores the ✅/❌ glyphs.
 - JSON tooling discovery logs are suppressed during the suite by default; set `MCPBASH_LOG_JSON_TOOL=log` to re-enable them.
 
+### Session Helper (Interactive Test Calls)
+
+- For batch requests, prefer `test_run_mcp()` from `test/common/env.sh` (single process, NDJSON in/out).
+- When you need sequential interactive calls without prebuilding request files, source `test/common/session.sh` and use `mcp_session_start`/`mcp_session_call`/`mcp_session_end`.
+- Limitations: skips notifications, overwrites EXIT traps (clears them on cleanup), no timeout, minimal error handling.
+
 ## Examples Suite
 
 ```

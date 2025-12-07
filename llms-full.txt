@@ -163,8 +163,13 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 - Git provider:
   - Disabled by default; enable with `MCPBASH_ENABLE_GIT_PROVIDER=true`.
   - `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` → allow/deny lists (private/loopback always blocked).
-  - `MCPBASH_GIT_TIMEOUT` (default ~30s, capped at 60s).
-  - `MCPBASH_GIT_MAX_KB` (default 50MB, capped at 1GB).
+- `MCPBASH_GIT_TIMEOUT` (default ~30s, capped at 60s).
+- `MCPBASH_GIT_MAX_KB` (default 50MB, capped at 1GB).
+
+## TESTING HELPERS
+
+- Batch harness: `test/common/env.sh` exposes `test_run_mcp <workspace> requests.ndjson responses.ndjson` to send a request batch through one server process (preferred for most tests).
+- Interactive helper: `test/common/session.sh` lets tests start one server and call tools sequentially via `mcp_session_start`/`mcp_session_call`/`mcp_session_end` (skips notifications, overwrites EXIT traps, no timeout; use only when prebuilding NDJSON is awkward).
 
 ## PROVIDERS
 
