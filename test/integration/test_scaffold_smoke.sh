@@ -17,6 +17,7 @@ test_create_tmpdir
 export MCPBASH_STAGING_TAR=0
 WORKSPACE="${TEST_TMPDIR}/workspace"
 test_stage_workspace "${WORKSPACE}"
+export TMPDIR="${WORKSPACE}/.tmp"
 
 # Minimal server metadata for the scaffolded project.
 mkdir -p "${WORKSPACE}/server.d"

@@ -8,6 +8,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "${script_dir}/../.." && pwd)"
 export MCPBASH_PROJECT_ROOT="${MCPBASH_PROJECT_ROOT:-${project_root}}"
 
+# Ensure a writable, short TMPDIR to avoid Windows /tmp path issues.
+tmp_base="${project_root}/.tmp"
+mkdir -p "${tmp_base}" 2>/dev/null || true
+export TMPDIR="${tmp_base}"
+export MCPBASH_TMP_ROOT="${tmp_base}"
+
 # Locate mcp-bash (prefer local project/bin, then PATH, then MCPBASH_HOME).
 MCPBASH_BIN="${MCPBASH_BIN:-}"
 if [[ -z "${MCPBASH_BIN}" ]] && [[ -x "${project_root}/bin/mcp-bash" ]]; then
