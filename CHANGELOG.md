@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - unreleased
 
+### Added
+- `mcp-bash config --inspector` prints a ready-to-run MCP Inspector command (stdio transport) with `MCPBASH_PROJECT_ROOT` pre-populated for the current project.
+
+### Fixed
+- Startup diagnostics detect stdio transport and log to stderr (transport, cwd, project root, JSON tool) to keep stdout JSON-only for clients.
+
 ### Changed
 - `mcp-bash config --wrapper` now creates `<project-root>/<server-name>.sh` and `chmod +x` when stdout is a TTY (with filename validation and collision checks) while preserving stdout output for piped/redirected use; help/docs/tests updated.
 

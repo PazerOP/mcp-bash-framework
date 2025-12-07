@@ -59,6 +59,12 @@ Configure MCP Inspector to use the debug subcommand:
 
 The log location is printed to stderr at startup, so you can see it in Inspector's server output.
 
+For a ready-to-run Inspector invocation that sets `MCPBASH_PROJECT_ROOT` for the current project, run:
+
+```bash
+mcp-bash config --inspector
+```
+
 ## Debug Log Format
 
 The log file `payload.debug.log` is pipe-delimited:

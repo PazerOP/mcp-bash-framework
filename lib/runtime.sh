@@ -18,6 +18,8 @@
 : "${MCPBASH_BOOTSTRAP_STAGED:=false}"
 : "${MCPBASH_BOOTSTRAP_TMP_DIR:=}"
 : "${MCPBASH_HOME:=}"
+: "${MCPBASH_TRANSPORT:=}"
+: "${MCPBASH_TRANSPORT_STDIO:=false}"
 
 # Path normalization helpers (Bash 3.2+). Load if not already present.
 if ! command -v mcp_path_normalize >/dev/null 2>&1; then
@@ -47,6 +49,41 @@ mcp_runtime_log_allowed() {
 	error | critical | alert | emergency) return 1 ;;
 	esac
 	return 0
+}
+
+mcp_runtime_detect_transport() {
+	# Transport detection is currently limited to stdio. If an unsupported value
+	# is provided, fall back to stdio and warn on stderr to avoid stdout noise.
+	local transport="${MCPBASH_TRANSPORT:-}"
+	if [ -z "${transport}" ] && [ -n "${MCP_TRANSPORT:-}" ]; then
+		transport="${MCP_TRANSPORT}"
+	fi
+	if [ -z "${transport}" ]; then
+		transport="stdio"
+	fi
+	transport="$(printf '%s' "${transport}" | tr '[:upper:]' '[:lower:]')"
+
+	case "${transport}" in
+	stdio) ;;
+	*)
+		if mcp_runtime_log_allowed; then
+			printf '%s\n' "mcp-bash: unsupported transport '${transport}'; defaulting to stdio." >&2
+		fi
+		transport="stdio"
+		;;
+	esac
+
+	MCPBASH_TRANSPORT="${transport}"
+	if [ "${transport}" = "stdio" ]; then
+		MCPBASH_TRANSPORT_STDIO="true"
+	else
+		MCPBASH_TRANSPORT_STDIO="false"
+	fi
+	export MCPBASH_TRANSPORT MCPBASH_TRANSPORT_STDIO
+}
+
+mcp_runtime_is_stdio_transport() {
+	[ "${MCPBASH_TRANSPORT_STDIO:-false}" = "true" ]
 }
 
 mcp_runtime_find_project_root() {
@@ -382,6 +419,38 @@ mcp_runtime_detect_json_tool() {
 		printf '%s\n' 'No gojq/jq found; entering minimal mode with reduced capabilities.' >&2
 	fi
 	return 0
+}
+
+mcp_runtime_log_startup_summary() {
+	if ! mcp_runtime_is_stdio_transport; then
+		return 0
+	fi
+	if ! mcp_runtime_log_allowed; then
+		return 0
+	fi
+
+	local command_path cwd project_root json_tool json_tool_detail
+
+	if ! command_path="$(command -v -- "$0" 2>/dev/null || true)"; then
+		command_path="$0"
+	elif [ -z "${command_path}" ]; then
+		command_path="$0"
+	fi
+	cwd="$(pwd -P 2>/dev/null || pwd)"
+	project_root="${MCPBASH_PROJECT_ROOT:-<unset>}"
+	json_tool="${MCPBASH_JSON_TOOL:-none}"
+	if [ -n "${MCPBASH_JSON_TOOL_BIN:-}" ]; then
+		json_tool_detail="${json_tool}:${MCPBASH_JSON_TOOL_BIN}"
+	else
+		json_tool_detail="${json_tool}"
+	fi
+
+	printf 'mcp-bash startup: transport=%s command=%q cwd=%q project_root=%q json_tool=%q\n' \
+		"${MCPBASH_TRANSPORT:-stdio}" \
+		"${command_path}" \
+		"${cwd}" \
+		"${project_root}" \
+		"${json_tool_detail}" >&2
 }
 
 mcp_runtime_force_minimal_mode_requested() {

@@ -99,6 +99,7 @@ The harness wraps `mcp-bash run-tool`, validates your project before running, an
 mcp-bash config --show
 mcp-bash config --json           # machine-readable descriptor (name/command/env)
 mcp-bash config --client cursor  # client-specific snippet
+mcp-bash config --inspector      # ready-to-run Inspector command (stdio)
 mcp-bash config --wrapper        # TTY: creates ./<server-name>.sh; piped/redirected: stdout
 ```
 

@@ -29,7 +29,7 @@ Usage:
   mcp-bash validate [--project-root DIR] [--fix] [--json]
                      [--explain-defaults] [--strict]
                            # validate project structure and metadata
-  mcp-bash config [--project-root DIR] [--show|--json|--client NAME]
+  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper|--inspector]
                            # print MCP client configuration snippets
   mcp-bash doctor          # diagnose environment and installation issues
   mcp-bash registry refresh [--project-root DIR] [--no-notify] [--quiet] [--filter PATH]
@@ -141,6 +141,7 @@ mcp_verify_stdout_target() {
 main() {
 	require_bash_runtime
 	initialize_runtime_paths
+	mcp_runtime_detect_transport
 	mcp_verify_stdout_target
 	mcp_runtime_detect_json_tool
 	mcp_runtime_log_batch_mode

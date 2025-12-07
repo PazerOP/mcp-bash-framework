@@ -120,5 +120,11 @@ export WORKSPACE
 	# Wait for exit
 	wait "${PID}" || true
 
+	if ! grep -q "mcp-bash startup: transport=stdio" err_log 2>/dev/null; then
+		echo "missing startup stderr log" >&2
+		rm in_pipe out_pipe
+		exit 1
+	fi
+
 	rm in_pipe out_pipe
 )

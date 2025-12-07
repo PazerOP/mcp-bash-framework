@@ -16,7 +16,7 @@ cli_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mcp_cli_config() {
 	local project_root=""
-	local mode="show" # show | json | wrapper
+	local mode="show" # show | json | wrapper | inspector
 	local client_filter=""
 
 	while [ $# -gt 0 ]; do
@@ -34,6 +34,9 @@ mcp_cli_config() {
 		--wrapper)
 			mode="wrapper"
 			;;
+		--inspector)
+			mode="inspector"
+			;;
 		--client)
 			shift
 			client_filter="${1:-}"
@@ -41,12 +44,13 @@ mcp_cli_config() {
 		--help | -h)
 			cat <<'EOF'
 Usage:
-  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper]
+  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper|--inspector]
 
 Print MCP client configuration snippets for the current project.
   --wrapper   Generate auto-install wrapper script.
               Interactive: creates <project-root>/<name>.sh
               Piped/redirected: writes to stdout
+  --inspector Print a ready-to-run MCP Inspector command (stdio transport)
 EOF
 			exit 0
 			;;
@@ -148,6 +152,22 @@ EOF
 		printf '%s\n' "${wrapper_content}" >"${wrapper_path}"
 		chmod +x "${wrapper_path}"
 		printf 'Wrapper script created: %s\n' "${wrapper_path}" >&2
+		exit 0
+	fi
+
+	if [ "${mode}" = "inspector" ]; then
+		local env_arg=""
+		if [ "${has_project_root}" = "true" ]; then
+			env_arg="-e MCPBASH_PROJECT_ROOT=$(printf '%q' "${MCPBASH_PROJECT_ROOT}")"
+		fi
+		local command_escaped
+		command_escaped="$(printf '%q' "${command_path}")"
+
+		if [ -n "${env_arg}" ]; then
+			printf 'npx @modelcontextprotocol/inspector %s --transport stdio -- %s\n' "${env_arg}" "${command_escaped}"
+		else
+			printf 'npx @modelcontextprotocol/inspector --transport stdio -- %s\n' "${command_escaped}"
+		fi
 		exit 0
 	fi
 
