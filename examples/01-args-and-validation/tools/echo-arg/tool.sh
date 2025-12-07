@@ -6,7 +6,7 @@ set -euo pipefail
 source "${MCP_SDK:?MCP_SDK environment variable not set}/tool-sdk.sh"
 
 value="$(mcp_args_get '.value')"
-if [ -z "${value}" ]; then
+if [[ -z "${value}" ]]; then
 	mcp_fail_invalid_args "Missing 'value' argument"
 fi
 

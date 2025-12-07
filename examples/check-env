@@ -4,13 +4,13 @@ set -euo pipefail
 printf 'Bash version: %s\n' "$BASH_VERSION"
 has_json_tool=false
 if command -v jq >/dev/null 2>&1; then
-  printf 'jq available: %s\n' "$(jq --version)"
-  has_json_tool=true
+	printf 'jq available: %s\n' "$(jq --version)"
+	has_json_tool=true
 fi
 if command -v gojq >/dev/null 2>&1; then
-  printf 'gojq available: %s\n' "$(gojq --version | head -n1)"
-  has_json_tool=true
+	printf 'gojq available: %s\n' "$(gojq --version | head -n1)"
+	has_json_tool=true
 fi
-if [ "${has_json_tool}" = false ]; then
-  printf 'No jq/gojq found: runtime will enter minimal mode (tools/resources/prompts/completion disabled).\n'
+if [[ "${has_json_tool}" == "false" ]]; then
+	printf 'No jq/gojq found: runtime will enter minimal mode (tools/resources/prompts/completion disabled).\n'
 fi

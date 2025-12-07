@@ -13,24 +13,24 @@ input_path="$(mcp_args_get '.input // empty' 2>/dev/null || true)"
 timestamp="$(mcp_args_get '.time // empty' 2>/dev/null || true)"
 output_path="$(mcp_args_get '.output // empty' 2>/dev/null || true)"
 
-if [ -z "${input_path}" ] && [ $# -ge 1 ]; then
+if [[ -z "${input_path}" ]] && [[ $# -ge 1 ]]; then
 	input_path="$1"
 fi
-if [ -z "${timestamp}" ] && [ $# -ge 2 ]; then
+if [[ -z "${timestamp}" ]] && [[ $# -ge 2 ]]; then
 	timestamp="$2"
 fi
-if [ -z "${output_path}" ] && [ $# -ge 3 ]; then
+if [[ -z "${output_path}" ]] && [[ $# -ge 3 ]]; then
 	output_path="$3"
 fi
 
-if [ -z "${input_path}" ] || [ -z "${timestamp}" ] || [ -z "${output_path}" ]; then
+if [[ -z "${input_path}" ]] || [[ -z "${timestamp}" ]] || [[ -z "${output_path}" ]]; then
 	mcp_fail_invalid_args "Missing required arguments: input, time, output"
 fi
 
-full_input="$(ffmpeg_resolve_path "${input_path}" "read")"
-full_output="$(ffmpeg_resolve_path "${output_path}" "write")"
+full_input="$(mcp_ffmpeg_resolve_path "${input_path}" "read")"
+full_output="$(mcp_ffmpeg_resolve_path "${output_path}" "write")"
 
-if [ ! -f "${full_input}" ]; then
+if [[ ! -f "${full_input}" ]]; then
 	mcp_fail -32602 "Input file not found: ${input_path}"
 fi
 

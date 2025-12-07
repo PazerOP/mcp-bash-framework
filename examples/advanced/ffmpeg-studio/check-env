@@ -2,13 +2,13 @@
 set -euo pipefail
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "Error: ffmpeg is required but not found in PATH." >&2
-  exit 1
+	printf 'Error: ffmpeg is required but not found in PATH.\n' >&2
+	exit 1
 fi
 
 if ! command -v ffprobe >/dev/null 2>&1; then
-  echo "Error: ffprobe is required but not found in PATH." >&2
-  exit 1
+	printf 'Error: ffprobe is required but not found in PATH.\n' >&2
+	exit 1
 fi
 
 # Create media directory if it doesn't exist
@@ -16,10 +16,10 @@ MEDIA_DIR="$(cd "$(dirname "$0")" && pwd)/media"
 mkdir -p "${MEDIA_DIR}"
 
 # Generate a tiny sample clip if none exists
-if [ ! -f "${MEDIA_DIR}/example.mp4" ]; then
-  ffmpeg -hide_banner -loglevel error \
-    -f lavfi -i testsrc=duration=3:size=640x360:rate=25 \
-    -pix_fmt yuv420p "${MEDIA_DIR}/example.mp4" >/dev/null
+if [[ ! -f "${MEDIA_DIR}/example.mp4" ]]; then
+	ffmpeg -hide_banner -loglevel error \
+		-f lavfi -i testsrc=duration=3:size=640x360:rate=25 \
+		-pix_fmt yuv420p "${MEDIA_DIR}/example.mp4" >/dev/null
 fi
 
 exit 0

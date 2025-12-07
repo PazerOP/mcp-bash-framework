@@ -18,7 +18,7 @@ mcp_cli_config() {
 	local project_root=""
 	local mode="show" # show | json | wrapper | inspector
 	local client_filter=""
-	local wrapper_login="false"
+	local wrapper_env="false"
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -35,9 +35,9 @@ mcp_cli_config() {
 		--wrapper)
 			mode="wrapper"
 			;;
-		--wrapper-login | --login-wrapper)
+		--wrapper-env)
 			mode="wrapper"
-			wrapper_login="true"
+			wrapper_env="true"
 			;;
 		--inspector)
 			mode="inspector"
@@ -49,13 +49,13 @@ mcp_cli_config() {
 		--help | -h)
 			cat <<'EOF'
 Usage:
-  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper|--wrapper-login|--inspector]
+  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper|--wrapper-env|--inspector]
 
 Print MCP client configuration snippets for the current project.
   --wrapper   Generate auto-install wrapper script.
               Interactive: creates <project-root>/<name>.sh
               Piped/redirected: writes to stdout
-  --wrapper-login Same as --wrapper but sources your shell profile (~/.zshrc, ~/.bash_profile, ~/.bashrc) before exec.
+  --wrapper-env Same as --wrapper but sources your shell profile (~/.zshrc, ~/.bash_profile, ~/.bashrc) before exec.
   --inspector Print a ready-to-run MCP Inspector command (stdio transport)
 EOF
 			exit 0
@@ -111,7 +111,7 @@ EOF
 
 	if [ "${mode}" = "wrapper" ]; then
 		local wrapper_content
-		if [ "${wrapper_login}" = "true" ]; then
+		if [ "${wrapper_env}" = "true" ]; then
 			wrapper_content="$(
 				cat <<'EOF'
 #!/usr/bin/env bash

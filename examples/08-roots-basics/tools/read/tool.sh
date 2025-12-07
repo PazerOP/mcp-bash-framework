@@ -6,15 +6,15 @@ set -euo pipefail
 source "${MCP_SDK:?MCP_SDK environment variable not set}/tool-sdk.sh"
 
 json_tool="${MCPBASH_JSON_TOOL_BIN:-}"
-if [ -z "${json_tool}" ] || ! command -v "${json_tool}" >/dev/null 2>&1; then
+if [[ -z "${json_tool}" ]] || ! command -v "${json_tool}" >/dev/null 2>&1; then
 	json_tool=""
 fi
 
 path="$(mcp_args_get '.path // empty' 2>/dev/null || true)"
-if [ -z "${path}" ] && [ $# -ge 1 ]; then
+if [[ -z "${path}" ]] && [[ $# -ge 1 ]]; then
 	path="$1"
 fi
-if [ -z "${path}" ]; then
+if [[ -z "${path}" ]]; then
 	mcp_fail_invalid_args "Missing required argument: path"
 fi
 
@@ -34,14 +34,14 @@ else
 	fi
 fi
 
-if [ ! -f "${full_path}" ]; then
+if [[ ! -f "${full_path}" ]]; then
 	mcp_fail -32602 "File not found: ${path}"
 fi
 
 content="$(cat "${full_path}")"
 bytes="$(printf '%s' "${content}" | wc -c | tr -d ' ')"
 
-if [ -n "${json_tool}" ]; then
+if [[ -n "${json_tool}" ]]; then
 	mcp_emit_json "$("${json_tool}" -n \
 		--arg path "${full_path}" \
 		--arg content "${content}" \
