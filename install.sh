@@ -307,7 +307,8 @@ if [ "${PATH_NEEDED}" = "true" ] && [ -n "${RC_FILE}" ]; then
 	printf 'Or open a new terminal.\n\n'
 fi
 
-printf 'Quick start:\n'
-printf '  %s%s%s\n' "${BLUE}" 'mkdir my-server && cd my-server' "${NC}"
-printf '  %s%s%s\n' "${BLUE}" 'mcp-bash init --name my-server' "${NC}"
+printf 'Quick start:\n\n'
+printf '  %s%s%s\n' "${BLUE}" 'mcp-bash new my-server && cd my-server' "${NC}"
+printf '  %s%s%s\n\n' "${BLUE}" 'mcp-bash run-tool hello' "${NC}"
+printf 'Test with MCP Inspector:\n\n'
 printf '  %s%s%s\n' "${BLUE}" 'npx @modelcontextprotocol/inspector --transport stdio -- mcp-bash' "${NC}"
