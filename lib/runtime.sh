@@ -31,6 +31,15 @@
 : "${MCPBASH_LOG_DIR:=}"
 : "${MCPBASH_LOG_TIMESTAMP:=false}"
 
+mcp_runtime_json_escape() {
+	local value="${1:-}"
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	value="${value//$'\n'/\\n}"
+	value="${value//$'\r'/}"
+	printf '%s' "${value}"
+}
+
 # Path normalization helpers (Bash 3.2+). Load if not already present.
 if ! command -v mcp_path_normalize >/dev/null 2>&1; then
 	# shellcheck source=lib/path.sh disable=SC1090,SC1091
@@ -297,6 +306,34 @@ mcp_runtime_init_paths() {
 	fi
 	if [ -n "${MCPBASH_LOG_DIR}" ]; then
 		(umask 077 && mkdir -p "${MCPBASH_LOG_DIR}") >/dev/null 2>&1 || true
+	fi
+	if [ "${MCPBASH_CI_MODE:-false}" = "true" ] && [ -n "${MCPBASH_LOG_DIR:-}" ]; then
+		local env_snapshot="${MCPBASH_LOG_DIR}/env-snapshot.json"
+		if [ ! -f "${env_snapshot}" ]; then
+			local path_entries path_count path_first path_last os_name cwd
+			path_entries="${PATH:-}"
+			path_count=0
+			path_first=""
+			path_last=""
+			os_name="$(uname -s 2>/dev/null || printf '')"
+			cwd="$(pwd 2>/dev/null || printf '')"
+			if [ -n "${path_entries}" ]; then
+				IFS=':' read -r path_first _ <<<"${path_entries}"
+				IFS=':' read -r -a path_array <<<"${path_entries}"
+				path_count="${#path_array[@]}"
+				path_last="${path_array[-1]}"
+			fi
+			{
+				printf '{'
+				printf '"bashVersion":"%s",' "$(mcp_runtime_json_escape "${BASH_VERSION:-}")"
+				printf '"os":"%s",' "$(mcp_runtime_json_escape "${os_name}")"
+				printf '"cwd":"%s",' "$(mcp_runtime_json_escape "${cwd}")"
+				printf '"pathCount":%s,' "${path_count}"
+				printf '"pathFirst":"%s",' "$(mcp_runtime_json_escape "${path_first}")"
+				printf '"pathLast":"%s"' "$(mcp_runtime_json_escape "${path_last}")"
+				printf '}\n'
+			} >"${env_snapshot}" 2>/dev/null || true
+		fi
 	fi
 
 	# Create state directory (needed for fastpath caching in registry refresh)

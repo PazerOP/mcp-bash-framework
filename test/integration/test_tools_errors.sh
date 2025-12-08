@@ -21,6 +21,9 @@ test_stage_workspace "${WORKSPACE}"
 mkdir -p "${WORKSPACE}/tmp"
 STATE_DIR="${WORKSPACE}/tmp/mcpbash.state.test"
 mkdir -p "${STATE_DIR}"
+LOG_DIR="${WORKSPACE}/logs"
+rm -rf "${LOG_DIR}" 2>/dev/null || true
+mkdir -p "${LOG_DIR}"
 
 mkdir -p "${WORKSPACE}/tools/fail"
 
@@ -56,7 +59,7 @@ JSON
 
 (
 	cd "${WORKSPACE}" || exit 1
-	MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCPBASH_TMP_ROOT="${WORKSPACE}/tmp" MCPBASH_STATE_DIR="${STATE_DIR}" MCPBASH_TRACE_TOOLS=true MCPBASH_PRESERVE_STATE=true ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
+	MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCPBASH_TMP_ROOT="${WORKSPACE}/tmp" MCPBASH_STATE_DIR="${STATE_DIR}" MCPBASH_TRACE_TOOLS=true MCPBASH_PRESERVE_STATE=true MCPBASH_CI_MODE=true MCPBASH_LOG_DIR="${LOG_DIR}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
 )
 
 assert_json_lines "${WORKSPACE}/responses.ndjson"
@@ -100,6 +103,22 @@ fi
 trace_file="$(find "${STATE_DIR}" -name 'trace.*.log' -type f -print -quit 2>/dev/null || true)"
 if [ -z "${trace_file}" ] || [ ! -f "${trace_file}" ]; then
 	test_fail "trace file missing"
+fi
+
+summary_file="$(find "${LOG_DIR}" "${WORKSPACE}/tmp" "${TMPDIR:-/tmp}" -maxdepth 4 -name 'failure-summary.jsonl' -type f -print -quit 2>/dev/null || true)"
+if [ -z "${summary_file}" ] || [ ! -f "${summary_file}" ]; then
+	test_fail "failure summary missing"
+fi
+fail_summary_tool="$(head -n1 "${summary_file}" | jq -r '.tool // empty')"
+if [ "${fail_summary_tool}" != "fail.tool" ]; then
+	test_fail "failure summary missing fail.tool entry"
+fi
+env_snapshot="$(find "${LOG_DIR}" "${WORKSPACE}/tmp" "${TMPDIR:-/tmp}" -maxdepth 4 -name 'env-snapshot.json' -type f -print -quit 2>/dev/null || true)"
+if [ -z "${env_snapshot}" ] || [ ! -f "${env_snapshot}" ]; then
+	test_fail "env snapshot missing"
+fi
+if ! jq -e '.bashVersion and .os and .cwd' "${env_snapshot}" >/dev/null 2>&1; then
+	test_fail "env snapshot missing required fields"
 fi
 
 printf 'Tool error and timeout tests passed.\n'

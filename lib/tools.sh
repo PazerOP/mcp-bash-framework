@@ -957,6 +957,57 @@ mcp_tools_trace_ps4() {
 	printf '+ ${BASH_SOURCE[0]##*/}:${LINENO}: '
 }
 
+mcp_tools_json_escape() {
+	local value="${1:-}"
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	printf '%s' "${value}"
+}
+
+mcp_tools_append_failure_summary() {
+	local name="$1"
+	local exit_code="$2"
+	local message="$3"
+	local stderr_tail="$4"
+	local trace_line="$5"
+	local arg_count="$6"
+	local arg_bytes="$7"
+	local meta_keys="$8"
+	local roots_count="$9"
+	local timed_out="${10:-false}"
+	if [ "${MCPBASH_CI_MODE:-false}" != "true" ]; then
+		return 0
+	fi
+	if [ -z "${MCPBASH_LOG_DIR:-}" ]; then
+		return 0
+	fi
+	local summary_file="${MCPBASH_LOG_DIR}/failure-summary.jsonl"
+	local ts
+	ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf '')"
+	local args_hash="n/a"
+	if command -v sha256sum >/dev/null 2>&1; then
+		args_hash="$(printf '%s' "${MCP_TOOL_ARGS_JSON:-}" | sha256sum | cut -d' ' -f1)"
+	elif command -v shasum >/dev/null 2>&1; then
+		args_hash="$(printf '%s' "${MCP_TOOL_ARGS_JSON:-}" | shasum -a 256 | cut -d' ' -f1)"
+	fi
+	{
+		printf '{'
+		printf '"ts":"%s",' "${ts}"
+		printf '"tool":"%s",' "$(mcp_tools_json_escape "${name}")"
+		printf '"exitCode":%s,' "${exit_code:-0}"
+		printf '"timedOut":%s,' "${timed_out}"
+		printf '"argCount":%s,' "${arg_count:-0}"
+		printf '"argBytes":%s,' "${arg_bytes:-0}"
+		printf '"argHash":"%s",' "${args_hash}"
+		printf '"metaKeys":%s,' "${meta_keys:-0}"
+		printf '"roots":%s,' "${roots_count:-0}"
+		printf '"message":"%s",' "$(mcp_tools_json_escape "${message}")"
+		printf '"stderrTail":"%s",' "$(mcp_tools_json_escape "${stderr_tail}")"
+		printf '"traceLine":"%s"' "$(mcp_tools_json_escape "${trace_line}")"
+		printf '}\n'
+	} >>"${summary_file}" 2>/dev/null || true
+}
+
 # shellcheck disable=SC2031  # Subshell env exports are deliberate; parent values remain unchanged.
 mcp_tools_call() {
 	local name="$1"
@@ -1110,17 +1161,17 @@ mcp_tools_call() {
 	'' | *[!0-9]*) effective_timeout="" ;;
 	esac
 
+	local arg_count=0
+	local arg_bytes=0
+	local meta_count=0
+	if [ -n "${args_json}" ] && [ "${args_json}" != "{}" ]; then
+		arg_count="$(printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
+		arg_bytes="$(printf '%s' "${args_json}" | wc -c | tr -d ' ')"
+	fi
+	if [ -n "${metadata}" ] && [ "${metadata}" != "{}" ]; then
+		meta_count="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
+	fi
 	if mcp_logging_is_enabled "debug"; then
-		local arg_count=0
-		local arg_bytes=0
-		local meta_count=0
-		if [ -n "${args_json}" ] && [ "${args_json}" != "{}" ]; then
-			arg_count="$(printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
-			arg_bytes="$(printf '%s' "${args_json}" | wc -c | tr -d ' ')"
-		fi
-		if [ -n "${metadata}" ] && [ "${metadata}" != "{}" ]; then
-			meta_count="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
-		fi
 		mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Invoke tool=${name} arg_count=${arg_count} arg_bytes=${arg_bytes} meta_keys=${meta_count} roots=${MCP_ROOTS_COUNT:-0} timeout=${effective_timeout:-none} trace=${trace_enabled}"
 		if mcp_logging_verbose_enabled; then
 			mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Tool path=${absolute_path}"
@@ -1509,6 +1560,7 @@ mcp_tools_call() {
 					'
 			)"
 		fi
+		mcp_tools_append_failure_summary "${name}" "${exit_code}" "Tool timed out" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "true"
 		_mcp_tools_emit_error -32603 "Tool timed out" "${timeout_data}"
 		cleanup_tool_temp_files
 		return 1
@@ -1624,6 +1676,7 @@ mcp_tools_call() {
 					'
 			)"
 		fi
+		mcp_tools_append_failure_summary "${name}" "${exit_code}" "${message_from_stderr}" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "false"
 		_mcp_tools_emit_error -32603 "${message_from_stderr}" "${data_json}"
 		cleanup_tool_temp_files
 		return 1

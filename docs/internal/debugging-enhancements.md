@@ -41,3 +41,6 @@ Ordered by impact on debuggability.
 
 ### Phase A status — **Partially Implemented**
 - **Status:** `MCPBASH_CI_MODE` sets a CI-safe `MCPBASH_TMP_ROOT` (prefers `RUNNER_TEMP`, then `$GITHUB_WORKSPACE/.mcpbash-tmp`, else `TMPDIR`), sets `MCPBASH_KEEP_LOGS=true` when unset (preserves state/logs), defaults log level to `info` (`debug` when `MCPBASH_CI_VERBOSE=true`), defaults `MCPBASH_LOG_DIR` when unset, and enables timestamped log messages by default. Remaining Phase A item (log formatting beyond timestamps) is pending.
+
+### Phase B status — **Implemented**
+- **Status:** Failure summaries emitted as JSONL (`failure-summary.jsonl`) under `MCPBASH_LOG_DIR` (or default CI log dir) when CI mode is enabled; includes tool name, exit code, timeout flag, arg/meta counts, roots count, stderr tail, trace line, and hashed args (no raw args). Env snapshot (`env-snapshot.json`) written once per run with allowlisted fields (bash version, OS, cwd, PATH first/last/count).
