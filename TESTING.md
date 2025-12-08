@@ -1,5 +1,7 @@
 # Testing Guide
 
+For the full list of environment knobs and defaults, see [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md).
+
 ## Runner Flags
 
 - `VERBOSE=1` streams per-test logs and re-enables JSON tooling discovery logs (default is quiet).

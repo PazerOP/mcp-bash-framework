@@ -390,30 +390,18 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MCPBASH_TOOLS_DIR` | `$MCPBASH_PROJECT_ROOT/tools` | Override tools location. |
-| `MCPBASH_RESOURCES_DIR` | `$MCPBASH_PROJECT_ROOT/resources` | Override resources location. |
-| `MCPBASH_PROMPTS_DIR` | `$MCPBASH_PROJECT_ROOT/prompts` | Override prompts location. |
-| `MCPBASH_SERVER_DIR` | `$MCPBASH_PROJECT_ROOT/server.d` | Override server hooks location. |
-| `MCPBASH_REGISTRY_DIR` | `$MCPBASH_PROJECT_ROOT/.registry` | Override registry cache location. |
-| `MCPBASH_REGISTRY_MAX_BYTES` | `104857600` | Maximum serialized registry size (bytes) before discovery fails fast. |
+| `MCPBASH_TOOLS_DIR` / `MCPBASH_RESOURCES_DIR` / `MCPBASH_PROMPTS_DIR` / `MCPBASH_SERVER_DIR` | Derived from `MCPBASH_PROJECT_ROOT` | Override content and server hook locations. |
+| `MCPBASH_REGISTRY_DIR` | `$MCPBASH_PROJECT_ROOT/.registry` | Registry cache location. |
 | `MCPBASH_MAX_CONCURRENT_REQUESTS` | `16` | Cap concurrent worker slots. |
-| `MCPBASH_LOG_LEVEL` | `info` | Log level. Falls back to `MCPBASH_LOG_LEVEL_DEFAULT` when unset; use `debug` to see path resolution and discovery traces. |
-| `MCPBASH_LOG_VERBOSE` | (unset) | Set to `true` to include full paths and manual-registration script output in logs. **Security note**: exposes file paths and usernames; use only in trusted environments. See [docs/LOGGING.md](docs/LOGGING.md). |
-| `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Background polling interval for resource subscriptions; set to `0` to disable. |
-| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications as they are produced instead of after handler completion. |
-| `MCPBASH_PROGRESS_FLUSH_INTERVAL` | `0.5` | Flush interval (seconds) for live progress/log streaming when enabled. |
-| `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. See [docs/DEBUGGING.md](docs/DEBUGGING.md). |
-| `MCPBASH_PRESERVE_STATE` | (unset) | Set to `true` to keep state directory after server exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |
-| `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Lifecycle, ping, and logging only). |
-| `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files once payloads exceed this many bytes. |
-| `MCPBASH_MAX_TOOL_STDERR_SIZE` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum stderr captured from a tool before failing the call. |
-| `MCPBASH_MAX_RESOURCE_BYTES` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum resource payload size accepted before failing fast. |
-| `MCPBASH_CORRUPTION_WINDOW` | `60` | Time window (seconds) for tracking stdout corruption events. |
-| `MCPBASH_CORRUPTION_THRESHOLD` | `3` | Number of stdout corruption events allowed within the window before exit. |
-| `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool environment isolation: `minimal` (default), `inherit`, or `allowlist`. |
-| `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env var names permitted when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
-| `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Optional subpath to limit `registry refresh` scanning scope (defaults to full tools/resources/prompts trees). |
-| `MCPBASH_COMPAT_BATCHES` | (unset) | Set to `true` to enable legacy batch request support. |
+| `MCPBASH_MAX_TOOL_OUTPUT_SIZE` | `10485760` | Tool stdout limit; stderr/resources inherit when unset. |
+| `MCPBASH_LOG_LEVEL` | `info` | Log level; use `debug` for discovery traces. |
+| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications during execution. |
+| `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files above this size. |
+| `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
+| `MCPBASH_DEFAULT_TOOL_TIMEOUT` | `30` | Default tool timeout (seconds). |
+| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+
+Full list and defaults: see [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md).
 
 ### Server Metadata
 
