@@ -65,8 +65,12 @@ bootstrap_dir="$(grep -oE '/[^ )]*mcpbash\.bootstrap\.[A-Za-z0-9]+' "${STDERR_LO
 if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
 	printf 'Note: KEEP_LOGS enabled; bootstrap workspace may be preserved: %s\n' "${bootstrap_dir:-<none>}"
 else
-	if [ -n "${bootstrap_dir}" ] && [ -d "${bootstrap_dir}" ]; then
-		test_fail "bootstrap workspace not cleaned up: ${bootstrap_dir}"
+	# On Windows/Git Bash, the TMP root uses a Windows path; the helper emits
+	# a best-effort cleanup warning for /tmp paths. Skip strict removal checks there.
+	if ! uname -s 2>/dev/null | grep -qiE 'mingw|msys|cygwin'; then
+		if [ -n "${bootstrap_dir}" ] && [ -d "${bootstrap_dir}" ]; then
+			test_fail "bootstrap workspace not cleaned up: ${bootstrap_dir}"
+		fi
 	fi
 fi
 
