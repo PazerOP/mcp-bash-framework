@@ -9,7 +9,7 @@ _Figure: High-level dataflow—MCP client sends JSON-RPC over stdio to mcp-bash 
 
 ## Repository layout
 ```
-mcp-bash-framework/
+~/.local/share/mcp-bash/   # or mcp-bash-framework/ if cloned manually
 ├─ bin/mcp-bash
 ├─ lib/
 │  ├─ core.sh

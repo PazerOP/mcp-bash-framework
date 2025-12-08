@@ -43,8 +43,9 @@ curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main
 Manual install (for security-conscious environments):
 
 ```bash
-git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/mcp-bash-framework
-echo 'export PATH="$HOME/mcp-bash-framework/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/.local/share/mcp-bash
+mkdir -p ~/.local/bin && ln -sf ~/.local/share/mcp-bash/bin/mcp-bash ~/.local/bin/mcp-bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc (if not already in PATH)
 ```
 
 Pin a release with the installer (auto-prefixes `v` for bare versions):
@@ -117,14 +118,14 @@ Picking a wrapper:
 Every client works the same way: point it at the framework and tell it where your project lives:
 
 1. Set `MCPBASH_PROJECT_ROOT=/path/to/your/project`.
-2. Point it at your framework install (`/path/to/mcp-bash-framework/bin/mcp-bash`).
+2. Point it at the `mcp-bash` binary (installed to `~/.local/bin/mcp-bash` by the installer).
    - If you generated a wrapper via `mcp-bash config --wrapper` or `--wrapper-env`, you can point clients at `<project-root>/<server-name>.sh`; the wrapper already wires `MCPBASH_PROJECT_ROOT` for you.
 
 - **Claude Desktop**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows) and add:
   ```jsonc
   "mcpServers": {
     "mcp-bash": {
-      "command": "/Users/you/mcp-bash-framework/bin/mcp-bash",
+      "command": "/Users/you/.local/bin/mcp-bash",
       "env": {"MCPBASH_PROJECT_ROOT": "/Users/you/my-mcp-server"}
     }
   }
@@ -137,7 +138,7 @@ Every client works the same way: point it at the framework and tell it where you
     Then point Claude Desktop at `/Users/you/my-mcp-server/mcp-bash.sh` as the `command`.
   - macOS quarantine: Gatekeeper can block quarantined downloads (typically from browsers/DMGs/AirDrop) even when paths are correct. CLI downloads (curl/wget/git) often skip quarantine. If you see `ENOENT`, `transport closed unexpectedly`, or `Operation not permitted` despite correct paths, clear quarantine and restart Claude Desktop:
     ```bash
-    xattr -r -d com.apple.quarantine /Users/you/mcp-bash-framework
+    xattr -r -d com.apple.quarantine ~/.local/share/mcp-bash
     xattr -r -d com.apple.quarantine /Users/you/my-mcp-server
     ```
     Helper: `scripts/macos-dequarantine.sh [path]` will clear quarantine for the repo (or a specific path). `xattr -cr` clears all extended attributes; only use it on trusted paths.
@@ -146,7 +147,7 @@ Every client works the same way: point it at the framework and tell it where you
   ```bash
   claude mcp add --transport stdio mcp-bash \
     --env MCPBASH_PROJECT_ROOT="$HOME/my-mcp-server" \
-    -- "$HOME/mcp-bash-framework/bin/mcp-bash"
+    -- "$HOME/.local/bin/mcp-bash"
   ```
 - **Cursor**: Create `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project) with the same `mcpServers` JSON as above.
 - **Windsurf (Cascade)**: Edit `~/.codeium/windsurf/mcp_config.json` via Settings → Advanced → Cascade, and add the same `mcpServers` entry.
@@ -155,7 +156,7 @@ Every client works the same way: point it at the framework and tell it where you
   mcpServers:
     mcp-bash:
       type: stdio
-      command: /Users/you/mcp-bash-framework/bin/mcp-bash
+      command: /Users/you/.local/bin/mcp-bash
       env:
         MCPBASH_PROJECT_ROOT: /Users/you/my-mcp-server
   ```
@@ -167,7 +168,7 @@ Every client works the same way: point it at the framework and tell it where you
   os.environ["MCPBASH_PROJECT_ROOT"] = "/Users/you/my-mcp-server"
   async with MCPServerStdio(
       params={
-          "command": "/Users/you/mcp-bash-framework/bin/mcp-bash",
+          "command": "/Users/you/.local/bin/mcp-bash",
           # optionally add args/env/cwd if your server needs them
       }
   ) as server:
@@ -179,14 +180,14 @@ Every client works the same way: point it at the framework and tell it where you
 
 ```
 Framework (Install Once)               Your Project (Version Control This)
-~/mcp-bash-framework/                  ~/my-mcp-server/
+~/.local/share/mcp-bash/               ~/my-mcp-server/
 ├── bin/mcp-bash                       ├── tools/
 ├── lib/                               │   └── check-disk/
 ├── handlers/                          │       ├── tool.sh
 └── ...                                │       └── tool.meta.json
                                        ├── prompts/
-                                       ├── resources/
-                                       ├── server.d/
+~/.local/bin/                          ├── resources/
+└── mcp-bash → ../share/mcp-bash/...   ├── server.d/
                                        │   └── server.meta.json (optional)
                                        └── .registry/ (auto-generated)
 ```
@@ -232,7 +233,7 @@ source "${MCP_SDK}/tool-sdk.sh"
 If you copy a tool out of this repository (or build your own project layout) and run it directly, set `MCP_SDK` before executing the script:
 
 ```bash
-export MCP_SDK=/path/to/mcp-bash-framework/sdk
+export MCP_SDK=~/.local/share/mcp-bash/sdk
 ./tools/check-disk/tool.sh
 ```
 

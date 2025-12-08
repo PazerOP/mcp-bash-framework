@@ -29,12 +29,12 @@ pip install mcp-proxy
 # Point to your project directory (tools/, resources/, prompts/)
 export MCPBASH_PROJECT_ROOT=/path/to/your/project
 
-# Point to where you cloned/installed the mcp-bash framework
+# Uses mcp-bash from PATH (installed via install.sh)
 mcp-proxy \
   --host 0.0.0.0 \
   --port 8080 \
   --env MCPBASH_PROJECT_ROOT="$MCPBASH_PROJECT_ROOT" \
-  /path/to/mcp-bash-framework/bin/mcp-bash
+  mcp-bash
 ```
 
 Clients connect to `http://<host>:8080/sse`.

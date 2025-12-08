@@ -103,8 +103,8 @@ jobs:
       
       - name: Install mcp-bash
         run: |
-          curl -fsSL https://raw.githubusercontent.com/modelcontextprotocol/mcp-bash-framework/main/install.sh | bash -s -- --yes
-          echo "$HOME/mcp-bash-framework/bin" >> $GITHUB_PATH
+          curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --yes
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           
       - name: Validate project
         run: mcp-bash validate

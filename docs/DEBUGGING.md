@@ -32,7 +32,7 @@ Fixes:
   Point Claude Desktop at that wrapper as the `command`.
 - macOS quarantine can silently block downloaded binaries/scripts. Browser/DMG/AirDrop downloads are commonly quarantined; CLI fetches (curl/wget/git) often are not. Clear quarantine, then restart Claude Desktop:
   ```bash
-  xattr -r -d com.apple.quarantine /path/to/mcp-bash-framework
+  xattr -r -d com.apple.quarantine ~/.local/share/mcp-bash
   xattr -r -d com.apple.quarantine /path/to/project
   ```
   Helper: `scripts/macos-dequarantine.sh [path]` clears quarantine for the repo or a custom path. `xattr -cr` removes all extended attributes—only use it on trusted paths.
