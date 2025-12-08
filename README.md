@@ -432,20 +432,23 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 
 ### Scope and Goals
 - Bash-only Model Context Protocol server verified on macOS Bash 3.2, Linux Bash ≥3.2, and experimental Git-Bash/WSL environments.
-- Targets MCP protocol version `2025-06-18` while supporting negotiated downgrades.
+- Targets MCP protocol version `2025-11-25` while supporting negotiated downgrades.
 - Transport support is limited to stdio; HTTP/SSE/OAuth transports remain out of scope (see [Remote Connectivity](docs/REMOTE.md) for gateway options).
 
 ### Protocol Version Compatibility
-This server targets MCP protocol version `2025-06-18` (the current stable specification) and supports negotiated downgrades during `initialize`.
+This server targets MCP protocol version `2025-11-25` (the current stable specification) and supports negotiated downgrades during `initialize`.
 
 | Version | Status |
 |---------|--------|
-| `2025-06-18` | ✅ Fully supported (default) |
+| `2025-11-25` | ✅ Fully supported (default) |
+| `2025-06-18` | ✅ Supported (downgrade) |
 | `2025-03-26` | ✅ Supported (downgrade) |
 | `2024-11-05` | ✅ Supported (downgrade) |
 | `2024-10-07` | ❌ **Not supported** |
 
 Unsupported versions receive an `initialize` error payload: `{"code":-32602,"message":"Unsupported protocol version"}`.
+
+For a complete feature-by-feature breakdown across all MCP versions, see the [Feature Support Matrix](SPEC-COMPLIANCE.md#feature-support-matrix) in `SPEC-COMPLIANCE.md`.
 
 ## FAQ
 
