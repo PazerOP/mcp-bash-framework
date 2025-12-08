@@ -5,7 +5,7 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - unreleased
+## [0.5.0] - 2025-12-08
 
 ### Added
 - Protocol version `2025-11-25` support for compatibility with MCP Inspector v0.17+ and latest MCP SDK.
