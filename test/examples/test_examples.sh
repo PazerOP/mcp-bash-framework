@@ -85,7 +85,7 @@ JSON
 
 	jq -e -s '
 		def by_id(id): first(.[] | select(.id == id));
-		by_id("init").result.protocolVersion == "2025-06-18"
+		by_id("init").result.protocolVersion == "2025-11-25"
 	' "${workdir}/responses.ndjson" >/dev/null
 
 	jq -e -s --arg tool_name "${tool_name}" '

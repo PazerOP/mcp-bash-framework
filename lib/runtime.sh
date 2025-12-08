@@ -239,6 +239,9 @@ mcp_runtime_init_paths() {
 	# 2. Otherwise, auto-detect from current directory
 	# 3. For server mode with bootstrap allowed, stage bootstrap project
 	# 4. Otherwise, emit a clear error
+	if [ -n "${MCPBASH_TMP_ROOT:-}" ]; then
+		MCPBASH_TMP_ROOT="${MCPBASH_TMP_ROOT%/}"
+	fi
 	if [ -n "${MCPBASH_PROJECT_ROOT:-}" ]; then
 		if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
 			printf 'mcp-bash: MCPBASH_PROJECT_ROOT directory does not exist: %s\n' "${MCPBASH_PROJECT_ROOT}" >&2

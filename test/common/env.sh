@@ -73,6 +73,9 @@ test_create_tmpdir() {
 }
 
 test_cleanup_tmpdir() {
+	if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
+		return 0
+	fi
 	if [ -n "${TEST_TMPDIR:-}" ] && [ -d "${TEST_TMPDIR}" ]; then
 		rm -rf "${TEST_TMPDIR}" 2>/dev/null || true
 	fi

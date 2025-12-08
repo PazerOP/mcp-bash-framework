@@ -13,7 +13,7 @@ MCP_SESSION_ID=0
 mcp_session_start() {
 	local workspace="${1:-${MCPBASH_PROJECT_ROOT:-$PWD}}"
 	local mcp_bin="${MCPBASH_BIN:-mcp-bash}"
-	local protocol_version="${MCPBASH_PROTOCOL_VERSION:-2025-06-18}"
+	local protocol_version="${MCPBASH_PROTOCOL_VERSION:-2025-11-25}"
 
 	MCP_SESSION_DIR="$(mktemp -d)"
 	mkfifo "${MCP_SESSION_DIR}/in" "${MCP_SESSION_DIR}/out"

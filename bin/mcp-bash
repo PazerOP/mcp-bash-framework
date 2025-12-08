@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # mcp-bash must execute on Bash ≥3.2 across macOS/Linux/WSL without edits.
-# Core targets MCP protocol version 2025-06-18 and maintains stdout discipline.
+# Core targets MCP protocol version 2025-11-25 and maintains stdout discipline.
 # Transport scope is limited to stdio; no alternative transports are supported.
 
 set -euo pipefail
@@ -68,7 +68,7 @@ EOF
 # Keep a stable, versioned core separated from extension directories.
 # Server metadata (name, version, title, etc.) is loaded from server.d/server.meta.json
 # with smart defaults derived from the project structure. See mcp_runtime_load_server_meta().
-MCPBASH_PROTOCOL_VERSION="2025-06-18"
+MCPBASH_PROTOCOL_VERSION="2025-11-25"
 MCPBASH_NEGOTIATED_PROTOCOL_VERSION="${MCPBASH_PROTOCOL_VERSION}"
 
 require_bash_runtime() {
