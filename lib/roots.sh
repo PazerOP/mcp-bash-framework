@@ -85,6 +85,13 @@ mcp_roots_append_unique() {
 	local path="$1"
 	local name="$2"
 
+	# Ensure arrays exist even if sourced under set -u in unusual order.
+	if ! declare -p MCPBASH_ROOTS_PATHS >/dev/null 2>&1; then
+		MCPBASH_ROOTS_PATHS=()
+		MCPBASH_ROOTS_URIS=()
+		MCPBASH_ROOTS_NAMES=()
+	fi
+
 	local existing
 	for existing in "${MCPBASH_ROOTS_PATHS[@]}"; do
 		if [ "${existing}" = "${path}" ]; then
