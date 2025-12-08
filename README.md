@@ -5,17 +5,30 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=main&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
 [![License](https://img.shields.io/github/license/yaniv-golan/mcp-bash-framework)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-%3E%3D3.2-green.svg)](https://www.gnu.org/software/bash/)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue)](https://spec.modelcontextprotocol.io/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-blue)](https://spec.modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#runtime-requirements)
 [![MCP Badge](https://lobehub.com/badge/mcp/yaniv-golan-mcp-bash-framework)](https://lobehub.com/mcp/yaniv-golan-mcp-bash-framework)
 
 > **Repository:** [`mcp-bash-framework`](https://github.com/yaniv-golan/mcp-bash-framework) &nbsp;•&nbsp; **CLI/Binary:** `mcp-bash`
 
-**mcp-bash** lets you expose Bash scripts and binaries directly to AI systems with zero ceremony.
+## Contents
 
-- Runs on the Bash you already have. No runtimes, no dependency chain.
-- Handles concurrency, timeouts and cancellation the way real systems need.
-- You write the tools. The framework stays out of your way.
+- [MCP Spec Coverage](#mcp-spec-coverage)
+- [Why Bash?](#why-bash)
+- [Quick Start](#quick-start)
+- [Client Recipes](#client-recipes)
+- [Client Compatibility](#client-compatibility)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
+- [Learn by Example](#learn-by-example)
+- [Documentation](#documentation)
+- [FAQ](#faq)
+
+> **The most complete MCP implementation in pure Bash.** Tools, resources, prompts, elicitation, roots, progress, cancellation—the full spec, no runtimes beyond your shell.
+>
+> - Runs on Bash 3.2+ (macOS/Linux stock). No Node, no Python, no containers.
+> - Handles concurrency, timeouts, and cancellation the way production systems need.
+> - You write the tools. The framework stays out of your way.
 
 ## Why this exists
 
@@ -27,6 +40,38 @@ Most MCP servers assume you’re willing to spin up heavyweight runtimes and fra
 - Everything must be inspectable. No magic.
 - If it’s not needed in production, it isn’t in the framework.
 - Your project stays yours. The framework upgrades cleanly.
+
+## MCP Spec Coverage
+
+mcp-bash targets the **2025-11-25** MCP specification with negotiated downgrades to older versions.
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Core Protocol | ✅ Full | Lifecycle, ping, capabilities, downgrades |
+| Tools | ⚠️ Near-full | list, call, icons, errors, listChanged (annotations not yet) |
+| Resources | ⚠️ Near-full | list, read, subscriptions, binary (templates stub only) |
+| Prompts | ✅ Full | list, get, arguments, icons |
+| Utilities | ✅ Full | Progress, cancellation, logging, completion |
+| Elicitation | ✅ Full | Form, URL, enum, multi-choice modes |
+| Roots | ✅ Full | Server→client request, listChanged |
+
+**Not yet implemented:** Audio content, async job/poll, sampling, server-identity discovery, tool annotations.
+
+Transport is stdio-only by design. See [Remote Connectivity](docs/REMOTE.md) for HTTP/SSE proxy options.
+
+→ [Full compliance matrix](SPEC-COMPLIANCE.md)
+
+## Why Bash?
+
+| | mcp-bash | TypeScript SDK | Python SDK |
+|---|----------|----------------|------------|
+| Runtime | Bash 3.2+ (pre-installed) | Node.js 18+ | Python 3.10+ |
+| Install | `curl \| bash` or `git clone` | `npm install` | `pip install` |
+| Startup | No VM warmup | Node.js startup | Python startup |
+| Dependencies | jq or gojq | npm packages | pip packages |
+| Best for | Shell automation, existing scripts, air-gapped/minimal environments | Node.js applications | Python applications |
+
+If your tools are already shell scripts, wrapping them in Node or Python adds complexity for no benefit. mcp-bash lets you expose them directly.
 
 ## Quick Start
 
@@ -56,14 +101,24 @@ curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main
 curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.4.0
 ```
 
-### 1.5 (Optional) Verify Your Install
+### 1.5 Verify It Works (30 seconds)
 
 ```bash
 mcp-bash doctor
-mcp-bash doctor --json    # machine-readable readiness (framework/runtime/project)
-```
+# Expected output includes lines like:
+#   ✓ Bash version: 5.x.x (>= 3.2 required)
+#   ✓ jq installed: /usr/bin/jq
+#   All checks passed! Ready to build MCP servers.
 
-You should see green checks for required dependencies (or clear errors if something is missing).
+# Quick end-to-end test (optional):
+mcp-bash new demo-server
+cd demo-server
+mcp-bash run-tool hello --args '{"name":"World"}'
+# Expected: {"message":"Hello World"}
+
+# Cleanup (the demo-server directory persists until you remove it):
+cd .. && rm -rf demo-server
+```
 
 ### 2. Create Your Project
 
@@ -177,6 +232,23 @@ Every client works the same way: point it at the framework and tell it where you
       ...
   ```
 - **Windows note**: Use Git Bash or WSL so `/usr/bin/env bash` and your paths resolve; adjust paths to `C:\Users\you\...` as needed.
+
+## Client Compatibility
+
+| Client | Status |
+|--------|--------|
+| Claude Desktop | Tested (macOS, Windows) |
+| Claude CLI / Claude Code | Tested |
+| Cursor | Config documented |
+| Windsurf (Cascade) | Config documented |
+| LibreChat | Config documented |
+| OpenAI Agents SDK | Example provided |
+
+**Tested** = maintainers have manually verified end-to-end. **Config documented** = configuration instructions provided but not regularly tested.
+
+**CI-tested platforms:** Ubuntu, macOS, Windows (Git Bash). CI validates the MCP protocol layer via integration tests, not specific client applications.
+
+Using a different client? Any MCP-compliant stdio client should work. [Open an issue](https://github.com/yaniv-golan/mcp-bash-framework/issues) if you hit compatibility problems.
 
 ## Project Structure
 
