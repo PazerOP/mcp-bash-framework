@@ -355,7 +355,13 @@ mcp_runtime_cleanup() {
 	fi
 
 	if [ -n "${MCPBASH_STATE_DIR}" ] && [ -d "${MCPBASH_STATE_DIR}" ]; then
-		mcp_runtime_safe_rmrf "${MCPBASH_STATE_DIR}"
+		if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
+			if mcp_runtime_log_allowed; then
+				printf 'mcp-bash: state preserved at %s\n' "${MCPBASH_STATE_DIR}" >&2
+			fi
+		else
+			mcp_runtime_safe_rmrf "${MCPBASH_STATE_DIR}"
+		fi
 	fi
 
 	if [ -n "${MCPBASH_LOCK_ROOT}" ] && [ -d "${MCPBASH_LOCK_ROOT}" ]; then

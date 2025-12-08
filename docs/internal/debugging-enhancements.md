@@ -40,4 +40,4 @@ Ordered by impact on debuggability.
   - Delivery phases to reduce scope: (A) CI mode + log dir defaults + keep-logs; (B) failure summary + env snapshot; (C) GitHub annotations.
 
 ### Phase A status — **Partially Implemented**
-- **Status:** `MCPBASH_CI_MODE` sets a CI-safe `MCPBASH_TMP_ROOT` (prefers `RUNNER_TEMP`, then `$GITHUB_WORKSPACE/.mcpbash-tmp`, else `TMPDIR`), sets `MCPBASH_KEEP_LOGS=true` when unset, and defaults log level to `info` if unspecified. Remaining Phase A items (log dir default, timestamps, CI verbose override) are pending.
+- **Status:** `MCPBASH_CI_MODE` sets a CI-safe `MCPBASH_TMP_ROOT` (prefers `RUNNER_TEMP`, then `$GITHUB_WORKSPACE/.mcpbash-tmp`, else `TMPDIR`), sets `MCPBASH_KEEP_LOGS=true` when unset (preserves state/logs), and defaults log level to `info` if unspecified. Remaining Phase A items (log dir default, timestamps/log-level override knob) are pending.
