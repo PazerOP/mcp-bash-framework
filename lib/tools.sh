@@ -964,6 +964,32 @@ mcp_tools_json_escape() {
 	printf '%s' "${value}"
 }
 
+mcp_tools_gh_escape() {
+	local value="${1:-}"
+	value="${value//%/%25}"
+	value="${value//$'\r'/%0D}"
+	value="${value//$'\n'/%0A}"
+	printf '%s' "${value}"
+}
+
+mcp_tools_emit_github_annotation() {
+	local tool="$1"
+	local message="$2"
+	local trace_line="$3"
+	[ "${GITHUB_ACTIONS:-false}" = "true" ] || return 0
+	[ -n "${trace_line}" ] || return 0
+	# Expect trace format "+ file:line: rest"
+	local file=""
+	local line=""
+	if [[ "${trace_line}" =~ ^\+?[[:space:]]*([^:]+):([0-9]+):[[:space:]]* ]]; then
+		file="${BASH_REMATCH[1]}"
+		line="${BASH_REMATCH[2]}"
+	fi
+	[ -n "${file}" ] && [ -n "${line}" ] || return 0
+	local msg="Tool ${tool} failed: ${message}"
+	printf '::error file=%s,line=%s::%s\n' "$(mcp_tools_gh_escape "${file}")" "$(mcp_tools_gh_escape "${line}")" "$(mcp_tools_gh_escape "${msg}")"
+}
+
 mcp_tools_append_failure_summary() {
 	local name="$1"
 	local exit_code="$2"
@@ -1560,6 +1586,7 @@ mcp_tools_call() {
 					'
 			)"
 		fi
+		mcp_tools_emit_github_annotation "${name}" "Tool timed out" "${trace_line}"
 		mcp_tools_append_failure_summary "${name}" "${exit_code}" "Tool timed out" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "true"
 		_mcp_tools_emit_error -32603 "Tool timed out" "${timeout_data}"
 		cleanup_tool_temp_files
@@ -1676,6 +1703,7 @@ mcp_tools_call() {
 					'
 			)"
 		fi
+		mcp_tools_emit_github_annotation "${name}" "${message_from_stderr}" "${trace_line}"
 		mcp_tools_append_failure_summary "${name}" "${exit_code}" "${message_from_stderr}" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "false"
 		_mcp_tools_emit_error -32603 "${message_from_stderr}" "${data_json}"
 		cleanup_tool_temp_files

@@ -44,3 +44,6 @@ Ordered by impact on debuggability.
 
 ### Phase B status — **Implemented**
 - **Status:** Failure summaries emitted as JSONL (`failure-summary.jsonl`) under `MCPBASH_LOG_DIR` (or default CI log dir) when CI mode is enabled; includes tool name, exit code, timeout flag, arg/meta counts, roots count, stderr tail, trace line, and hashed args (no raw args). Env snapshot (`env-snapshot.json`) written once per run with allowlisted fields (bash version, OS, cwd, PATH first/last/count).
+
+### Phase C status — **Implemented**
+- **Status:** GitHub Actions annotations emitted when `GITHUB_ACTIONS=true` and a reliable trace line is available: `::error file=... line=...::Tool <name> failed: <message>`. Guarded to avoid leaking args; relies on tracing-derived `traceLine`.
