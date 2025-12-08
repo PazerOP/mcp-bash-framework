@@ -57,7 +57,7 @@ fi
 
 # Tar staging: on in CI (MCPBASH_CI_MODE=1), off by default locally. Override with MCPBASH_STAGING_TAR=1/0.
 if [ -z "${MCPBASH_STAGING_TAR:-}" ]; then
-	if [ "${MCPBASH_CI_MODE:-0}" = "1" ]; then
+	if [[ "${MCPBASH_CI_MODE:-0}" =~ ^(1|true|yes)$ ]]; then
 		MCPBASH_STAGING_TAR=1
 	else
 		MCPBASH_STAGING_TAR=0
