@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 2 ]; then
-  printf 'Usage: %s <jsonrpc-file> <server-command...>\n' "$0" >&2
-  exit 1
+if [[ $# -lt 2 ]]; then
+	printf 'Usage: %s <jsonrpc-file> <server-command...>\n' "$0" >&2
+	exit 1
 fi
 
 INPUT_FILE="$1"

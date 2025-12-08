@@ -507,13 +507,18 @@ mcp_require_path() {
 }
 
 # Elicitation helpers ---------------------------------------------------------
+# SEP-1036: Supports form (in-band) and url (out-of-band) modes
 
 MCP_ELICIT_DEFAULT_TIMEOUT="${MCPBASH_ELICITATION_TIMEOUT:-30}"
 
+# Core elicitation function with mode support
+# Usage: mcp_elicit <message> <schema_json> [timeout] [mode]
+# mode: "form" (default) or "url"
 mcp_elicit() {
 	local message="$1"
 	local schema_json="$2"
 	local timeout="${3:-${MCP_ELICIT_DEFAULT_TIMEOUT}}"
+	local mode="${4:-form}"
 
 	if [ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]; then
 		__mcp_sdk_warn "mcp_elicit: Client does not support elicitation"
@@ -532,7 +537,8 @@ mcp_elicit() {
 	local message_json
 	message_json="$(__mcp_sdk_json_escape "${message}")"
 	local tmp_request="${MCP_ELICIT_REQUEST_FILE}.tmp.$$"
-	printf '{"message":%s,"schema":%s}' "${message_json}" "${schema_json}" >"${tmp_request}"
+	# SEP-1036: Include mode in request
+	printf '{"message":%s,"schema":%s,"mode":"%s"}' "${message_json}" "${schema_json}" "${mode}" >"${tmp_request}"
 	mv "${tmp_request}" "${MCP_ELICIT_REQUEST_FILE}"
 
 	local max_iterations=$((timeout * 10))
@@ -550,6 +556,62 @@ mcp_elicit() {
 	if [ ! -f "${MCP_ELICIT_RESPONSE_FILE}" ]; then
 		rm -f "${MCP_ELICIT_REQUEST_FILE}"
 		__mcp_sdk_warn "mcp_elicit: Timeout waiting for user response"
+		printf '{"action":"error","content":null}'
+		return 1
+	fi
+
+	local response
+	response="$(cat "${MCP_ELICIT_RESPONSE_FILE}")"
+	rm -f "${MCP_ELICIT_RESPONSE_FILE}"
+	printf '%s' "${response}"
+}
+
+# SEP-1036: URL mode elicitation for secure out-of-band interactions
+# Opens a browser URL for OAuth, payments, or sensitive data entry
+# Usage: mcp_elicit_url <message> <url> [timeout]
+# Returns: {"action":"accept|decline|cancel","content":null}
+mcp_elicit_url() {
+	local message="$1"
+	local url="$2"
+	local timeout="${3:-${MCP_ELICIT_DEFAULT_TIMEOUT}}"
+
+	if [ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]; then
+		__mcp_sdk_warn "mcp_elicit_url: Client does not support elicitation"
+		printf '{"action":"decline","content":null}'
+		return 1
+	fi
+
+	if [ -z "${MCP_ELICIT_REQUEST_FILE:-}" ] || [ -z "${MCP_ELICIT_RESPONSE_FILE:-}" ]; then
+		__mcp_sdk_warn "mcp_elicit_url: Elicitation environment not configured"
+		printf '{"action":"error","content":null}'
+		return 1
+	fi
+
+	rm -f "${MCP_ELICIT_RESPONSE_FILE}"
+
+	local message_json url_json
+	message_json="$(__mcp_sdk_json_escape "${message}")"
+	url_json="$(__mcp_sdk_json_escape "${url}")"
+	local tmp_request="${MCP_ELICIT_REQUEST_FILE}.tmp.$$"
+	# SEP-1036 URL mode: message + url, no schema
+	printf '{"message":%s,"url":%s,"mode":"url"}' "${message_json}" "${url_json}" >"${tmp_request}"
+	mv "${tmp_request}" "${MCP_ELICIT_REQUEST_FILE}"
+
+	local max_iterations=$((timeout * 10))
+	local iterations=0
+	while [ ! -f "${MCP_ELICIT_RESPONSE_FILE}" ] && [ "${iterations}" -lt "${max_iterations}" ]; do
+		sleep 0.1
+		iterations=$((iterations + 1))
+		if mcp_is_cancelled; then
+			rm -f "${MCP_ELICIT_REQUEST_FILE}"
+			printf '{"action":"cancel","content":null}'
+			return 1
+		fi
+	done
+
+	if [ ! -f "${MCP_ELICIT_RESPONSE_FILE}" ]; then
+		rm -f "${MCP_ELICIT_REQUEST_FILE}"
+		__mcp_sdk_warn "mcp_elicit_url: Timeout waiting for user response"
 		printf '{"action":"error","content":null}'
 		return 1
 	fi
@@ -583,5 +645,85 @@ mcp_elicit_choice() {
 	enum_json="$(printf '%s\n' "${options[@]}" | "${json_tool}" -R . | "${json_tool}" -s -c .)"
 	local schema
 	schema="$(printf '{"type":"object","properties":{"choice":{"type":"string","enum":%s}},"required":["choice"]}' "${enum_json}")"
+	mcp_elicit "${message}" "${schema}"
+}
+
+# Titled choice: each option is "value:Display Title"
+# Example: mcp_elicit_titled_choice "Pick quality" "high:High (1080p)" "low:Low (480p)"
+# Returns: {"action":"accept","content":{"choice":"high"}}
+mcp_elicit_titled_choice() {
+	local message="$1"
+	shift
+	local options=("$@")
+	local json_tool="${MCPBASH_JSON_TOOL_BIN:-jq}"
+
+	# Build oneOf array: [{"const":"value","title":"Display Title"}, ...]
+	local one_of_items=""
+	local first=1
+	for opt in "${options[@]}"; do
+		local value="${opt%%:*}"
+		local title="${opt#*:}"
+		# If no colon, use value as title
+		[[ "${value}" == "${opt}" ]] && title="${value}"
+
+		local item
+		item="$("${json_tool}" -n -c --arg v "${value}" --arg t "${title}" '{const:$v,title:$t}')"
+		if [[ "${first}" -eq 1 ]]; then
+			one_of_items="${item}"
+			first=0
+		else
+			one_of_items="${one_of_items},${item}"
+		fi
+	done
+
+	local schema
+	schema="$(printf '{"type":"object","properties":{"choice":{"type":"string","oneOf":[%s]}},"required":["choice"]}' "${one_of_items}")"
+	mcp_elicit "${message}" "${schema}"
+}
+
+# Multi-select choice: user can select multiple options (checkboxes)
+# Example: mcp_elicit_multi_choice "Select codecs" "h264" "h265" "vp9"
+# Returns: {"action":"accept","content":{"choices":["h264","vp9"]}}
+mcp_elicit_multi_choice() {
+	local message="$1"
+	shift
+	local options=("$@")
+	local json_tool="${MCPBASH_JSON_TOOL_BIN:-jq}"
+	local enum_json
+	enum_json="$(printf '%s\n' "${options[@]}" | "${json_tool}" -R . | "${json_tool}" -s -c .)"
+	local schema
+	schema="$(printf '{"type":"object","properties":{"choices":{"type":"array","items":{"type":"string","enum":%s}}},"required":["choices"]}' "${enum_json}")"
+	mcp_elicit "${message}" "${schema}"
+}
+
+# Multi-select with titles: each option is "value:Display Title"
+# Example: mcp_elicit_titled_multi_choice "Select outputs" "mp4:MP4 Video" "mp3:MP3 Audio"
+# Returns: {"action":"accept","content":{"choices":["mp4","mp3"]}}
+mcp_elicit_titled_multi_choice() {
+	local message="$1"
+	shift
+	local options=("$@")
+	local json_tool="${MCPBASH_JSON_TOOL_BIN:-jq}"
+
+	# Build oneOf array for items
+	local one_of_items=""
+	local first=1
+	for opt in "${options[@]}"; do
+		local value="${opt%%:*}"
+		local title="${opt#*:}"
+		[[ "${value}" == "${opt}" ]] && title="${value}"
+
+		local item
+		item="$("${json_tool}" -n -c --arg v "${value}" --arg t "${title}" '{const:$v,title:$t}')"
+		if [[ "${first}" -eq 1 ]]; then
+			one_of_items="${item}"
+			first=0
+		else
+			one_of_items="${one_of_items},${item}"
+		fi
+	done
+
+	local schema
+	schema="$(printf '{"type":"object","properties":{"choices":{"type":"array","items":{"oneOf":[%s]}}},"required":["choices"]}' "${one_of_items}")"
 	mcp_elicit "${message}" "${schema}"
 }

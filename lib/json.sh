@@ -962,3 +962,117 @@ mcp_json_extract_prompt_arguments() {
 		;;
 	esac
 }
+
+# Convert local file paths in icons array to data URIs.
+# Usage: mcp_json_icons_to_data_uris <icons_json> <base_dir>
+# Input: [{"src": "./icon.svg"}, {"src": "https://..."}]
+# Output: [{"src": "data:image/svg+xml;base64,..."}, {"src": "https://..."}]
+mcp_json_icons_to_data_uris() {
+	local icons_json="$1"
+	local base_dir="$2"
+
+	if [ "${icons_json}" = "null" ] || [ -z "${icons_json}" ]; then
+		printf 'null'
+		return 0
+	fi
+
+	if [ "${MCPBASH_JSON_TOOL:-none}" = "none" ]; then
+		# No JSON tool - pass through unchanged
+		printf '%s' "${icons_json}"
+		return 0
+	fi
+
+	# Process each icon in the array
+	printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg base "${base_dir}" '
+		[.[] | . as $icon |
+			if (.src | startswith("data:")) or (.src | startswith("http://")) or (.src | startswith("https://")) then
+				$icon
+			else
+				# Local file path - mark for shell processing
+				$icon + {"_local": true, "_base": $base}
+			end
+		]
+	' | while IFS= read -r processed; do
+		# Check if any icons need local file conversion
+		if printf '%s' "${processed}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'any(._local)' >/dev/null 2>&1; then
+			# Has local files - process them
+			mcp_json_icons_resolve_local_files "${processed}" "${base_dir}"
+		else
+			printf '%s' "${processed}"
+		fi
+	done
+}
+
+# Resolve local file icons to data URIs
+mcp_json_icons_resolve_local_files() {
+	local icons_json="$1"
+	local base_dir="$2"
+	local result="["
+	local first=1
+	local icon_count
+	icon_count="$(printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+
+	local i=0
+	while [ "${i}" -lt "${icon_count}" ]; do
+		local icon
+		icon="$(printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c ".[$i]")"
+		local is_local
+		is_local="$(printf '%s' "${icon}" | "${MCPBASH_JSON_TOOL_BIN}" -r '._local // false')"
+
+		if [ "${is_local}" = "true" ]; then
+			local src mime_type
+			src="$(printf '%s' "${icon}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.src')"
+			mime_type="$(printf '%s' "${icon}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mimeType // empty')"
+
+			# Resolve path relative to base_dir
+			local file_path
+			case "${src}" in
+			/*) file_path="${src}" ;;
+			*) file_path="${base_dir}/${src}" ;;
+			esac
+
+			if [ -f "${file_path}" ]; then
+				# Auto-detect mime type from extension if not provided
+				if [ -z "${mime_type}" ]; then
+					case "${file_path}" in
+					*.svg) mime_type="image/svg+xml" ;;
+					*.png) mime_type="image/png" ;;
+					*.jpg | *.jpeg) mime_type="image/jpeg" ;;
+					*.gif) mime_type="image/gif" ;;
+					*.webp) mime_type="image/webp" ;;
+					*.ico) mime_type="image/x-icon" ;;
+					*) mime_type="application/octet-stream" ;;
+					esac
+				fi
+
+				# Read and base64 encode the file
+				local data_uri
+				if command -v base64 >/dev/null 2>&1; then
+					data_uri="data:${mime_type};base64,$(base64 <"${file_path}" | tr -d '\n')"
+				else
+					# Fallback: keep original src if base64 not available
+					data_uri="${src}"
+				fi
+
+				# Build icon object with data URI
+				icon="$(printf '%s' "${icon}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg src "${data_uri}" --arg mime "${mime_type}" '
+					del(._local, ._base) | .src = $src | if .mimeType then . else .mimeType = $mime end
+				')"
+			else
+				# File not found - keep original src, remove markers
+				icon="$(printf '%s' "${icon}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'del(._local, ._base)')"
+			fi
+		fi
+
+		if [ "${first}" -eq 1 ]; then
+			result="${result}${icon}"
+			first=0
+		else
+			result="${result},${icon}"
+		fi
+		i=$((i + 1))
+	done
+
+	result="${result}]"
+	printf '%s' "${result}"
+}

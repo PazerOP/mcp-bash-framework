@@ -78,18 +78,18 @@ mcp_validate_tools() {
 							warnings=$((warnings + 1))
 						fi
 						if [ -n "${t_name}" ]; then
-							printf '✓ %s - valid\n' "${rel_meta}"
-							if [[ "${t_name}" != *.* ]]; then
-								printf '⚠ %s - tool name lacks namespace prefix (recommended: serverName.toolName)\n' "${rel_meta}"
+							if [[ "${t_name}" != *"-"* && "${t_name}" != *"_"* && "${t_name}" != *"."* ]]; then
+								printf '⚠ %s - namespace recommended (prefix tool name, e.g., myproj-hello)\n' "${rel_meta}"
 								warnings=$((warnings + 1))
 							fi
-							if [[ ! "${t_name}" =~ ^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)*$ ]]; then
-								printf '⚠ %s - tool name contains non-standard characters (expected namespace.camelCase)\n' "${rel_meta}"
+							local name_ok="true"
+							if [[ ! "${t_name}" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+								printf '⚠ %s - tool name must match ^[a-zA-Z0-9_-]{1,64}$ (Some clients including Claude Desktop reject dots)\n' "${rel_meta}"
 								warnings=$((warnings + 1))
+								name_ok="false"
 							fi
-							if [ "${#t_name}" -gt 64 ]; then
-								printf '⚠ %s - tool name exceeds 64 characters\n' "${rel_meta}"
-								warnings=$((warnings + 1))
+							if [ "${name_ok}" = "true" ]; then
+								printf '✓ %s - valid\n' "${rel_meta}"
 							fi
 						fi
 						if [ -n "${t_name}" ] && [ "${t_name}" != "${tool_name}" ]; then

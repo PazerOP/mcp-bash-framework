@@ -22,7 +22,7 @@ assert_contains() {
 	local needle="$1"
 	local haystack="$2"
 	local message="${3:-expected to find \"${needle}\" in ${haystack}}"
-	if ! grep -q "${needle}" <<<"${haystack}"; then
+	if ! grep -q -- "${needle}" <<<"${haystack}"; then
 		test_fail "${message}"
 	fi
 }

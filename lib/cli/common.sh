@@ -44,14 +44,14 @@ mcp_file_uri_from_path() {
 
 mcp_scaffold_validate_name() {
 	local name="$1"
-	# Allow simple names only: alnum, dot, underscore, dash; no slashes or traversal.
+	# Allow simple names only: alnum, underscore, dash; no slashes, traversal, or dots (Some clients including Claude Desktop rejects them).
 	if [ -z "${name}" ]; then
 		return 1
 	fi
 	case "${name}" in
 	*/* | *..*) return 1 ;;
 	esac
-	if ! printf '%s' "${name}" | LC_ALL=C grep -Eq '^[A-Za-z0-9._-]+$'; then
+	if ! [[ "${name}" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
 		return 1
 	fi
 	return 0
@@ -69,7 +69,7 @@ mcp_scaffold_prepare() {
 		exit 1
 	fi
 	if ! mcp_scaffold_validate_name "${name}"; then
-		printf 'Invalid %s name: use alphanumerics, dot, underscore, dash only; no paths or traversal.\n' "${kind}" >&2
+		printf 'Invalid %s name: use alphanumerics, underscore, dash only (1-64 chars); no dots, paths, or traversal (Some clients including Claude Desktop rejects dots).\n' "${kind}" >&2
 		exit 1
 	fi
 	if [ ! -d "${scaffold_dir}" ]; then

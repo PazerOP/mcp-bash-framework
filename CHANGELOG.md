@@ -5,6 +5,35 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - unreleased
+
+### Added
+- Protocol version `2025-11-25` support for compatibility with MCP Inspector v0.17+ and latest MCP SDK.
+- Icons support for tools, resources, and prompts (SEP-973): add an `icons` array to any `.meta.json` file to provide visual identifiers in compatible clients. Icons are passed through in `tools/list`, `resources/list`, and `prompts/list` responses. Local file paths (e.g., `"./icon.svg"`) are automatically converted to data URIs for stdio transport compatibility.
+- Documentation on Protocol Errors vs Tool Execution Errors (SEP-1303): `ERRORS.md` and `BEST-PRACTICES.md` now explain when to use each error type to enable LLM self-correction. Examples updated to demonstrate best practices.
+- Elicitation SDK helpers for SEP-1330 enum improvements: `mcp_elicit_titled_choice` (choices with display labels) and `mcp_elicit_multi_choice` / `mcp_elicit_titled_multi_choice` (multi-select checkboxes). The 07-elicitation example demonstrates all patterns.
+- SEP-1036 URL mode elicitation support: `mcp_elicit_url` helper for secure out-of-band interactions (OAuth, payments, sensitive data). The framework now detects client form/url mode capabilities and includes `mode` in elicitation requests.
+- `mcp-bash config --inspector` prints a ready-to-run MCP Inspector command (stdio transport) with `MCPBASH_PROJECT_ROOT` pre-populated for the current project.
+- Test session helper `test/common/session.sh` for sequential interactive tool calls in tests; documented in `TESTING.md` (note: skips notifications, overwrites EXIT traps).
+- `mcp-bash config --wrapper-env` generates a wrapper that sources `.zshrc`/`.bash_profile`/`.bashrc` before exec (for Claude Desktop macOS non-login shells).
+- `mcp-bash doctor` detects macOS `com.apple.quarantine` on the framework binary and project path and prints remediation commands; helper script `scripts/macos-dequarantine.sh` added.
+- README and debugging docs include macOS Claude Desktop troubleshooting (PATH/env gaps, quarantine clearing, wrapper guidance).
+- `validate` warns when tool names lack a namespace-style prefix (e.g., `myproj-hello`) to encourage safer naming.
+
+### Fixed
+- Unsupported protocol version errors now include the requested version and list of supported versions for easier debugging.
+- Startup diagnostics detect stdio transport and log to stderr (transport, cwd, project root, JSON tool) to keep stdout JSON-only for clients.
+- README OpenAI Agents SDK example matches the current `MCPServerStdio` signature (no `name` kwarg, optional args/env/cwd shown).
+- README notes that client configs can point to generated wrapper scripts (`config --wrapper`/`--wrapper-env`) instead of the raw binary.
+- README clarifies when to choose `config --wrapper` vs `--wrapper-env` and how to distribute both options (GUI vs CI/Linux).
+
+### Changed
+- Replaced `mcp-bash scaffold server` with `mcp-bash new <name> [--no-hello]`; server scaffolding now lives under the new command and `scaffold server` is removed.
+- `mcp-bash config --wrapper` now creates `<project-root>/<server-name>.sh` and `chmod +x` when stdout is a TTY (with filename validation and collision checks) while preserving stdout output for piped/redirected use; help/docs/tests updated.
+- Documentation clarifies the MCP name regex (alphanumeric, underscores, hyphens only) and switches tool examples to hyphenated names to match the limitations of some clients; `validate` now warns on names outside the supported regex and scaffolding rejects dotted names up front.
+- JSON tooling detection success logs are quiet by default; set `MCPBASH_LOG_JSON_TOOL=log` or `MCPBASH_LOG_VERBOSE=true` to surface them. Minimal-mode warnings still emit when JSON tooling is missing.
+- Startup summary log is suppressed by default; set `MCPBASH_LOG_STARTUP=true` or `MCPBASH_LOG_VERBOSE=true` to print it.
+
 ## [0.4.0] - 2025-12-06
 
 ### Added

@@ -5,6 +5,7 @@
 - Set level with `MCPBASH_LOG_LEVEL` (`debug`, `info`, `notice`, `warning`, `error`, ...). Default is `info`.
 - Debug logs emit only when `MCPBASH_LOG_LEVEL=debug`. Warning/error logs always emit regardless of level.
 - Argument values are never logged; debug traces focus on flow (method, ids, counts, byte sizes).
+- Startup diagnostics (transport, cwd, project root, JSON tool) are written to stderr when running over the stdio transport so stdout stays JSON-only for clients and Inspector.
 
 ## Verbose Mode (paths + script output)
 

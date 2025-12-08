@@ -55,6 +55,8 @@ expected_root_basename="$(basename "${canonical_root}")"
 actual_root_basename="$(basename "${env_root}")"
 assert_eq "${expected_root_basename}" "${actual_root_basename}" "config --json project root mismatch"
 
+framework_bin="$(cd "${MCPBASH_TEST_ROOT}" && (pwd -P 2>/dev/null || pwd))/bin/mcp-bash"
+
 printf ' -> config --client cursor filter\n'
 cursor_output="$(
 	cd "${PROJECT_DIR}" || exit 1
@@ -114,5 +116,15 @@ if ! printf '%s' "${librechat_output}" | jq -e '.' >/dev/null 2>&1; then
 fi
 assert_contains "cfg-demo" "${librechat_output}" "config --client librechat missing project name"
 assert_contains "MCPBASH_PROJECT_ROOT" "${librechat_output}" "config --client librechat missing env var"
+
+printf ' -> config --inspector helper\n'
+inspector_output="$(
+	cd "${PROJECT_DIR}" || exit 1
+	"${MCPBASH_TEST_ROOT}/bin/mcp-bash" config --inspector
+)"
+assert_contains "npx @modelcontextprotocol/inspector" "${inspector_output}" "config --inspector missing inspector command"
+assert_contains "--transport stdio --" "${inspector_output}" "config --inspector missing transport delimiter"
+assert_contains "MCPBASH_PROJECT_ROOT=${canonical_root}" "${inspector_output}" "config --inspector missing project root env"
+assert_contains "${framework_bin}" "${inspector_output}" "config --inspector missing framework binary path"
 
 printf 'CLI config variants test passed.\n'

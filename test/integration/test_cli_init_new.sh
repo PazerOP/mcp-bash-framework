@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Integration: init/scaffold edge cases.
+# Integration: init/new edge cases.
 # shellcheck disable=SC2034  # Used by test runner for reporting.
-TEST_DESC="CLI init and scaffold server handle edge cases."
+TEST_DESC="CLI init and new handle edge cases."
 
 set -euo pipefail
 
@@ -67,12 +67,12 @@ assert_eq "1" "${count_logs}" ".gitignore should contain *.log once"
 assert_eq "1" "${count_dsstore}" ".gitignore should contain .DS_Store once"
 assert_eq "1" "${count_thumbs}" ".gitignore should contain Thumbs.db once"
 
-printf ' -> scaffold server <name> creates project skeleton\n'
+printf ' -> new <name> creates project skeleton\n'
 SERVER_PARENT="${TEST_TMPDIR}/servers"
 mkdir -p "${SERVER_PARENT}"
 (
 	cd "${SERVER_PARENT}" || exit 1
-	"${MCPBASH_TEST_ROOT}/bin/mcp-bash" scaffold server demo >/dev/null
+	"${MCPBASH_TEST_ROOT}/bin/mcp-bash" new demo >/dev/null
 )
 
 DEMO_ROOT="${SERVER_PARENT}/demo"
@@ -81,20 +81,29 @@ assert_file_exists "${DEMO_ROOT}/.gitignore"
 assert_file_exists "${DEMO_ROOT}/tools/hello/tool.sh"
 
 if ! jq -e '.name == "demo"' "${DEMO_ROOT}/server.d/server.meta.json" >/dev/null; then
-	test_fail "scaffold server did not set expected server name"
+	test_fail "new did not set expected server name"
 fi
 
-printf ' -> scaffold server fails when target exists\n'
+printf ' -> new --no-hello does not create hello tool\n'
+(
+	cd "${SERVER_PARENT}" || exit 1
+	"${MCPBASH_TEST_ROOT}/bin/mcp-bash" new no-hello-new --no-hello >/dev/null
+)
+if [ -d "${SERVER_PARENT}/no-hello-new/tools/hello" ]; then
+	test_fail "new --no-hello should not create tools/hello"
+fi
+
+printf ' -> new fails when target exists\n'
 mkdir -p "${SERVER_PARENT}/existing"
 set +e
 existing_output="$(
-	cd "${SERVER_PARENT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" scaffold server existing 2>&1
+	cd "${SERVER_PARENT}" && "${MCPBASH_TEST_ROOT}/bin/mcp-bash" new existing 2>&1
 )"
 status=$?
 set -e
 
 if [ "${status}" -eq 0 ]; then
-	test_fail "scaffold server succeeded despite existing target directory"
+	test_fail "new succeeded despite existing target directory"
 fi
-assert_contains "already exists" "${existing_output}" "scaffold server did not report existing target"
-printf 'CLI init/scaffold server test passed.\n'
+assert_contains "already exists" "${existing_output}" "new did not report existing target"
+printf 'CLI init/new test passed.\n'

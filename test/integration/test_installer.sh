@@ -19,7 +19,8 @@ test_create_tmpdir
 INSTALL_ROOT="${TEST_TMPDIR}/install-root"
 
 printf ' -> install from local source\n'
-MCPBASH_INSTALL_LOCAL_SOURCE="${MCPBASH_TEST_ROOT}" "${MCPBASH_TEST_ROOT}/install.sh" --dir "${INSTALL_ROOT}" --yes
+INSTALL_BRANCH="$(git -C "${MCPBASH_TEST_ROOT}" rev-parse --abbrev-ref HEAD)"
+MCPBASH_INSTALL_LOCAL_SOURCE="${MCPBASH_TEST_ROOT}" "${MCPBASH_TEST_ROOT}/install.sh" --dir "${INSTALL_ROOT}" --branch "${INSTALL_BRANCH}" --yes
 
 assert_file_exists "${INSTALL_ROOT}/bin/mcp-bash"
 assert_file_exists "${INSTALL_ROOT}/VERSION"
@@ -30,7 +31,7 @@ repo_version="$(tr -d '[:space:]' <"${MCPBASH_TEST_ROOT}/VERSION")"
 assert_eq "${repo_version}" "${installed_version}" "installed version mismatch"
 
 printf ' -> idempotent re-run into same directory\n'
-MCPBASH_INSTALL_LOCAL_SOURCE="${MCPBASH_TEST_ROOT}" "${MCPBASH_TEST_ROOT}/install.sh" --dir "${INSTALL_ROOT}" --yes
+MCPBASH_INSTALL_LOCAL_SOURCE="${MCPBASH_TEST_ROOT}" "${MCPBASH_TEST_ROOT}/install.sh" --dir "${INSTALL_ROOT}" --branch "${INSTALL_BRANCH}" --yes
 
 installed_version_2="$("${INSTALL_ROOT}/bin/mcp-bash" --version | awk '{print $2}')"
 assert_eq "${installed_version}" "${installed_version_2}" "version changed after re-install"

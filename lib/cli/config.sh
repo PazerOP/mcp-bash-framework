@@ -10,10 +10,15 @@ fi
 
 # Globals: usage() from bin, MCPBASH_HOME and runtime globals set by initialize_runtime_paths.
 
+cli_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/cli/common.sh
+. "${cli_dir}/common.sh"
+
 mcp_cli_config() {
 	local project_root=""
-	local mode="show" # show | json | wrapper
+	local mode="show" # show | json | wrapper | inspector
 	local client_filter=""
+	local wrapper_env="false"
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -30,6 +35,13 @@ mcp_cli_config() {
 		--wrapper)
 			mode="wrapper"
 			;;
+		--wrapper-env)
+			mode="wrapper"
+			wrapper_env="true"
+			;;
+		--inspector)
+			mode="inspector"
+			;;
 		--client)
 			shift
 			client_filter="${1:-}"
@@ -37,9 +49,14 @@ mcp_cli_config() {
 		--help | -h)
 			cat <<'EOF'
 Usage:
-  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper]
+  mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper|--wrapper-env|--inspector]
 
 Print MCP client configuration snippets for the current project.
+  --wrapper   Generate auto-install wrapper script.
+              Interactive: creates <project-root>/<name>.sh
+              Piped/redirected: writes to stdout
+  --wrapper-env Same as --wrapper but sources your shell profile (~/.zshrc, ~/.bash_profile, ~/.bashrc) before exec.
+  --inspector Print a ready-to-run MCP Inspector command (stdio transport)
 EOF
 			exit 0
 			;;
@@ -93,21 +110,112 @@ EOF
 	fi
 
 	if [ "${mode}" = "wrapper" ]; then
-		cat <<EOF
+		local wrapper_content
+		if [ "${wrapper_env}" = "true" ]; then
+			wrapper_content="$(
+				cat <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-FRAMEWORK_DIR="\${MCPBASH_HOME:-\$HOME/mcp-bash-framework}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRAMEWORK_DIR="${MCPBASH_HOME:-$HOME/mcp-bash-framework}"
+SHELL_PROFILE=""
 
-if [ ! -f "\${FRAMEWORK_DIR}/bin/mcp-bash" ]; then
-	echo "Installing mcp-bash framework..." >&2
-	git clone --depth 1 https://github.com/yaniv-golan/mcp-bash-framework.git "\${FRAMEWORK_DIR}"
+if [ -f "${HOME}/.zshrc" ]; then
+	SHELL_PROFILE="${HOME}/.zshrc"
+elif [ -f "${HOME}/.bash_profile" ]; then
+	SHELL_PROFILE="${HOME}/.bash_profile"
+elif [ -f "${HOME}/.bashrc" ]; then
+	SHELL_PROFILE="${HOME}/.bashrc"
 fi
 
-export MCPBASH_PROJECT_ROOT="\${SCRIPT_DIR}"
-exec "\${FRAMEWORK_DIR}/bin/mcp-bash" "\$@"
+if [ -n "${SHELL_PROFILE}" ]; then
+	# shellcheck source=/dev/null
+	. "${SHELL_PROFILE}"
+fi
+
+if [ ! -f "${FRAMEWORK_DIR}/bin/mcp-bash" ]; then
+	printf 'Error: mcp-bash framework not found at %s\n' "${FRAMEWORK_DIR}" >&2
+	printf 'Install: git clone https://github.com/yaniv-golan/mcp-bash-framework.git "%s"\n' "${FRAMEWORK_DIR}" >&2
+	exit 1
+fi
+
+export MCPBASH_PROJECT_ROOT="${SCRIPT_DIR}"
+exec "${FRAMEWORK_DIR}/bin/mcp-bash" "$@"
 EOF
+			)"
+		else
+			wrapper_content="$(
+				cat <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRAMEWORK_DIR="${MCPBASH_HOME:-$HOME/mcp-bash-framework}"
+
+if [ ! -f "${FRAMEWORK_DIR}/bin/mcp-bash" ]; then
+	printf 'Error: mcp-bash framework not found at %s\n' "${FRAMEWORK_DIR}" >&2
+	printf 'Install: git clone https://github.com/yaniv-golan/mcp-bash-framework.git "%s"\n' "${FRAMEWORK_DIR}" >&2
+	exit 1
+fi
+
+export MCPBASH_PROJECT_ROOT="${SCRIPT_DIR}"
+exec "${FRAMEWORK_DIR}/bin/mcp-bash" "$@"
+EOF
+			)"
+		fi
+
+		# Validate server name is safe for use as filename
+		if ! mcp_scaffold_validate_name "${server_name}"; then
+			printf 'Server name "%s" contains invalid characters for filename.\n' "${server_name}" >&2
+			printf 'Use alphanumerics, dot, underscore, dash only. Pipe to cat for stdout.\n' >&2
+			printf '%s\n' "${wrapper_content}"
+			exit 0
+		fi
+
+		# Non-TTY (piped/redirected): write to stdout
+		if [[ ! -t 1 ]]; then
+			printf '%s\n' "${wrapper_content}"
+			exit 0
+		fi
+
+		# Interactive TTY mode: create file in project root
+
+		local wrapper_filename="${server_name}.sh"
+		local wrapper_path="${MCPBASH_PROJECT_ROOT}/${wrapper_filename}"
+
+		if [[ -e "${wrapper_path}" ]]; then
+			printf 'File already exists: %s\n' "${wrapper_path}" >&2
+			printf 'Delete the file and retry, or pipe to cat for stdout.\n' >&2
+			exit 1
+		fi
+
+		printf '%s\n' "${wrapper_content}" >"${wrapper_path}"
+		chmod +x "${wrapper_path}"
+		printf 'Wrapper script created: %s\n' "${wrapper_path}" >&2
+		exit 0
+	fi
+
+	if [ "${mode}" = "inspector" ]; then
+		local env_arg=""
+		if [ "${has_project_root}" = "true" ]; then
+			local inspector_project_root="${MCPBASH_PROJECT_ROOT}"
+			if [ -d "${inspector_project_root}" ]; then
+				inspector_project_root="$(cd "${inspector_project_root}" && pwd -P 2>/dev/null || printf '%s' "${inspector_project_root}")"
+			fi
+			if command -v cygpath >/dev/null 2>&1; then
+				inspector_project_root="$(cygpath -u "${inspector_project_root}")"
+			fi
+			env_arg="-e MCPBASH_PROJECT_ROOT=${inspector_project_root}"
+		fi
+		local command_escaped
+		command_escaped="$(printf '%q' "${command_path}")"
+
+		if [ -n "${env_arg}" ]; then
+			printf 'npx @modelcontextprotocol/inspector %s --transport stdio -- %s\n' "${env_arg}" "${command_escaped}"
+		else
+			printf 'npx @modelcontextprotocol/inspector --transport stdio -- %s\n' "${command_escaped}"
+		fi
 		exit 0
 	fi
 

@@ -18,6 +18,30 @@ Output:
 mcp-bash debug: logging to /tmp/mcpbash.debug.12345/payload.debug.log
 ```
 
+## Claude Desktop on macOS (PATH + quarantine)
+
+Claude Desktop often execs servers directly (no login shell), so `~/.zshrc`/`~/.bash_profile` are skipped and PATH/env customizations (nvm/pyenv/uv/rbenv, etc.) are missing. Common symptoms: `ENOENT` / `command not found`, `transport closed unexpectedly`, missing env vars. Location can matter on macOS: Desktop/Documents/Downloads are TCC-protected and Downloads is frequently quarantined.
+
+Fixes:
+- Use absolute paths to runtimes (e.g., `/opt/homebrew/bin/node`) and set required vars in the MCP config `env` block.
+- Or generate a login-aware wrapper that sources your shell profile before exec:
+  ```bash
+  mcp-bash config --project-root /path/to/project --wrapper-env > /path/to/project/mcp-bash.sh
+  chmod +x /path/to/project/mcp-bash.sh
+  ```
+  Point Claude Desktop at that wrapper as the `command`.
+- macOS quarantine can silently block downloaded binaries/scripts. Browser/DMG/AirDrop downloads are commonly quarantined; CLI fetches (curl/wget/git) often are not. Clear quarantine, then restart Claude Desktop:
+  ```bash
+  xattr -r -d com.apple.quarantine /path/to/mcp-bash-framework
+  xattr -r -d com.apple.quarantine /path/to/project
+  ```
+  Helper: `scripts/macos-dequarantine.sh [path]` clears quarantine for the repo or a custom path. `xattr -cr` removes all extended attributes—only use it on trusted paths.
+- macOS folder permissions: Desktop/Documents/Downloads and similar are TCC-protected. If your server or data lives there, grant Claude Desktop “Full Disk Access” and “Files and Folders” in System Settings (or relocate to a neutral folder) to avoid `Operation not permitted` or silent exits.
+- Diagnostics: To see Gatekeeper/TCC blocks while launching a server, run:
+  ```bash
+  log stream --predicate 'process == "taskgated" OR process == "tccd" OR process == "syspolicyd"' --info
+  ```
+
 ## Analyzing Debug Logs
 
 Use the provided analysis script:
@@ -58,6 +82,12 @@ Configure MCP Inspector to use the debug subcommand:
 ```
 
 The log location is printed to stderr at startup, so you can see it in Inspector's server output.
+
+For a ready-to-run Inspector invocation that sets `MCPBASH_PROJECT_ROOT` for the current project, run:
+
+```bash
+mcp-bash config --inspector
+```
 
 ## Debug Log Format
 

@@ -9,8 +9,13 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `tools/`, `resources/`, `prompts/`, `server.d/`, optional `lib/`, `config/`, `.registry/` (generated).
 - Project creation & scaffolding:
   - Initialize in current directory: `bin/mcp-bash init [--name NAME] [--no-hello]`.
-  - Scaffold full project in new directory: `bin/mcp-bash scaffold server <name>`.
+  - Create new project in new directory: `bin/mcp-bash new <name> [--no-hello]`.
   - Scaffold assets in an existing project: `bin/mcp-bash scaffold tool|prompt|resource <name>`.
+- Recommended flow to create a new server:
+  1) Install the framework once via the one-liner (no repo clone needed): `curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash` (or pin a version with `--version`; manual `git clone` to `$HOME/mcp-bash-framework` is the fallback).
+  2) Create a project dir and initialize: `mkdir ~/my-mcp-server && cd ~/my-mcp-server && mcp-bash init --name my-mcp-server`.
+  3) Generate wiring for clients: `mcp-bash config --wrapper` (TTY creates `./my-mcp-server.sh`, piped/redirected prints to stdout) or `mcp-bash config --client <client>` for pasteable JSON.
+  4) Add tools/resources/prompts via `mcp-bash scaffold tool|prompt|resource <name>`, then `mcp-bash validate` before wiring to clients.
 - Validation & config:
   - Validate project: `bin/mcp-bash validate [--project-root DIR] [--fix] [--json] [--explain-defaults] [--strict]`.
   - Generate MCP client config snippets / JSON descriptor: `bin/mcp-bash config [--project-root DIR] [--show|--json|--client NAME|--wrapper]`.
@@ -158,8 +163,13 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 - Git provider:
   - Disabled by default; enable with `MCPBASH_ENABLE_GIT_PROVIDER=true`.
   - `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` → allow/deny lists (private/loopback always blocked).
-  - `MCPBASH_GIT_TIMEOUT` (default ~30s, capped at 60s).
-  - `MCPBASH_GIT_MAX_KB` (default 50MB, capped at 1GB).
+- `MCPBASH_GIT_TIMEOUT` (default ~30s, capped at 60s).
+- `MCPBASH_GIT_MAX_KB` (default 50MB, capped at 1GB).
+
+## TESTING HELPERS
+
+- Batch harness: `test/common/env.sh` exposes `test_run_mcp <workspace> requests.ndjson responses.ndjson` to send a request batch through one server process (preferred for most tests).
+- Interactive helper: `test/common/session.sh` lets tests start one server and call tools sequentially via `mcp_session_start`/`mcp_session_call`/`mcp_session_end` (skips notifications, overwrites EXIT traps, no timeout; use only when prebuilding NDJSON is awkward).
 
 ## PROVIDERS
 
@@ -216,7 +226,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 
 - Core commands:
   - Initialize project in current directory: `bin/mcp-bash init [--name NAME] [--no-hello]`.
-  - Scaffold full project into new directory: `bin/mcp-bash scaffold server <name>`.
+  - Create new project in new directory: `bin/mcp-bash new <name> [--no-hello]`.
   - Scaffold assets in a project: `bin/mcp-bash scaffold tool|prompt|resource <name>`.
   - Run server: `bin/mcp-bash` (auto-detects project root when run inside a project directory; for MCP clients set `MCPBASH_PROJECT_ROOT` explicitly).
   - Run a single tool without starting the server: `bin/mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run] [--timeout SECS] [--verbose] [--no-refresh] [--minimal] [--project-root DIR] [--print-env]`.
@@ -231,6 +241,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 - Test suites (from repo root; see `TESTING.md`):
   - Lint: `./test/lint.sh`.
   - Smoke: `./test/smoke.sh`.
+  - Per-tool smoke: each scaffolded tool ships `tools/<name>/smoke.sh` to validate stdout JSON; update its sample args when you change `tool.meta.json`.
   - Unit: `./test/unit/run.sh`.
   - Integration: `./test/integration/run.sh`.
   - Examples: `./test/examples/run.sh` (NDJSON harness + `run-tool` smoke for hello).
@@ -252,7 +263,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Always compact JSON (`-c`) before emitting; use `-r` for raw strings.
 - Naming:
   - Framework functions: `mcp_<module>_<name>`.
-  - Tool names: `namespace.toolname` (e.g., `example.hello`).
+  - Tool names: `^[a-zA-Z0-9_-]{1,64}$`, no dots (Some clients including Claude Desktop rejects them); prefer hyphenated namespaces (e.g., `example-hello`).
 - Discovery:
   - Auto-discovered: tools, resources, prompts (from configured dirs).
   - Manual-only: completions and any custom overrides via `server.d/register.sh`.

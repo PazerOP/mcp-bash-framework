@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-  printf 'Usage: %s <example-id>\n' "$0" >&2
-  exit 1
+if [[ $# -lt 1 ]]; then
+	printf 'Usage: %s <example-id>\n' "$0" >&2
+	exit 1
 fi
 
 EXAMPLE_ID="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXAMPLE_DIR="${SCRIPT_DIR}/${EXAMPLE_ID}"
-if [ ! -d "${EXAMPLE_DIR}" ]; then
-  printf 'Example %s not found\n' "${EXAMPLE_ID}" >&2
-  exit 1
+if [[ ! -d "${EXAMPLE_DIR}" ]]; then
+	printf 'Example %s not found\n' "${EXAMPLE_ID}" >&2
+	exit 1
 fi
 
 TMPDIR="$(mktemp -d)"
-cleanup() {
-  rm -rf "${TMPDIR}"
+mcp_examples_cleanup() {
+	rm -rf "${TMPDIR}"
 }
-trap cleanup EXIT INT TERM
+trap mcp_examples_cleanup EXIT INT TERM
 
 # Reuse the framework in-place; only stage example content into a temp project.
 FRAMEWORK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -34,27 +34,38 @@ mkdir -p "${TMPDIR}/server.d"
 cp -a "${EXAMPLE_DIR}/." "${TMPDIR}/" 2>/dev/null || true
 
 # Run per-example environment checks if provided
-if [ -x "${TMPDIR}/check-env" ]; then
-  if ! (cd "${TMPDIR}" && "${TMPDIR}/check-env"); then
-    printf 'Warning: check-env for %s failed; continuing.\n' "${EXAMPLE_ID}" >&2
-  fi
+if [[ -x "${TMPDIR}/check-env" ]]; then
+	if ! (cd "${TMPDIR}" && "${TMPDIR}/check-env"); then
+		printf 'Warning: check-env for %s failed; continuing.\n' "${EXAMPLE_ID}" >&2
+	fi
 fi
 
 # Ensure media roots exist for examples that declare them
-if [ -f "${TMPDIR}/config/media_roots.json" ]; then
-  if command -v jq >/dev/null 2>&1; then
-    while IFS= read -r root; do
-      [ -z "${root}" ] && continue
-      case "${root}" in
-      /*) dir="${root}" ;;
-      ./*) dir="${TMPDIR}/${root#./}" ;;
-      *) dir="${TMPDIR}/${root}" ;;
-      esac
-      mkdir -p "${dir}" 2>/dev/null || true
-    done < <(jq -r '.roots[]?.path // empty' "${TMPDIR}/config/media_roots.json" 2>/dev/null)
-  else
-    mkdir -p "${TMPDIR}/media" 2>/dev/null || true
-  fi
+if [[ -f "${TMPDIR}/config/media_roots.json" ]]; then
+	json_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	if [[ -z "${json_bin}" ]]; then
+		if command -v gojq >/dev/null 2>&1; then
+			json_bin="gojq"
+		elif command -v jq >/dev/null 2>&1; then
+			json_bin="jq"
+		fi
+	elif ! command -v "${json_bin}" >/dev/null 2>&1; then
+		json_bin=""
+	fi
+
+	if [[ -n "${json_bin}" ]]; then
+		while IFS= read -r root; do
+			[[ -z "${root}" ]] && continue
+			case "${root}" in
+			/*) dir="${root}" ;;
+			./*) dir="${TMPDIR}/${root#./}" ;;
+			*) dir="${TMPDIR}/${root}" ;;
+			esac
+			mkdir -p "${dir}" 2>/dev/null || true
+		done < <("${json_bin}" -r '.roots[]?.path // empty' "${TMPDIR}/config/media_roots.json" 2>/dev/null)
+	else
+		mkdir -p "${TMPDIR}/media" 2>/dev/null || true
+	fi
 fi
 
 cd "${TMPDIR}" || exit 1

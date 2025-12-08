@@ -90,6 +90,7 @@ mcp_core_bootstrap_state() {
 	: >"${MCP_LOG_STREAM}"
 	mcp_core_start_progress_flusher
 	mcp_core_start_resource_poll
+	mcp_runtime_log_startup_summary
 }
 
 mcp_core_read_loop() {

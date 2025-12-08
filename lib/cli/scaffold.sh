@@ -25,46 +25,9 @@ mcp_scaffold_tool() {
 	chmod +x "${target_dir}/tool.sh"
 	mcp_template_render "${scaffold_dir}/tool.meta.json" "${target_dir}/tool.meta.json" "__NAME__=${name}"
 	mcp_template_render "${scaffold_dir}/README.md" "${target_dir}/README.md" "__NAME__=${name}"
+	mcp_template_render "${scaffold_dir}/smoke.sh" "${target_dir}/smoke.sh" "__NAME__=${name}"
+	chmod +x "${target_dir}/smoke.sh"
 	printf 'Scaffolded tool at %s\n' "${target_dir}"
-	exit 0
-}
-
-mcp_scaffold_server() {
-	local name="$1"
-	if [ -z "${name}" ]; then
-		printf 'Server name required\n' >&2
-		exit 1
-	fi
-	if ! mcp_scaffold_validate_name "${name}"; then
-		printf 'Invalid server name: use alphanumerics, dot, underscore, dash only; no paths or traversal.\n' >&2
-		exit 1
-	fi
-
-	local project_root="${PWD%/}/${name}"
-	if [ -e "${project_root}" ]; then
-		printf 'Target %s already exists (remove it or choose a new server name)\n' "${project_root}" >&2
-		exit 1
-	fi
-
-	mkdir -p "${project_root}"
-	printf 'Created project at ./%s/\n\n' "${name}"
-
-	# Reuse the same skeleton initializer as `init`, always creating the hello tool.
-	mcp_init_project_skeleton "${project_root}" "${name}" "true"
-
-	# Optional README from scaffold templates, if present.
-	local server_scaffold_dir="${MCPBASH_HOME:-}"
-	if [ -n "${server_scaffold_dir}" ]; then
-		server_scaffold_dir="${server_scaffold_dir}/scaffold/server"
-		if [ -d "${server_scaffold_dir}" ] && [ -f "${server_scaffold_dir}/README.md" ]; then
-			cp "${server_scaffold_dir}/README.md" "${project_root}/README.md"
-		fi
-	fi
-
-	printf '\nNext steps:\n'
-	printf '  cd %s\n' "${name}"
-	printf '  mcp-bash scaffold tool <name>\n'
-
 	exit 0
 }
 

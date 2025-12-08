@@ -6,21 +6,36 @@ set -euo pipefail
 source "${MCP_SDK:?MCP_SDK environment variable not set}/tool-sdk.sh"
 
 json_tool="${MCPBASH_JSON_TOOL_BIN:-}"
-if [ -z "${json_tool}" ] || ! command -v "${json_tool}" >/dev/null 2>&1; then
+if [[ -z "${json_tool}" ]] || ! command -v "${json_tool}" >/dev/null 2>&1; then
 	json_tool=""
 fi
 
 path="$(mcp_args_get '.path // empty' 2>/dev/null || true)"
-if [ -z "${path}" ] && [ $# -ge 1 ]; then
+if [[ -z "${path}" ]] && [[ $# -ge 1 ]]; then
 	path="$1"
 fi
-if [ -z "${path}" ]; then
+
+# ERROR HANDLING BEST PRACTICES:
+# - Protocol Errors (-32xxx): For structural issues the LLM cannot fix
+# - Tool Execution Errors (exit 1 with message): For correctable input issues
+# See docs/ERRORS.md for full guidance.
+
+# Missing required argument → Protocol Error (request structure issue)
+if [[ -z "${path}" ]]; then
 	mcp_fail_invalid_args "Missing required argument: path"
 fi
 
-# Enforce roots
+# Enforce roots - path outside allowed roots → Tool Execution Error
+# The LLM can self-correct by choosing a path within allowed roots
 if ! mcp_roots_contains "${path}"; then
-	mcp_fail -32602 "Path is outside allowed roots"
+	roots_list="$(mcp_roots_list 2>/dev/null | head -3 | tr '\n' ', ' | sed 's/,$//')"
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Path is outside allowed roots" \
+			path "${path}" \
+			hint "Try a path within: ${roots_list:-<no roots configured>}"
+	)"
+	exit 1
 fi
 
 # Resolve to absolute path for reading and messaging
@@ -34,14 +49,22 @@ else
 	fi
 fi
 
-if [ ! -f "${full_path}" ]; then
-	mcp_fail -32602 "File not found: ${path}"
+# File not found → Tool Execution Error
+# The LLM can self-correct by choosing a different file
+if [[ ! -f "${full_path}" ]]; then
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "File not found" \
+			path "${path}" \
+			hint "Check the path exists and is a regular file"
+	)"
+	exit 1
 fi
 
 content="$(cat "${full_path}")"
 bytes="$(printf '%s' "${content}" | wc -c | tr -d ' ')"
 
-if [ -n "${json_tool}" ]; then
+if [[ -n "${json_tool}" ]]; then
 	mcp_emit_json "$("${json_tool}" -n \
 		--arg path "${full_path}" \
 		--arg content "${content}" \

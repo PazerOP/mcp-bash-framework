@@ -33,6 +33,8 @@ export WORKSPACE
 	cd "${WORKSPACE}"
 	# Point project root at the staged workspace so the server can start.
 	export MCPBASH_PROJECT_ROOT="${WORKSPACE}"
+	# Enable startup logging for this test (disabled by default since b832516)
+	export MCPBASH_LOG_STARTUP=true
 
 	# Use a named pipe or coproc. coproc is bash 4+.
 	# Let's use a simple FIFO approach which works on older bash too if needed, but coproc is cleaner.
@@ -119,6 +121,12 @@ export WORKSPACE
 
 	# Wait for exit
 	wait "${PID}" || true
+
+	if ! grep -q "mcp-bash startup: transport=stdio" err_log 2>/dev/null; then
+		echo "missing startup stderr log" >&2
+		rm in_pipe out_pipe
+		exit 1
+	fi
 
 	rm in_pipe out_pipe
 )

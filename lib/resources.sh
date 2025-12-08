@@ -72,8 +72,10 @@ mcp_resources_manual_finalize() {
 				else "file" end
 			)),
 			mimeType: (.mimeType // "text/plain"),
-			path: (.path // "")
+			path: (.path // ""),
+			icons: (.icons // null)
 		}) |
+		map(if .icons == null then del(.icons) else . end) |
 		sort_by(.name) |
 		{
 			version: 1,
@@ -472,6 +474,7 @@ mcp_resources_scan() {
 			local uri=""
 			local mime="text/plain"
 			local provider=""
+			local icons="null"
 
 			if [ -f "${meta_json}" ]; then
 				local meta
@@ -483,6 +486,11 @@ mcp_resources_scan() {
 				uri="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.uri // empty' 2>/dev/null)"
 				mime="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mimeType // "text/plain"' 2>/dev/null)"
 				provider="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // empty' 2>/dev/null)"
+				icons="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null || printf 'null')"
+				# Convert local file paths to data URIs
+				local meta_dir
+				meta_dir="$(dirname "${meta_json}")"
+				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
 			fi
 
 			if [ -z "${uri}" ]; then
@@ -502,6 +510,14 @@ mcp_resources_scan() {
 					local h_desc
 					h_desc="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
 					[ -n "${h_desc}" ] && description="${h_desc}"
+					local h_icons
+					h_icons="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
+					if [ -n "${h_icons}" ] && [ "${h_icons}" != "null" ]; then
+						# Convert local file paths to data URIs
+						local script_dir
+						script_dir="$(dirname "${path}")"
+						icons="$(mcp_json_icons_to_data_uris "${h_icons}" "${script_dir}")"
+					fi
 				fi
 			fi
 
@@ -537,7 +553,9 @@ mcp_resources_scan() {
 				--arg uri "$uri" \
 				--arg mime "$mime" \
 				--arg provider "$provider" \
-				'{name: $name, description: $desc, path: $path, uri: $uri, mimeType: $mime, provider: $provider}' >>"${items_file}"
+				--argjson icons "$icons" \
+				'{name: $name, description: $desc, path: $path, uri: $uri, mimeType: $mime, provider: $provider}
+				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
 		done < <(find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | LC_ALL=C sort)
 	fi
 

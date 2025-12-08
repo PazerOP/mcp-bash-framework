@@ -9,53 +9,79 @@ source "${MCP_SDK:?MCP_SDK environment variable not set}/tool-sdk.sh"
 # shellcheck source=../../lib/roots.sh disable=SC1091
 source "${script_dir}/../../lib/roots.sh"
 
+json_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+if [[ -z "${json_bin}" ]] || ! command -v "${json_bin}" >/dev/null 2>&1; then
+	mcp_fail -32603 "JSON tooling unavailable for argument parsing"
+fi
+
 input_path="$(mcp_args_get '.input // empty' 2>/dev/null || true)"
 output_path="$(mcp_args_get '.output // empty' 2>/dev/null || true)"
 preset="$(mcp_args_get '.preset // empty' 2>/dev/null || true)"
 start_time="$(mcp_args_get '.start_time // empty' 2>/dev/null || true)"
 duration="$(mcp_args_get '.duration // empty' 2>/dev/null || true)"
 
-if [ -z "${input_path}" ] && [ $# -ge 1 ]; then
+if [[ -z "${input_path}" ]] && [[ $# -ge 1 ]]; then
 	input_path="$1"
 fi
-if [ -z "${output_path}" ] && [ $# -ge 2 ]; then
+if [[ -z "${output_path}" ]] && [[ $# -ge 2 ]]; then
 	output_path="$2"
 fi
-if [ -z "${preset}" ] && [ $# -ge 3 ]; then
+if [[ -z "${preset}" ]] && [[ $# -ge 3 ]]; then
 	preset="$3"
 fi
-if [ -z "${start_time}" ] && [ $# -ge 4 ]; then
+if [[ -z "${start_time}" ]] && [[ $# -ge 4 ]]; then
 	start_time="$4"
 fi
-if [ -z "${duration}" ] && [ $# -ge 5 ]; then
+if [[ -z "${duration}" ]] && [[ $# -ge 5 ]]; then
 	duration="$5"
 fi
 
-if [ -z "${input_path}" ] || [ -z "${output_path}" ] || [ -z "${preset}" ]; then
+if [[ -z "${input_path}" ]] || [[ -z "${output_path}" ]] || [[ -z "${preset}" ]]; then
 	mcp_fail_invalid_args "Missing required arguments: input, output, preset"
 fi
 
-full_input="$(ffmpeg_resolve_path "${input_path}" "read")"
-full_output="$(ffmpeg_resolve_path "${output_path}" "write")"
+full_input="$(mcp_ffmpeg_resolve_path "${input_path}" "read")"
+full_output="$(mcp_ffmpeg_resolve_path "${output_path}" "write")"
 
-# Validation: Input exists
-if [ ! -f "${full_input}" ]; then
-	mcp_fail -32602 "Input file not found: ${input_path}"
+# Validation: Input exists → Tool Execution Error (LLM can choose a different file)
+if [[ ! -f "${full_input}" ]]; then
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Input file not found" \
+			input "${input_path}" \
+			hint "Check the file exists and is within allowed media roots"
+	)"
+	exit 1
 fi
 
 # Validation: Output collision with elicitation-based confirmation
-if [ -f "${full_output}" ]; then
-	if [ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]; then
-		mcp_fail -32602 "Output file exists and elicitation is not supported; refusing to overwrite ${output_path}"
+if [[ -f "${full_output}" ]]; then
+	if [[ "${MCP_ELICIT_SUPPORTED:-0}" != "1" ]]; then
+		# Tool Execution Error: LLM can choose a different output path
+		mcp_emit_json "$(
+			mcp_json_obj \
+				error "Output file already exists" \
+				output "${output_path}" \
+				hint "Choose a different output path or enable elicitation to confirm overwrite"
+		)"
+		exit 1
+	fi
+	if [[ -z "${json_bin}" ]]; then
+		mcp_fail -32603 "JSON tooling unavailable for elicitation parsing"
 	fi
 	overwrite_resp="$(mcp_elicit_confirm "Output ${output_path} exists. Overwrite?")"
-	overwrite_action="$(printf '%s' "${overwrite_resp}" | jq -r '.action')"
-	if [ "${overwrite_action}" != "accept" ]; then
-		mcp_fail -32602 "Overwrite declined for ${output_path}"
-	fi
-	confirmed="$(printf '%s' "${overwrite_resp}" | jq -r '.content.confirmed // false')"
-	if [ "${confirmed}" != "true" ]; then
-		mcp_fail -32602 "Overwrite not confirmed for ${output_path}"
+	overwrite_fields="$("${json_bin}" -r '[.action, (.content.confirmed // false)] | @tsv' <<<"${overwrite_resp}")"
+	overwrite_action="${overwrite_fields%%$'\t'*}"
+	overwrite_confirmed="${overwrite_fields#*$'\t'}"
+	if [[ "${overwrite_action}" != "accept" ]] || [[ "${overwrite_confirmed}" != "true" ]]; then
+		# Tool Execution Error: User declined, LLM can try different output
+		mcp_emit_json "$(
+			mcp_json_obj \
+				error "Overwrite declined" \
+				output "${output_path}" \
+				hint "Choose a different output path"
+		)"
+		exit 1
 	fi
 fi
 
@@ -64,10 +90,10 @@ global_opts=("-hide_banner")
 input_opts=()
 output_opts=("-y")
 
-if [ -n "${start_time}" ]; then
+if [[ -n "${start_time}" ]]; then
 	input_opts+=("-ss" "${start_time}")
 fi
-if [ -n "${duration}" ]; then
+if [[ -n "${duration}" ]]; then
 	input_opts+=("-t" "${duration}")
 fi
 
@@ -86,14 +112,21 @@ case "${preset}" in
 	output_opts+=("-vf" "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
 	;;
 *)
-	mcp_fail -32602 "Invalid preset: ${preset}"
+	# Tool Execution Error: LLM can choose a valid preset
+	mcp_emit_json "$(
+		mcp_json_obj \
+			error "Invalid preset" \
+			preset "${preset}" \
+			hint "Valid presets: 1080p, 720p, audio-only, gif"
+	)"
+	exit 1
 	;;
 esac
 
 # Get total duration in microseconds for progress calculation
 total_duration_us=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${full_input}" | awk '{print int($1 * 1000000)}')
 
-if [ -z "${total_duration_us}" ] || [ "${total_duration_us}" -eq 0 ]; then
+if [[ -z "${total_duration_us}" ]] || [[ "${total_duration_us}" -eq 0 ]]; then
 	# Fallback if duration unknown
 	total_duration_us=1
 fi
@@ -103,10 +136,10 @@ mcp_progress 0 "Starting transcoding..."
 fifo_dir="$(mktemp -d "${TMPDIR:-/tmp}/mcp-ffmpeg-progress.XXXXXX")"
 progress_fifo="${fifo_dir}/progress.fifo"
 mkfifo "${progress_fifo}"
-cleanup_fifo() {
+mcp_ffmpeg_cleanup_fifo() {
 	rm -rf "${fifo_dir}"
 }
-trap cleanup_fifo EXIT INT TERM
+trap mcp_ffmpeg_cleanup_fifo EXIT INT TERM
 
 ffmpeg "${global_opts[@]}" "${input_opts[@]}" -i "${full_input}" -progress "${progress_fifo}" "${output_opts[@]}" "${full_output}" &
 ffmpeg_pid=$!
@@ -117,9 +150,11 @@ while IFS= read -r line; do
 
 	if [[ "$key" == "out_time_us" ]]; then
 		current_us=$value
-		if [ "${total_duration_us}" -gt 0 ]; then
+		if [[ "${total_duration_us}" -gt 0 ]]; then
 			pct=$((current_us * 100 / total_duration_us))
-			[ $pct -gt 100 ] && pct=100
+			if [[ $pct -gt 100 ]]; then
+				pct=100
+			fi
 			mcp_progress "${pct}" "Transcoding... ${pct}%"
 		fi
 	fi
@@ -139,7 +174,7 @@ fi
 rm -f "${progress_fifo}"
 trap - EXIT INT TERM
 
-if [ "${wait_status}" -ne 0 ]; then
+if [[ "${wait_status}" -ne 0 ]]; then
 	rm -f "${full_output}"
 	mcp_fail -32603 "Transcode failed (ffmpeg exit ${wait_status})"
 fi

@@ -30,6 +30,7 @@ Guardrails are enforced for all registries:
 ## `.registry/tools.json`
 
 Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DIR`.
+Tool names must match `^[a-zA-Z0-9_-]{1,64}$`; Some clients, including Claude Desktop, enforces this and rejects dotted names, so prefer hyphenated or underscored namespaces.
 
 ```json
 {
@@ -37,7 +38,7 @@ Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DI
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "example.hello",
+      "name": "example-hello",
       "description": "Return a friendly greeting",
       "path": "hello/tool.sh",
       "inputSchema": {
@@ -51,13 +52,36 @@ Each entry describes an executable tool. Paths are relative to `MCPBASH_TOOLS_DI
           "message": { "type": "string" }
         }
       },
-      "timeoutSecs": 5
+      "timeoutSecs": 5,
+      "icons": [
+        {"src": "https://example.com/hello-icon.svg", "mimeType": "image/svg+xml"}
+      ]
     }
   ],
   "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "total": 1
 }
 ```
+
+**Icons format (MCP 2025-11-25):** The optional `icons` array provides visual identifiers for each item. Each icon object includes:
+- `src` (required): URI pointing to the icon — can be:
+  - **Local file path**: `"./icon.svg"` or `"icons/logo.png"` — automatically converted to data URIs at registry generation
+  - **Data URI**: `"data:image/svg+xml;base64,PHN2Zy4uLg=="`
+  - **HTTPS URL**: `"https://example.com/icon.png"`
+- `mimeType` (optional): MIME type (e.g., `image/svg+xml`, `image/png`) — auto-detected from file extension for local files
+- `sizes` (optional): Array of size specifications (e.g., `["48x48"]`, `["any"]` for SVG)
+
+**Local file example:**
+```json
+{
+  "name": "my-tool",
+  "icons": [
+    {"src": "./icon.svg"},
+    {"src": "https://cdn.example.com/fallback.png", "mimeType": "image/png"}
+  ]
+}
+```
+Local paths are resolved relative to the `.meta.json` file location. For stdio transport, data URIs are preferred since clients don't need network access to display the icon.
 
 Metadata precedence order:
 1. `<tool>.meta.json`
@@ -74,12 +98,15 @@ Entries describe resource templates and providers. Paths are relative to `MCPBAS
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "file.readme",
+      "name": "file-readme",
       "description": "Serve README fragments",
       "path": "readme/README.md",
       "uri": "file:///path/to/project/resources/readme/README.md",
       "mimeType": "text/markdown",
-      "provider": "file"
+      "provider": "file",
+      "icons": [
+        {"src": "https://example.com/doc-icon.png", "mimeType": "image/png", "sizes": ["48x48"]}
+      ]
     }
   ],
   "hash": "77b2e6fa5b2986a2b9ac64a2f1c6b757b954dcbe356743f9fb493144b917ebc7",
@@ -130,7 +157,7 @@ Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_
   "generatedAt": "2025-10-18T09:00:00Z",
   "items": [
     {
-      "name": "summarise.notes",
+      "name": "summarise-notes",
       "description": "Summarise meeting notes",
       "path": "summarise/summarise.txt",
       "arguments": {
@@ -141,7 +168,10 @@ Entries reference prompt templates and metadata. Paths are relative to `MCPBASH_
             "type": "string"
           }
         }
-      }
+      },
+      "icons": [
+        {"src": "https://example.com/summary-icon.svg", "mimeType": "image/svg+xml"}
+      ]
     }
   ],
   "hash": "a46db88ec044b6bfc28f0c30a8243f005f7947743104c1d343958aa88f76768a",

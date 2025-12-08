@@ -103,10 +103,12 @@ mcp_tools_manual_finalize() {
 			path: .path,
 			inputSchema: (.inputSchema // .arguments // {type: "object", properties: {}}),
 			timeoutSecs: (.timeoutSecs // null),
-			outputSchema: (.outputSchema // null)
+			outputSchema: (.outputSchema // null),
+			icons: (.icons // null)
 		}) |
 		map(
-			if .outputSchema == null then del(.outputSchema) else . end
+			if .outputSchema == null then del(.outputSchema) else . end |
+			if .icons == null then del(.icons) else . end
 		) |
 		sort_by(.name) |
 		{
@@ -510,6 +512,10 @@ mcp_tools_scan() {
 			esac
 			local base_name
 			base_name="$(basename "${path}")"
+			# Skip scaffolded smoke test scripts (not tools)
+			if [ "${base_name}" = "smoke.sh" ]; then
+				continue
+			fi
 			local name="${base_name%.*}"
 			local dir_name
 			dir_name="$(dirname "${path}")"
@@ -528,6 +534,8 @@ mcp_tools_scan() {
 			local timeout=""
 			local output_schema="null"
 
+			local icons="null"
+
 			if [ -f "${meta_json}" ]; then
 				# Read fields individually to avoid collapsing empty columns
 				local j_name
@@ -537,6 +545,11 @@ mcp_tools_scan() {
 				arguments="$("${MCPBASH_JSON_TOOL_BIN}" -c '.inputSchema // .arguments // {type:"object",properties:{}}' "${meta_json}" 2>/dev/null || printf '{}')"
 				timeout="$("${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' "${meta_json}" 2>/dev/null || printf '')"
 				output_schema="$("${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' "${meta_json}" 2>/dev/null || printf 'null')"
+				icons="$("${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' "${meta_json}" 2>/dev/null || printf 'null')"
+				# Convert local file paths to data URIs
+				local meta_dir
+				meta_dir="$(dirname "${meta_json}")"
+				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
 			fi
 
 			if [ "${arguments}" = "{}" ]; then
@@ -556,6 +569,11 @@ mcp_tools_scan() {
 					arguments="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.arguments // {type: "object", properties: {}}' 2>/dev/null)"
 					timeout="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
 					output_schema="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
+					icons="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
+					# Convert local file paths to data URIs (relative to tool script dir)
+					local script_dir
+					script_dir="$(dirname "${path}")"
+					icons="$(mcp_json_icons_to_data_uris "${icons}" "${script_dir}")"
 				fi
 			fi
 
@@ -569,6 +587,7 @@ mcp_tools_scan() {
 				--argjson args "$arguments" \
 				--arg timeout "$timeout" \
 				--argjson out "$output_schema" \
+				--argjson icons "$icons" \
 				'{
 					name: $name,
 					description: $desc,
@@ -576,7 +595,8 @@ mcp_tools_scan() {
 					inputSchema: $args,
 					timeoutSecs: (if ($timeout|test("^[0-9]+$")) then ($timeout|tonumber) else null end)
 				}
-				+ (if $out != null then {outputSchema: $out} else {} end)' >>"${items_file}"
+				+ (if $out != null then {outputSchema: $out} else {} end)
+				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
 		done
 	fi
 

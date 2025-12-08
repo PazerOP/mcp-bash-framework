@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+set -euo pipefail
 
 # Guard helpers that confine media access to configured roots.
 
@@ -25,7 +26,7 @@ mcp_ffmpeg_guard_realpath() {
 		)
 		return
 	fi
-	echo "mcp_ffmpeg_guard: realpath is required" >&2
+	printf 'mcp_ffmpeg_guard: realpath is required\n' >&2
 	return 1
 }
 
@@ -43,9 +44,9 @@ mcp_ffmpeg_guard_init() {
 		return 0
 	fi
 
-	local json_bin="${MCPBASH_JSON_TOOL_BIN:-jq}"
-	if ! command -v "${json_bin}" >/dev/null 2>&1; then
-		echo "mcp_ffmpeg_guard: JSON tool ${json_bin} not available (set MCPBASH_JSON_TOOL_BIN)" >&2
+	local json_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	if [[ -z "${json_bin}" ]] || ! command -v "${json_bin}" >/dev/null 2>&1; then
+		printf 'mcp_ffmpeg_guard: JSON tool unavailable (MCPBASH_JSON_TOOL_BIN=%s)\n' "${json_bin:-unset}" >&2
 		return 1
 	fi
 
@@ -57,7 +58,7 @@ mcp_ffmpeg_guard_init() {
 
 	local config="${base}/config/media_roots.json"
 	if [[ ! -f "${config}" ]]; then
-		echo "mcp_ffmpeg_guard: missing config ${config}" >&2
+		printf 'mcp_ffmpeg_guard: missing config %s\n' "${config}" >&2
 		return 1
 	fi
 
@@ -80,13 +81,13 @@ JQ
 
 	if ! mapfile -t entries < <("${json_bin}" -r -f "${jq_script_file}" "${config}"); then
 		rm -f "${jq_script_file}"
-		echo "mcp_ffmpeg_guard: invalid config in ${config}" >&2
+		printf 'mcp_ffmpeg_guard: invalid config in %s\n' "${config}" >&2
 		return 1
 	fi
 	rm -f "${jq_script_file}"
 
 	if [[ "${#entries[@]}" -eq 0 ]]; then
-		echo "mcp_ffmpeg_guard: no media roots configured" >&2
+		printf 'mcp_ffmpeg_guard: no media roots configured\n' >&2
 		return 1
 	fi
 
@@ -100,7 +101,7 @@ JQ
 		case "${mode}" in
 		rw | ro) ;;
 		*)
-			echo "mcp_ffmpeg_guard: invalid mode \"${mode}\" for path ${raw_path}" >&2
+			printf 'mcp_ffmpeg_guard: invalid mode "%s" for path %s\n' "${mode}" "${raw_path}" >&2
 			return 1
 			;;
 		esac
@@ -121,7 +122,7 @@ JQ
 		fi
 
 		if [[ ! -d "${abs_path}" ]]; then
-			echo "mcp_ffmpeg_guard: configured root ${abs_path} does not exist" >&2
+			printf 'mcp_ffmpeg_guard: configured root %s does not exist\n' "${abs_path}" >&2
 			return 1
 		fi
 
@@ -134,7 +135,7 @@ JQ
 	done
 
 	if [[ "${#MCP_FFMPEG_ROOTS[@]}" -eq 0 ]]; then
-		echo "mcp_ffmpeg_guard: no usable media roots found" >&2
+		printf 'mcp_ffmpeg_guard: no usable media roots found\n' >&2
 		return 1
 	fi
 
@@ -158,7 +159,7 @@ mcp_ffmpeg_guard_resolve() {
 	local user_path="$2"
 
 	if [[ -z "${user_path}" ]]; then
-		echo "mcp_ffmpeg_guard: path cannot be empty" >&2
+		printf 'mcp_ffmpeg_guard: path cannot be empty\n' >&2
 		return 1
 	fi
 
@@ -185,7 +186,7 @@ mcp_ffmpeg_guard_resolve() {
 			return 1
 		fi
 		if ! matched_index="$(mcp_ffmpeg_guard_root_index "${canonical}")"; then
-			echo "mcp_ffmpeg_guard: ${canonical} is not within an allowed media root" >&2
+			printf 'mcp_ffmpeg_guard: %s is not within an allowed media root\n' "${canonical}" >&2
 			return 1
 		fi
 	else
@@ -208,19 +209,19 @@ mcp_ffmpeg_guard_resolve() {
 		done
 
 		if [[ "${matched_index}" -lt 0 ]]; then
-			echo "mcp_ffmpeg_guard: ${user_path} is not within an allowed media root" >&2
+			printf 'mcp_ffmpeg_guard: %s is not within an allowed media root\n' "${user_path}" >&2
 			return 1
 		fi
 	fi
 
 	if [[ -z "${canonical}" ]]; then
-		echo "mcp_ffmpeg_guard: failed to resolve ${user_path}" >&2
+		printf 'mcp_ffmpeg_guard: failed to resolve %s\n' "${user_path}" >&2
 		return 1
 	fi
 
 	local root_mode="${MCP_FFMPEG_MODES[$matched_index]}"
 	if [[ "${desired_mode}" == "write" && "${root_mode}" != "rw" ]]; then
-		echo "mcp_ffmpeg_guard: ${MCP_FFMPEG_ROOTS[$matched_index]} is read-only" >&2
+		printf 'mcp_ffmpeg_guard: %s is read-only\n' "${MCP_FFMPEG_ROOTS[$matched_index]}" >&2
 		return 1
 	fi
 
@@ -228,12 +229,12 @@ mcp_ffmpeg_guard_resolve() {
 		local parent
 		parent="$(dirname "${canonical}")"
 		if ! mcp_ffmpeg_guard_path_contains "${MCP_FFMPEG_ROOTS[$matched_index]}" "${parent}"; then
-			echo "mcp_ffmpeg_guard: parent directory escapes the allowed root" >&2
+			printf 'mcp_ffmpeg_guard: parent directory escapes the allowed root\n' >&2
 			return 1
 		fi
 		if [[ ! -d "${parent}" ]]; then
 			if ! mkdir -p "${parent}"; then
-				echo "mcp_ffmpeg_guard: unable to create ${parent}" >&2
+				printf 'mcp_ffmpeg_guard: unable to create %s\n' "${parent}" >&2
 				return 1
 			fi
 		fi
