@@ -18,13 +18,13 @@
 ```
 > initialize
 < {"result":{"capabilities":{...}}}
-> tools/call example.hello
+> tools/call example-hello
 < {"result":{"content":[{"type":"text","text":"Hello from example tool"}]}}
 ```
 
 **Success criteria**
-- `tools/list` shows `example.hello`
-- Calling `example.hello` returns a greeting (text or structured if jq/gojq is present)
+- `tools/list` shows `example-hello`
+- Calling `example-hello` returns a greeting (text or structured if jq/gojq is present)
 
 **Troubleshooting**
 - Ensure scripts are executable (`chmod +x examples/run examples/00-hello-tool/tools/*/tool.sh`).

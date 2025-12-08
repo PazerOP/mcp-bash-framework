@@ -17,13 +17,13 @@
 **Transcript**
 ```
 > resources/list
-< {"result":{"resources":[{"name":"example.greeting","uri":"file://./resources/greeting.txt",...}]}}
+< {"result":{"resources":[{"name":"example-greeting","uri":"file://./resources/greeting.txt",...}]}}
 > resources/read {"uri":"file://./resources/greeting.txt"}
 < {"result":{"contents":[{"type":"text","text":"Hello from a resource file"}]}}
 ```
 
 **Success criteria**
-- `resources/list` shows `example.greeting` with a file:// URI
+- `resources/list` shows `example-greeting` with a file:// URI
 - `resources/read` returns the greeting text
 
 **Troubleshooting**

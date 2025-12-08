@@ -1,5 +1,5 @@
 {
-  "name": "example.elicitation",
+  "name": "example-elicitation",
   "description": "Demonstrates elicitation confirm + choice",
   "inputSchema": {
     "type": "object",
@@ -7,4 +7,3 @@
     "additionalProperties": false
   }
 }
-

@@ -1,5 +1,5 @@
 {
-  "name": "example.echoArg",
+  "name": "example-echo-arg",
   "description": "Echos a provided value",
   "inputSchema": {
     "type": "object",
@@ -20,4 +20,3 @@
   },
   "timeoutSecs": 10
 }
-

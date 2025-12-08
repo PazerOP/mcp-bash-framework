@@ -1,5 +1,5 @@
 {
-  "name": "example.hello",
+  "name": "example-hello",
   "description": "Return a friendly greeting",
   "inputSchema": {
     "type": "object",
@@ -17,4 +17,3 @@
   },
   "timeoutSecs": 5
 }
-

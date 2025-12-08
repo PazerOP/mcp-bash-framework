@@ -1,5 +1,5 @@
 {
-  "name": "example.greeting",
+  "name": "example-greeting",
   "description": "Returns a greeting from a resource file",
   "uri": "file://./resources/greeting.txt",
   "mimeType": "text/plain",

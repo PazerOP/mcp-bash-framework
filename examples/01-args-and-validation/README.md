@@ -16,14 +16,14 @@
 
 **Transcript**
 ```
-> tools/call example.echoArg {"value":"hi"}
+> tools/call example-echo-arg {"value":"hi"}
 < {"result":{"content":[{"type":"text","text":"You sent: hi"}]}}
-> tools/call example.echoArg {}
+> tools/call example-echo-arg {}
 < {"error":{"code":-32602,"message":"Missing 'value' argument","isError":true}}
 ```
 
 **Success criteria**
-- `tools/list` shows `example.echoArg`
+- `tools/list` shows `example-echo-arg`
 - Valid call echoes the provided value; missing argument yields a validation error
 
 **Troubleshooting**

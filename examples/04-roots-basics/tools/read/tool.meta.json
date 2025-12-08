@@ -1,5 +1,5 @@
 {
-  "name": "example.roots.read",
+  "name": "example-roots-read",
   "description": "Read a file only if it is within configured MCP roots",
   "inputSchema": {
     "type": "object",
@@ -22,4 +22,3 @@
   },
   "timeoutSecs": 5
 }
-
