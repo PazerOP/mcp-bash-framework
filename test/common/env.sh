@@ -277,6 +277,9 @@ test_stage_workspace() {
 	if test_prepare_base_tar && test_extract_base_tar "${dest}"; then
 		return 0
 	fi
+	if [ "${VERBOSE:-0}" = "1" ]; then
+		printf ' -> base tar unavailable; falling back to copy\n' >&2
+	fi
 	# Copy framework files
 	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
 	cp -a "${MCPBASH_HOME}/lib" "${dest}/"

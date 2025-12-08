@@ -400,6 +400,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
 | `MCPBASH_DEFAULT_TOOL_TIMEOUT` | `30` | Default tool timeout (seconds). |
 | `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+| `MCPBASH_CI_MODE` | (unset) | CI defaults: safe tmp/log dirs, keep-logs, timestamped logs, failure summary (`failure-summary.jsonl`), env snapshot (`env-snapshot.json`); `MCPBASH_CI_VERBOSE=true` starts at debug; GH annotations when tracing provides file/line. |
 
 Full list and defaults: see [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md).
 
