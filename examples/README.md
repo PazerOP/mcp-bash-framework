@@ -19,3 +19,8 @@ MCP Inspector (stdio) quickstart:
 npx @modelcontextprotocol/inspector --transport stdio -- ./examples/run 08-elicitation
 ```
 The `--` separator prevents the inspector from treating `./examples/run` as its own flag. Replace `08-elicitation` with any example ID (e.g., `advanced/ffmpeg-studio`).
+
+Highlights:
+- `10-completions` — manual completion registration, query filtering, pagination/hasMore.
+- `08-elicitation` — confirm/choice/multi-choice flows when clients advertise elicitation.
+- Full ladder lives in the main README table.
