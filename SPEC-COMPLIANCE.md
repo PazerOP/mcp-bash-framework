@@ -74,20 +74,6 @@ This table shows when features were introduced in the MCP specification and when
 - ❌ Not yet: Planned but not yet implemented
 - ❌ Not supported: Intentionally out of scope
 
-### Version Summary
-
-**mcpbash 0.1.0** (2025-11-30): Initial release with comprehensive MCP 2024-11-05 and 2025-06-18 feature support, including tools, resources, prompts, elicitation, roots, pagination, and cancellation.
-
-**mcpbash 0.2.0** (2025-12-02): Enhanced server metadata via server.meta.json with optional serverInfo fields.
-
-**mcpbash 0.3.0** (2025-12-05): CLI tooling for project management (init, validate, config, doctor).
-
-**mcpbash 0.4.0** (2025-12-06): SDK enhancements, run-tool command, path normalization, tool policy hooks.
-
-**mcpbash 0.5.0** (2025-12-08): MCP 2025-11-25 protocol support, icons (SEP-973), elicitation enhancements (SEP-1330, SEP-1036), tool execution errors (SEP-1303).
-
-**mcpbash 0.6.0** (Unreleased): XDG Base Directory paths, stricter roots validation, multi-client config output.
-
 ## Protocol Version
 
 | Property | Value |
