@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tools can now return embedded resources in results: write paths (optional mime/uri) to `MCP_TOOL_RESOURCES_FILE` and the framework will emit `type:"resource"` entries, including binary-safe handling.
 - Resource reads detect binary MIME and emit base64 `blob` payloads instead of raw text to prevent malformed JSON on binary files.
 - Tool annotations support (MCP 2025-03-26): tools can declare behavior hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) in `.meta.json` or inline `# mcp:` comments. Annotations are surfaced in `tools/list` responses for clients to present appropriate UI cues.
+- Shared-secret guard for proxied runs: set `MCPBASH_REMOTE_TOKEN` (default `_meta["mcpbash/remoteToken"]`, configurable key, timing-safe compare) to reject unauthenticated requests with `-32602`.
+- Readiness/health probe: `mcp-bash --health|--ready [--project-root DIR] [--timeout SECS]` refreshes registries without side effects and exits `0/1/2` for probes.
 
 ### Changed
 - **BREAKING**: Installer now uses XDG Base Directory compliant paths. Framework installs to `~/.local/share/mcp-bash` (or `$XDG_DATA_HOME/mcp-bash`) with a symlink at `~/.local/bin/mcp-bash`. Previous default was `~/mcp-bash-framework`. Users upgrading should either re-run the installer (which will use the new location) or specify `--dir ~/mcp-bash-framework` to keep the old path.

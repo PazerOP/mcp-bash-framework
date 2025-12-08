@@ -172,6 +172,11 @@ mcp_registry_write_with_lock() {
 	local json_payload="$2"
 	local lock_name="${3:-registry.refresh}"
 	local timeout="${4:-5}"
+
+	if [ "${MCPBASH_REGISTRY_REFRESH_NO_WRITE:-false}" = "true" ]; then
+		return 0
+	fi
+
 	if ! mcp_lock_acquire_timeout "${lock_name}" "${timeout}"; then
 		printf '%s\n' "mcp-bash: registry lock '${lock_name}' unavailable after ${timeout}s" >&2
 		return 2

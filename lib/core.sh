@@ -61,6 +61,9 @@ mcp_core_bootstrap_state() {
 	MCPBASH_INITIALIZE_HANDSHAKE_DONE=false
 	_MCP_NOTIFICATION_PAYLOAD=""
 	mcp_runtime_init_paths
+	if ! mcp_auth_init; then
+		exit 1
+	fi
 	mcp_runtime_load_server_meta
 	mcp_ids_init_state
 	mcp_lock_init
@@ -488,6 +491,10 @@ mcp_core_dispatch_object() {
 
 	if ! id_json="$(mcp_json_extract_id "${json_line}")"; then
 		mcp_core_emit_parse_error "Invalid Request" -32600 "Unable to extract id"
+		return
+	fi
+
+	if ! mcp_auth_guard_request "${json_line}" "${method}" "${id_json}"; then
 		return
 	fi
 

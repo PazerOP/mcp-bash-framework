@@ -42,6 +42,8 @@ Usage:
   mcp-bash init [--name NAME] [--no-hello]
                            # initialize project in current directory
   mcp-bash debug           # launch server with debug logging (see docs/DEBUGGING.md)
+  mcp-bash --health        # readiness probe (0=ready, 1=unhealthy, 2=misconfigured)
+  mcp-bash --ready         # alias for --health
   mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run]
                            [--timeout SECS] [--verbose] [--no-refresh]
                            [--minimal] [--project-root DIR] [--print-env]
@@ -59,6 +61,7 @@ Usage:
   mcp-bash registry status [--project-root DIR]
 
 Note: running without MCPBASH_PROJECT_ROOT starts a temporary getting-started helper tool.
+Remote deployments: set MCPBASH_REMOTE_TOKEN to require per-request _meta token; see docs/REMOTE.md.
 EOF
 }
 
@@ -91,7 +94,7 @@ initialize_runtime_paths() {
 	script_dir="$(cd "$(dirname "${resolved}")" && pwd)"
 	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
 
-	local required_libs="runtime json hash ids lock io paginate logging uri policy tools_policy registry spec tools resources prompts completion timeout rpc core validate"
+	local required_libs="runtime json hash ids lock io paginate logging auth uri policy tools_policy registry spec tools resources prompts completion timeout rpc core validate"
 	local lib
 
 	for lib in ${required_libs}; do
@@ -117,6 +120,8 @@ initialize_runtime_paths() {
 	. "${MCPBASH_HOME}/lib/paginate.sh"
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME}/lib/logging.sh"
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME}/lib/auth.sh"
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME}/lib/uri.sh"
 	# shellcheck disable=SC1090
@@ -233,6 +238,13 @@ if [ "${cli_cmd}" = "doctor" ]; then
 	# shellcheck source=lib/cli/doctor.sh disable=SC1091
 	. "${MCPBASH_HOME}/lib/cli/doctor.sh"
 	mcp_cli_doctor "$@"
+fi
+
+if [ "${cli_cmd}" = "--health" ] || [ "${cli_cmd}" = "--ready" ] || [ "${cli_cmd}" = "health" ] || [ "${cli_cmd}" = "ready" ]; then
+	shift
+	# shellcheck source=lib/cli/health.sh disable=SC1091
+	. "${MCPBASH_HOME}/lib/cli/health.sh"
+	mcp_cli_health "$@"
 fi
 
 if [ "${cli_cmd}" = "new" ]; then

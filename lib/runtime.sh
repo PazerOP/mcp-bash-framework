@@ -21,6 +21,10 @@
 : "${MCPBASH_HOME:=}"
 : "${MCPBASH_TRANSPORT:=}"
 : "${MCPBASH_TRANSPORT_STDIO:=false}"
+: "${MCPBASH_REMOTE_TOKEN:=}"
+: "${MCPBASH_REMOTE_TOKEN_KEY:=}"
+: "${MCPBASH_REMOTE_TOKEN_FALLBACK_KEY:=}"
+: "${MCPBASH_REMOTE_TOKEN_ENABLED:=false}"
 
 # Path normalization helpers (Bash 3.2+). Load if not already present.
 if ! command -v mcp_path_normalize >/dev/null 2>&1; then

@@ -57,7 +57,7 @@ mcp-bash targets the **2025-11-25** MCP specification with negotiated downgrades
 
 **Not yet implemented:** Audio content, async job/poll, sampling, server-identity discovery.
 
-Transport is stdio-only by design. See [Remote Connectivity](docs/REMOTE.md) for HTTP/SSE proxy options.
+Transport is stdio-only by design. See [Remote Connectivity](docs/REMOTE.md) for HTTP/SSE proxy options, including the shared-secret guard (`MCPBASH_REMOTE_TOKEN`) and readiness probe (`mcp-bash --health`).
 
 → [Full compliance matrix](SPEC-COMPLIANCE.md)
 
@@ -291,6 +291,7 @@ See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layout
 
 ## Diagnostics & Validation
 
+- Readiness/health probe: `mcp-bash --health [--project-root DIR] [--timeout SECS]` (`0`=ready, `1`=unhealthy, `2`=misconfigured)
 - Project checks: `mcp-bash validate [--project-root DIR] [--fix] [--json] [--explain-defaults] [--strict]`
 - Environment check: `mcp-bash doctor [--json]`
 - Registry cache introspection: `mcp-bash registry status [--project-root DIR]`
