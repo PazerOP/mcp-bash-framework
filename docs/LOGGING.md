@@ -6,6 +6,7 @@
 - Debug logs emit only when `MCPBASH_LOG_LEVEL=debug`. Warning/error logs always emit regardless of level.
 - Argument values are never logged; debug traces focus on flow (method, ids, counts, byte sizes).
 - Startup diagnostics (transport, cwd, project root, JSON tool) are written to stderr when running over the stdio transport so stdout stays JSON-only for clients and Inspector.
+- Tool stderr capture is opt-in configurable: `MCPBASH_TOOL_STDERR_CAPTURE` (`true`/`false`), `MCPBASH_TOOL_STDERR_TAIL_LIMIT` (bytes, default 4096), and `MCPBASH_TOOL_TIMEOUT_CAPTURE` for timeouts.
 
 ## Verbose Mode (paths + script output)
 

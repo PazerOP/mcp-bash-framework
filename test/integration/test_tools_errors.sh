@@ -71,6 +71,12 @@ test_assert_eq "${fail_code}" "-32603"
 if [ -z "${fail_stderr}" ] || [[ "${fail_stderr}" != *"nope"* ]]; then
 	test_fail "stderr not propagated from fail.tool"
 fi
+fail_exit_code="$(echo "${fail_resp}" | jq -r '.error.data.exitCode // empty')"
+test_assert_eq "${fail_exit_code}" "7"
+fail_stderr_tail="$(echo "${fail_resp}" | jq -r '.error.data.stderrTail // empty')"
+if [ -z "${fail_stderr_tail}" ] || [[ "${fail_stderr_tail}" != *"nope"* ]]; then
+	test_fail "stderrTail missing or incorrect for fail.tool"
+fi
 
 slow_resp="$(jq -c 'select(.id=="slow")' "${WORKSPACE}/responses.ndjson")"
 if [ -z "${slow_resp}" ]; then
@@ -78,5 +84,14 @@ if [ -z "${slow_resp}" ]; then
 fi
 slow_code="$(echo "${slow_resp}" | jq -r '.error.code')"
 test_assert_eq "${slow_code}" "-32603"
+slow_exit_code="$(echo "${slow_resp}" | jq -r '.error.data.exitCode // empty')"
+case "${slow_exit_code}" in
+124 | 137 | 143) ;;
+*) test_fail "unexpected timeout exit code: ${slow_exit_code}" ;;
+esac
+slow_stderr_tail="$(echo "${slow_resp}" | jq -r '.error.data.stderrTail // empty')"
+if [ -n "${slow_stderr_tail}" ] && [ "${#slow_stderr_tail}" -gt 4096 ]; then
+	test_fail "timeout stderrTail exceeds expected cap"
+fi
 
 printf 'Tool error and timeout tests passed.\n'

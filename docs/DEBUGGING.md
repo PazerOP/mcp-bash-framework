@@ -145,6 +145,9 @@ For manual control without the `debug` subcommand:
 | `MCPBASH_PRESERVE_STATE` | (unset) | Set to `true` to keep state directory after exit |
 | `MCPBASH_LOG_LEVEL` | `info` | Set to `debug` for verbose stderr logging |
 | `MCPBASH_LOG_VERBOSE` | (unset) | Set to `true` to include file paths in logs |
+| `MCPBASH_TOOL_STDERR_CAPTURE` | `true` | Include a bounded stderr tail in tool error responses (`error.data._meta.stderr` / `stderrTail`) |
+| `MCPBASH_TOOL_STDERR_TAIL_LIMIT` | `4096` | Max bytes of stderr tail to attach to responses |
+| `MCPBASH_TOOL_TIMEOUT_CAPTURE` | `true` | Include timeout exit code and stderr tail (when available) in timeout errors |
 
 Example:
 ```bash

@@ -75,7 +75,8 @@ For validation that happens early in a tool (before doing real work), prefer ret
 
 ## General Error Handling
 
-- Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; timeouts and cancellation surface as JSON-RPC errors before tool output is returned.
+- Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; error responses include `error.data.exitCode` and `error.data.stderrTail` (bounded) with the same `_meta.stderr` for compatibility. Disable capture with `MCPBASH_TOOL_STDERR_CAPTURE=false`; adjust the tail cap with `MCPBASH_TOOL_STDERR_TAIL_LIMIT` (default 4096 bytes).
+- Timeouts and cancellation surface as JSON-RPC errors before tool output is returned; timeouts include `error.data.exitCode` and `error.data.stderrTail` when `MCPBASH_TOOL_TIMEOUT_CAPTURE` is enabled (default).
 - Resource failures use JSON-RPC errors (no `isError` flag) consistent with the MCP spec: invalid cursors/params return `-32602`, provider failures and oversized payloads return `-32603`.
 - Malformed tool output triggers a substitution with an error payload and a logged incident.
 - Registry or discovery errors fall back to minimal capabilities while emitting `notifications/message` with severity `error`.

@@ -917,6 +917,30 @@ mcp_tools_metadata_for_name() {
 	printf '%s' "${metadata}"
 }
 
+mcp_tools_stderr_capture_enabled() {
+	local flag="${MCPBASH_TOOL_STDERR_CAPTURE:-true}"
+	case "${flag}" in
+	"" | "1" | "true" | "TRUE" | "yes" | "on") return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+mcp_tools_timeout_capture_enabled() {
+	local flag="${MCPBASH_TOOL_TIMEOUT_CAPTURE:-true}"
+	case "${flag}" in
+	"" | "1" | "true" | "TRUE" | "yes" | "on") return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+mcp_tools_stderr_tail() {
+	local file="$1"
+	local limit="${2:-4096}"
+	[ -n "${file}" ] || return 0
+	[ -f "${file}" ] || return 0
+	tail -c "${limit}" "${file}" 2>/dev/null | tr -d '\0'
+}
+
 # shellcheck disable=SC2031  # Subshell env exports are deliberate; parent values remain unchanged.
 mcp_tools_call() {
 	local name="$1"
@@ -1346,6 +1370,15 @@ mcp_tools_call() {
 	stderr_content="${stderr_file}"
 	stdout_content="${stdout_file}"
 
+	local stderr_tail_limit="${MCPBASH_TOOL_STDERR_TAIL_LIMIT:-4096}"
+	case "${stderr_tail_limit}" in
+	'' | *[!0-9]*) stderr_tail_limit=4096 ;;
+	esac
+	local stderr_tail=""
+	if mcp_tools_stderr_capture_enabled && [ -s "${stderr_content}" ]; then
+		stderr_tail="$(mcp_tools_stderr_tail "${stderr_content}" "${stderr_tail_limit}")"
+	fi
+
 	local cancelled_flag="false"
 	if [ -n "${MCP_CANCEL_FILE:-}" ] && [ -f "${MCP_CANCEL_FILE}" ]; then
 		cancelled_flag="true"
@@ -1372,7 +1405,22 @@ mcp_tools_call() {
 	fi
 
 	if [ "${timed_out}" = "true" ]; then
-		_mcp_tools_emit_error -32603 "Tool timed out" "null"
+		local timeout_data="null"
+		if mcp_tools_timeout_capture_enabled && [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
+			timeout_data="$(
+				"${MCPBASH_JSON_TOOL_BIN}" -n \
+					--argjson code "${exit_code}" \
+					--arg stderr "${stderr_tail}" \
+					'
+					{
+						exitCode: $code,
+						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
+					}
+					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					'
+			)"
+		fi
+		_mcp_tools_emit_error -32603 "Tool timed out" "${timeout_data}"
 		cleanup_tool_temp_files
 		return 1
 	fi
@@ -1412,7 +1460,7 @@ mcp_tools_call() {
 	fi
 
 	if [ "${exit_code}" -ne 0 ]; then
-		local stderr_preview message_from_stderr data_json="" stdout_error_json="" stdout_raw=""
+		local message_from_stderr data_json="" stdout_error_json="" stdout_raw=""
 		if [ -s "${stdout_content}" ]; then
 			stdout_raw="$(cat "${stdout_content}")"
 			if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
@@ -1466,8 +1514,7 @@ mcp_tools_call() {
 			fi
 		fi
 
-		stderr_preview="$(head -c 2048 "${stderr_content}" | tr -d '\0')"
-		message_from_stderr="$(printf '%s' "${stderr_preview}" | head -n 1 | tr -d '\r')"
+		message_from_stderr="$(printf '%s' "${stderr_tail}" | head -n 1 | tr -d '\r')"
 		if [ -z "${message_from_stderr}" ]; then
 			message_from_stderr="Tool failed"
 		fi
@@ -1476,12 +1523,14 @@ mcp_tools_call() {
 			data_json="$(
 				"${MCPBASH_JSON_TOOL_BIN}" -n \
 					--argjson code "${exit_code}" \
-					--arg stderr "${stderr_preview}" \
+					--arg stderr "${stderr_tail}" \
 					'
 					{
+						exitCode: $code,
 						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
 					}
-				'
+					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					'
 			)"
 		fi
 		_mcp_tools_emit_error -32603 "${message_from_stderr}" "${data_json}"
@@ -1501,7 +1550,7 @@ mcp_tools_call() {
 		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg name "${name}" \
 			--rawfile stdout "${stdout_content}" \
-			--rawfile stderr "${stderr_content}" \
+			--arg stderr "${stderr_tail}" \
 			--argjson exit_code "${exit_code}" \
 			--arg has_json "${has_json_tool}" \
 			'
