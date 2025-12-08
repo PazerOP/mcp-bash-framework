@@ -215,7 +215,7 @@ test_prepare_base_tar() {
 		fi
 
 		local -a tar_args
-		tar_args=("${TEST_TAR_BIN}" "${tar_flags[@]}" -cf "${tmp_tar}" -C "${MCPBASH_HOME}")
+		tar_args=("${TEST_TAR_BIN}" "${tar_flags[@]:-}" -cf "${tmp_tar}" -C "${MCPBASH_HOME}")
 		local dir
 		for dir in bin lib handlers providers sdk bootstrap scaffold; do
 			if [ -e "${MCPBASH_HOME}/${dir}" ]; then
@@ -261,7 +261,7 @@ test_extract_base_tar() {
 	fi
 
 	mkdir -p "${dest}"
-	if "${TEST_TAR_BIN}" "${tar_flags[@]}" -xf "${MCPBASH_BASE_TAR}" -C "${dest}"; then
+	if "${TEST_TAR_BIN}" "${tar_flags[@]:-}" -xf "${MCPBASH_BASE_TAR}" -C "${dest}"; then
 		return 0
 	fi
 	return 1
