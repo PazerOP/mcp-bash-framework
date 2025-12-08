@@ -1473,6 +1473,10 @@ mcp_tools_call() {
 			mv "${trace_tmp}" "${trace_file}" 2>/dev/null || true
 		fi
 	fi
+	local trace_line=""
+	if [ "${trace_enabled}" = "true" ] && [ -n "${trace_file}" ] && [ -f "${trace_file}" ]; then
+		trace_line="$(tail -n 1 "${trace_file}" 2>/dev/null | head -c 512 | tr -d '\0')"
+	fi
 
 	if [ "${cancelled_flag}" = "true" ]; then
 		_mcp_tools_emit_error -32001 "Tool cancelled" "null"
@@ -1487,13 +1491,15 @@ mcp_tools_call() {
 				"${MCPBASH_JSON_TOOL_BIN}" -n \
 					--argjson code "${exit_code}" \
 					--arg stderr "${stderr_tail}" \
+					--arg traceLine "${trace_line}" \
 					'
-						{
-							exitCode: $code,
-							_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
-						}
-						| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
-						'
+					{
+						exitCode: $code,
+						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
+					}
+					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					| if ($traceLine|length) > 0 then .traceLine = $traceLine else . end
+					'
 			)"
 		fi
 		_mcp_tools_emit_error -32603 "Tool timed out" "${timeout_data}"
@@ -1600,12 +1606,14 @@ mcp_tools_call() {
 				"${MCPBASH_JSON_TOOL_BIN}" -n \
 					--argjson code "${exit_code}" \
 					--arg stderr "${stderr_tail}" \
+					--arg traceLine "${trace_line}" \
 					'
 					{
 						exitCode: $code,
 						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
 					}
 					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					| if ($traceLine|length) > 0 then .traceLine = $traceLine else . end
 					'
 			)"
 		fi
