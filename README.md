@@ -5,17 +5,30 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/yaniv-golan/mcp-bash-framework/ci.yml?branch=main&label=CI)](https://github.com/yaniv-golan/mcp-bash-framework/actions)
 [![License](https://img.shields.io/github/license/yaniv-golan/mcp-bash-framework)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-%3E%3D3.2-green.svg)](https://www.gnu.org/software/bash/)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue)](https://spec.modelcontextprotocol.io/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-blue)](https://spec.modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#runtime-requirements)
 [![MCP Badge](https://lobehub.com/badge/mcp/yaniv-golan-mcp-bash-framework)](https://lobehub.com/mcp/yaniv-golan-mcp-bash-framework)
 
 > **Repository:** [`mcp-bash-framework`](https://github.com/yaniv-golan/mcp-bash-framework) &nbsp;•&nbsp; **CLI/Binary:** `mcp-bash`
 
-**mcp-bash** lets you expose Bash scripts and binaries directly to AI systems with zero ceremony.
+## Contents
 
-- Runs on the Bash you already have. No runtimes, no dependency chain.
-- Handles concurrency, timeouts and cancellation the way real systems need.
-- You write the tools. The framework stays out of your way.
+- [MCP Spec Coverage](#mcp-spec-coverage)
+- [Why Bash?](#why-bash)
+- [Quick Start](#quick-start)
+- [Client Recipes](#client-recipes)
+- [Client Compatibility](#client-compatibility)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
+- [Learn by Example](#learn-by-example)
+- [Documentation](#documentation)
+- [FAQ](#faq)
+
+> **The most complete MCP implementation in pure Bash.** Tools, resources, prompts, elicitation, roots, progress, cancellation—the full spec, no runtimes beyond your shell.
+>
+> - Runs on Bash 3.2+ (macOS/Linux stock). No Node, no Python, no containers.
+> - Handles concurrency, timeouts, and cancellation the way production systems need.
+> - You write the tools. The framework stays out of your way.
 
 ## Why this exists
 
@@ -27,6 +40,38 @@ Most MCP servers assume you’re willing to spin up heavyweight runtimes and fra
 - Everything must be inspectable. No magic.
 - If it’s not needed in production, it isn’t in the framework.
 - Your project stays yours. The framework upgrades cleanly.
+
+## MCP Spec Coverage
+
+mcp-bash targets the **2025-11-25** MCP specification with negotiated downgrades to older versions.
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Core Protocol | ✅ Full | Lifecycle, ping, capabilities, downgrades |
+| Tools | ✅ Full | list, call, icons, errors, listChanged, annotations |
+| Resources | ⚠️ Near-full | list, read, subscriptions, binary (templates stub only) |
+| Prompts | ✅ Full | list, get, arguments, icons |
+| Utilities | ✅ Full | Progress, cancellation, logging, completion |
+| Elicitation | ✅ Full | Form, URL, enum, multi-choice modes |
+| Roots | ✅ Full | Server→client request, listChanged |
+
+**Not yet implemented:** Audio content, async job/poll, sampling, server-identity discovery.
+
+Transport is stdio-only by design. See [Remote Connectivity](docs/REMOTE.md) for HTTP/SSE proxy options, including the shared-secret guard (`MCPBASH_REMOTE_TOKEN`) and readiness probe (`mcp-bash --health`).
+
+→ [Full compliance matrix](SPEC-COMPLIANCE.md)
+
+## Why Bash?
+
+| | mcp-bash | TypeScript SDK | Python SDK |
+|---|----------|----------------|------------|
+| Runtime | Bash 3.2+ (pre-installed) | Node.js 18+ | Python 3.10+ |
+| Install | `curl \| bash` or `git clone` | `npm install` | `pip install` |
+| Startup | No VM warmup | Node.js startup | Python startup |
+| Dependencies | jq or gojq | npm packages | pip packages |
+| Best for | Shell automation, existing scripts, air-gapped/minimal environments | Node.js applications | Python applications |
+
+If your tools are already shell scripts, wrapping them in Node or Python adds complexity for no benefit. mcp-bash lets you expose them directly.
 
 ## Quick Start
 
@@ -43,26 +88,37 @@ curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main
 Manual install (for security-conscious environments):
 
 ```bash
-git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/mcp-bash-framework
-echo 'export PATH="$HOME/mcp-bash-framework/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/.local/share/mcp-bash
+mkdir -p ~/.local/bin && ln -sf ~/.local/share/mcp-bash/bin/mcp-bash ~/.local/bin/mcp-bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc (if not already in PATH)
 ```
 
 Pin a release with the installer (auto-prefixes `v` for bare versions):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version 0.4.0
+curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version 0.6.0
 # or with explicit tag
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.4.0
+curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.6.0
 ```
 
-### 1.5 (Optional) Verify Your Install
+### 1.5 Verify It Works (30 seconds)
 
 ```bash
 mcp-bash doctor
-mcp-bash doctor --json    # machine-readable readiness (framework/runtime/project)
-```
+# Expected output includes lines like:
+#   ✓ Bash version: 5.x.x (>= 3.2 required)
+#   ✓ jq installed: /usr/bin/jq
+#   All checks passed! Ready to build MCP servers.
 
-You should see green checks for required dependencies (or clear errors if something is missing).
+# Quick end-to-end test (optional):
+mcp-bash new demo-server
+cd demo-server
+mcp-bash run-tool hello --args '{"name":"World"}'
+# Expected: {"message":"Hello World"}
+
+# Cleanup (the demo-server directory persists until you remove it):
+cd .. && rm -rf demo-server
+```
 
 ### 2. Create Your Project
 
@@ -106,6 +162,8 @@ mcp-bash config --wrapper-env    # wrapper that sources your shell profile first
 mcp-bash config --wrapper        # TTY: creates ./<server-name>.sh; piped/redirected: stdout
 ```
 
+`config --show` prints one labeled snippet per supported client (headings like `# Claude Desktop`, `# Cursor`, etc.) so you can see which block to copy; use `--client <name>` or `--json` when you only want a single paste-ready block.
+
 Copy the snippet for your client (Claude Desktop/CLI/Code, Cursor, Windsurf, LibreChat, etc.) and paste it into the appropriate config file. This sets `MCPBASH_PROJECT_ROOT` and the `mcp-bash` command path for you. When run in a terminal (stdout is a TTY), `config --wrapper` writes `<project-root>/<server-name>.sh`, marks it executable, and prints the path to stderr; piping or redirecting prints the wrapper script to stdout.
 Picking a wrapper:
 - Use `--wrapper` when your PATH/env is already correct in non-login shells (e.g., Linux, or macOS with absolute paths).
@@ -117,14 +175,14 @@ Picking a wrapper:
 Every client works the same way: point it at the framework and tell it where your project lives:
 
 1. Set `MCPBASH_PROJECT_ROOT=/path/to/your/project`.
-2. Point it at your framework install (`/path/to/mcp-bash-framework/bin/mcp-bash`).
+2. Point it at the `mcp-bash` binary (installed to `~/.local/bin/mcp-bash` by the installer).
    - If you generated a wrapper via `mcp-bash config --wrapper` or `--wrapper-env`, you can point clients at `<project-root>/<server-name>.sh`; the wrapper already wires `MCPBASH_PROJECT_ROOT` for you.
 
 - **Claude Desktop**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows) and add:
   ```jsonc
   "mcpServers": {
     "mcp-bash": {
-      "command": "/Users/you/mcp-bash-framework/bin/mcp-bash",
+      "command": "/Users/you/.local/bin/mcp-bash",
       "env": {"MCPBASH_PROJECT_ROOT": "/Users/you/my-mcp-server"}
     }
   }
@@ -137,7 +195,7 @@ Every client works the same way: point it at the framework and tell it where you
     Then point Claude Desktop at `/Users/you/my-mcp-server/mcp-bash.sh` as the `command`.
   - macOS quarantine: Gatekeeper can block quarantined downloads (typically from browsers/DMGs/AirDrop) even when paths are correct. CLI downloads (curl/wget/git) often skip quarantine. If you see `ENOENT`, `transport closed unexpectedly`, or `Operation not permitted` despite correct paths, clear quarantine and restart Claude Desktop:
     ```bash
-    xattr -r -d com.apple.quarantine /Users/you/mcp-bash-framework
+    xattr -r -d com.apple.quarantine ~/.local/share/mcp-bash
     xattr -r -d com.apple.quarantine /Users/you/my-mcp-server
     ```
     Helper: `scripts/macos-dequarantine.sh [path]` will clear quarantine for the repo (or a specific path). `xattr -cr` clears all extended attributes; only use it on trusted paths.
@@ -146,7 +204,7 @@ Every client works the same way: point it at the framework and tell it where you
   ```bash
   claude mcp add --transport stdio mcp-bash \
     --env MCPBASH_PROJECT_ROOT="$HOME/my-mcp-server" \
-    -- "$HOME/mcp-bash-framework/bin/mcp-bash"
+    -- "$HOME/.local/bin/mcp-bash"
   ```
 - **Cursor**: Create `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project) with the same `mcpServers` JSON as above.
 - **Windsurf (Cascade)**: Edit `~/.codeium/windsurf/mcp_config.json` via Settings → Advanced → Cascade, and add the same `mcpServers` entry.
@@ -155,7 +213,7 @@ Every client works the same way: point it at the framework and tell it where you
   mcpServers:
     mcp-bash:
       type: stdio
-      command: /Users/you/mcp-bash-framework/bin/mcp-bash
+      command: /Users/you/.local/bin/mcp-bash
       env:
         MCPBASH_PROJECT_ROOT: /Users/you/my-mcp-server
   ```
@@ -167,7 +225,7 @@ Every client works the same way: point it at the framework and tell it where you
   os.environ["MCPBASH_PROJECT_ROOT"] = "/Users/you/my-mcp-server"
   async with MCPServerStdio(
       params={
-          "command": "/Users/you/mcp-bash-framework/bin/mcp-bash",
+          "command": "/Users/you/.local/bin/mcp-bash",
           # optionally add args/env/cwd if your server needs them
       }
   ) as server:
@@ -175,18 +233,35 @@ Every client works the same way: point it at the framework and tell it where you
   ```
 - **Windows note**: Use Git Bash or WSL so `/usr/bin/env bash` and your paths resolve; adjust paths to `C:\Users\you\...` as needed.
 
+## Client Compatibility
+
+| Client | Status |
+|--------|--------|
+| Claude Desktop | Tested (macOS, Windows) |
+| Claude CLI / Claude Code | Tested |
+| Cursor | Config documented |
+| Windsurf (Cascade) | Config documented |
+| LibreChat | Config documented |
+| OpenAI Agents SDK | Example provided |
+
+**Tested** = maintainers have manually verified end-to-end. **Config documented** = configuration instructions provided but not regularly tested.
+
+**CI-tested platforms:** Ubuntu, macOS, Windows (Git Bash). CI validates the MCP protocol layer via integration tests, not specific client applications.
+
+Using a different client? Any MCP-compliant stdio client should work. [Open an issue](https://github.com/yaniv-golan/mcp-bash-framework/issues) if you hit compatibility problems.
+
 ## Project Structure
 
 ```
 Framework (Install Once)               Your Project (Version Control This)
-~/mcp-bash-framework/                  ~/my-mcp-server/
+~/.local/share/mcp-bash/               ~/my-mcp-server/
 ├── bin/mcp-bash                       ├── tools/
 ├── lib/                               │   └── check-disk/
 ├── handlers/                          │       ├── tool.sh
 └── ...                                │       └── tool.meta.json
                                        ├── prompts/
-                                       ├── resources/
-                                       ├── server.d/
+~/.local/bin/                          ├── resources/
+└── mcp-bash → ../share/mcp-bash/...   ├── server.d/
                                        │   └── server.meta.json (optional)
                                        └── .registry/ (auto-generated)
 ```
@@ -216,6 +291,7 @@ See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layout
 
 ## Diagnostics & Validation
 
+- Readiness/health probe: `mcp-bash --health [--project-root DIR] [--timeout SECS]` (`0`=ready, `1`=unhealthy, `2`=misconfigured)
 - Project checks: `mcp-bash validate [--project-root DIR] [--fix] [--json] [--explain-defaults] [--strict]`
 - Environment check: `mcp-bash doctor [--json]`
 - Registry cache introspection: `mcp-bash registry status [--project-root DIR]`
@@ -232,7 +308,7 @@ source "${MCP_SDK}/tool-sdk.sh"
 If you copy a tool out of this repository (or build your own project layout) and run it directly, set `MCP_SDK` before executing the script:
 
 ```bash
-export MCP_SDK=/path/to/mcp-bash-framework/sdk
+export MCP_SDK=~/.local/share/mcp-bash/sdk
 ./tools/check-disk/tool.sh
 ```
 
@@ -283,11 +359,13 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | [**01-args-and-validation**](examples/01-args-and-validation/) | Handling JSON arguments and input validation. |
 | [**02-logging-and-levels**](examples/02-logging-and-levels/) | Sending logs to the client and managing verbosity. |
 | [**03-progress-and-cancellation**](examples/03-progress-and-cancellation/) | Long-running tasks, reporting progress, and handling user cancellation. |
-| [**04-resources-basics**](examples/04-resources-basics/) | Listing and reading resources via the built-in file provider. |
-| [**05-prompts-basics**](examples/05-prompts-basics/) | Discovering and rendering prompt templates. |
-| [**06-manual-registration**](examples/06-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
-| [**07-elicitation**](examples/07-elicitation/) | Client-driven elicitation prompts that gate tool execution. |
-| [**08-roots-basics**](examples/08-roots-basics/) | MCP roots scoping for tools; allows/denies file reads based on configured roots. |
+| [**04-roots-basics**](examples/04-roots-basics/) | MCP roots scoping for tools; allows/denies file reads based on configured roots. |
+| [**05-resources-basics**](examples/05-resources-basics/) | Listing and reading resources via the built-in file provider. |
+| [**06-embedded-resources**](examples/06-embedded-resources/) | Embedding file content directly in tool responses. |
+| [**07-prompts-basics**](examples/07-prompts-basics/) | Discovering and rendering prompt templates. |
+| [**08-elicitation**](examples/08-elicitation/) | Client-driven elicitation prompts that gate tool execution. |
+| [**09-manual-registration**](examples/09-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
+| [**10-completions**](examples/10-completions/) | Completion registration, query filtering, and pagination/hasMore. |
 | [**Advanced: ffmpeg-studio**](examples/advanced/ffmpeg-studio/) | Real-world application: video processing pipeline with media inspection (optional, heavy deps). |
 
 ## Features at a Glance
@@ -312,30 +390,19 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MCPBASH_TOOLS_DIR` | `$MCPBASH_PROJECT_ROOT/tools` | Override tools location. |
-| `MCPBASH_RESOURCES_DIR` | `$MCPBASH_PROJECT_ROOT/resources` | Override resources location. |
-| `MCPBASH_PROMPTS_DIR` | `$MCPBASH_PROJECT_ROOT/prompts` | Override prompts location. |
-| `MCPBASH_SERVER_DIR` | `$MCPBASH_PROJECT_ROOT/server.d` | Override server hooks location. |
-| `MCPBASH_REGISTRY_DIR` | `$MCPBASH_PROJECT_ROOT/.registry` | Override registry cache location. |
-| `MCPBASH_REGISTRY_MAX_BYTES` | `104857600` | Maximum serialized registry size (bytes) before discovery fails fast. |
+| `MCPBASH_TOOLS_DIR` / `MCPBASH_RESOURCES_DIR` / `MCPBASH_PROMPTS_DIR` / `MCPBASH_SERVER_DIR` | Derived from `MCPBASH_PROJECT_ROOT` | Override content and server hook locations. |
+| `MCPBASH_REGISTRY_DIR` | `$MCPBASH_PROJECT_ROOT/.registry` | Registry cache location. |
 | `MCPBASH_MAX_CONCURRENT_REQUESTS` | `16` | Cap concurrent worker slots. |
-| `MCPBASH_LOG_LEVEL` | `info` | Log level. Falls back to `MCPBASH_LOG_LEVEL_DEFAULT` when unset; use `debug` to see path resolution and discovery traces. |
-| `MCPBASH_LOG_VERBOSE` | (unset) | Set to `true` to include full paths and manual-registration script output in logs. **Security note**: exposes file paths and usernames; use only in trusted environments. See [docs/LOGGING.md](docs/LOGGING.md). |
-| `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Background polling interval for resource subscriptions; set to `0` to disable. |
-| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications as they are produced instead of after handler completion. |
-| `MCPBASH_PROGRESS_FLUSH_INTERVAL` | `0.5` | Flush interval (seconds) for live progress/log streaming when enabled. |
-| `MCPBASH_DEBUG_PAYLOADS` | (unset) | Set to `true` to write full message payloads to `${TMPDIR}/mcpbash.state.*`. See [docs/DEBUGGING.md](docs/DEBUGGING.md). |
-| `MCPBASH_PRESERVE_STATE` | (unset) | Set to `true` to keep state directory after server exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |
-| `MCPBASH_FORCE_MINIMAL` | (unset) | Set to `true` to force "Minimal Mode" (Lifecycle, ping, and logging only). |
-| `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files once payloads exceed this many bytes. |
-| `MCPBASH_MAX_TOOL_STDERR_SIZE` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum stderr captured from a tool before failing the call. |
-| `MCPBASH_MAX_RESOURCE_BYTES` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Maximum resource payload size accepted before failing fast. |
-| `MCPBASH_CORRUPTION_WINDOW` | `60` | Time window (seconds) for tracking stdout corruption events. |
-| `MCPBASH_CORRUPTION_THRESHOLD` | `3` | Number of stdout corruption events allowed within the window before exit. |
-| `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool environment isolation: `minimal` (default), `inherit`, or `allowlist`. |
-| `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env var names permitted when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
-| `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Optional subpath to limit `registry refresh` scanning scope (defaults to full tools/resources/prompts trees). |
-| `MCPBASH_COMPAT_BATCHES` | (unset) | Set to `true` to enable legacy batch request support. |
+| `MCPBASH_MAX_TOOL_OUTPUT_SIZE` | `10485760` | Tool stdout limit; stderr/resources inherit when unset. |
+| `MCPBASH_LOG_LEVEL` | `info` | Log level; use `debug` for discovery traces. |
+| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications during execution. |
+| `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files above this size. |
+| `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
+| `MCPBASH_DEFAULT_TOOL_TIMEOUT` | `30` | Default tool timeout (seconds). |
+| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+| `MCPBASH_CI_MODE` | (unset) | CI defaults: safe tmp/log dirs, keep-logs, timestamped logs, failure summary (`failure-summary.jsonl`), env snapshot (`env-snapshot.json`); `MCPBASH_CI_VERBOSE=true` starts at debug; GH annotations when tracing provides file/line. |
+
+Full list and defaults: see [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md).
 
 ### Server Metadata
 
@@ -417,6 +484,15 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 - [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) - Layouts, Docker deployment, multi-environment setups.
 - [**Examples**](examples/) - Learn by example: hello-world, args, logging, progress, real-world video processing.
 
+### Feature Guides
+- [**Elicitation**](docs/ELICITATION.md) - Form and URL modes, SDK helpers, and client capability checks.
+- [**Roots**](docs/ROOTS.md) - Roots/list flow, env wiring, validation, and fallbacks.
+- [**Completions**](docs/COMPLETION.md) - Manual registration, provider types, pagination, and script contracts.
+- [**Registry**](docs/REGISTRY.md) - Registry envelopes, TTL, manual registration, and template stubs.
+- [**Limits & Performance**](docs/LIMITS.md) - Concurrency, payload ceilings, throttling.
+- [**Errors**](docs/ERRORS.md) - Protocol errors vs tool execution errors (SEP-1303).
+- [**Best Practices**](docs/BEST-PRACTICES.md) - Development, testing, operations guidance.
+
 ### Deep Dive
 - [**Architecture Guide**](docs/ARCHITECTURE.md) - Internal architecture, lifecycle loop, concurrency model.
 - [**Protocol Compliance**](SPEC-COMPLIANCE.md) - Detailed MCP protocol support breakdown.
@@ -429,20 +505,36 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 
 ### Scope and Goals
 - Bash-only Model Context Protocol server verified on macOS Bash 3.2, Linux Bash ≥3.2, and experimental Git-Bash/WSL environments.
-- Targets MCP protocol version `2025-06-18` while supporting negotiated downgrades.
+- Targets MCP protocol version `2025-11-25` while supporting negotiated downgrades.
 - Transport support is limited to stdio; HTTP/SSE/OAuth transports remain out of scope (see [Remote Connectivity](docs/REMOTE.md) for gateway options).
 
+## Embedded resources in tool output
+- Tools can attach files directly to the MCP response as `type:"resource"` content parts; binary files are auto-base64-encoded into the `blob` field, text stays in `text`.
+- Write paths to `MCP_TOOL_RESOURCES_FILE` (TSV: `path<TAB>mime<TAB>uri` or JSON array of `{path,mimeType,uri}`) during tool execution:
+	- ```bash
+	  payload_path="${MCPBASH_PROJECT_ROOT}/resources/report.txt"
+	  printf 'Report content' >"${payload_path}"
+	  if [ -n "${MCP_TOOL_RESOURCES_FILE:-}" ]; then
+	  	printf '%s\ttext/plain\n' "${payload_path}" >>"${MCP_TOOL_RESOURCES_FILE}"
+	  fi
+	  printf 'See embedded report for details'
+	  ```
+	- See the dedicated example at `examples/06-embedded-resources/`.
+
 ### Protocol Version Compatibility
-This server targets MCP protocol version `2025-06-18` (the current stable specification) and supports negotiated downgrades during `initialize`.
+This server targets MCP protocol version `2025-11-25` (the current stable specification) and supports negotiated downgrades during `initialize`.
 
 | Version | Status |
 |---------|--------|
-| `2025-06-18` | ✅ Fully supported (default) |
+| `2025-11-25` | ✅ Fully supported (default) |
+| `2025-06-18` | ✅ Supported (downgrade) |
 | `2025-03-26` | ✅ Supported (downgrade) |
 | `2024-11-05` | ✅ Supported (downgrade) |
 | `2024-10-07` | ❌ **Not supported** |
 
 Unsupported versions receive an `initialize` error payload: `{"code":-32602,"message":"Unsupported protocol version"}`.
+
+For a complete feature-by-feature breakdown across all MCP versions, see the [Feature Support Matrix](SPEC-COMPLIANCE.md#feature-support-matrix) in `SPEC-COMPLIANCE.md`.
 
 ## FAQ
 

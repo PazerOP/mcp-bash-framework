@@ -58,12 +58,12 @@ Set for tools:
 The SDK handles writing/reading these files, timeouts, and cancellation. Tools should branch on `.action` (`accept`, `decline`, `cancel`, `error`) and only use `.content` when `action=accept`.
 
 ## Examples
-- `examples/07-elicitation` — minimal confirm + choice flow with fallback when elicitation is unsupported.
+- `examples/08-elicitation` — minimal confirm + choice flow with fallback when elicitation is unsupported.
 - `examples/advanced/ffmpeg-studio/transcode.sh` — uses elicitation (when available) to confirm overwriting an existing output; otherwise refuses to overwrite.
 
 ### Running via MCP Inspector
 From the repo root, launch the example with the inspector’s stdio transport:
 ```bash
-npx @modelcontextprotocol/inspector --transport stdio -- ./examples/run 07-elicitation
+npx @modelcontextprotocol/inspector --transport stdio -- ./examples/run 08-elicitation
 ```
 The `--` separator is required so the inspector doesn’t parse `./examples/run` as a flag.

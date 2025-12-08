@@ -1,12 +1,35 @@
 #!/usr/bin/env bash
 # mcp-bash must execute on Bash ≥3.2 across macOS/Linux/WSL without edits.
-# Core targets MCP protocol version 2025-06-18 and maintains stdout discipline.
+# Core targets MCP protocol version 2025-11-25 and maintains stdout discipline.
 # Transport scope is limited to stdio; no alternative transports are supported.
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
+mcp_resolve_script_path() {
+	local source="${BASH_SOURCE[0]-$0}"
+	local dir=""
+
+	while [ -L "${source}" ]; do
+		dir="$(cd -P "$(dirname "${source}")" && pwd)"
+		source="$(readlink "${source}")"
+		if [[ "${source}" != /* ]]; then
+			source="${dir}/${source}"
+		fi
+	done
+
+	dir="$(cd -P "$(dirname "${source}")" && pwd)"
+	printf '%s/%s\n' "${dir}" "$(basename "${source}")"
+}
+
+script_path="$(mcp_resolve_script_path)"
+MCPBASH_SCRIPT_PATH="${script_path}"
+script_dir="$(cd -P "$(dirname "${script_path}")" && pwd)"
+MCPBASH_HOME="$(cd -P "${script_dir}/.." && pwd)"
+
+if [ ! -r "${MCPBASH_HOME}/lib/runtime.sh" ]; then
+	printf '%s\n' "mcp-bash install looks broken: expected ${MCPBASH_HOME}/lib/runtime.sh (resolved from ${script_path})." >&2
+	exit 1
+fi
 
 usage() {
 	cat <<'EOF'
@@ -19,6 +42,8 @@ Usage:
   mcp-bash init [--name NAME] [--no-hello]
                            # initialize project in current directory
   mcp-bash debug           # launch server with debug logging (see docs/DEBUGGING.md)
+  mcp-bash --health        # readiness probe (0=ready, 1=unhealthy, 2=misconfigured)
+  mcp-bash --ready         # alias for --health
   mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run]
                            [--timeout SECS] [--verbose] [--no-refresh]
                            [--minimal] [--project-root DIR] [--print-env]
@@ -36,13 +61,14 @@ Usage:
   mcp-bash registry status [--project-root DIR]
 
 Note: running without MCPBASH_PROJECT_ROOT starts a temporary getting-started helper tool.
+Remote deployments: set MCPBASH_REMOTE_TOKEN to require per-request _meta token; see docs/REMOTE.md.
 EOF
 }
 
 # Keep a stable, versioned core separated from extension directories.
 # Server metadata (name, version, title, etc.) is loaded from server.d/server.meta.json
 # with smart defaults derived from the project structure. See mcp_runtime_load_server_meta().
-MCPBASH_PROTOCOL_VERSION="2025-06-18"
+MCPBASH_PROTOCOL_VERSION="2025-11-25"
 MCPBASH_NEGOTIATED_PROTOCOL_VERSION="${MCPBASH_PROTOCOL_VERSION}"
 
 require_bash_runtime() {
@@ -62,12 +88,13 @@ require_bash_runtime() {
 
 # Establish project root and source runtime detection helpers.
 initialize_runtime_paths() {
+	local resolved="${MCPBASH_SCRIPT_PATH:-${BASH_SOURCE[0]-$0}}"
 	local script_dir=""
 
-	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	script_dir="$(cd "$(dirname "${resolved}")" && pwd)"
 	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
 
-	local required_libs="runtime json hash ids lock io paginate logging uri policy tools_policy registry spec tools resources prompts completion timeout rpc core validate"
+	local required_libs="runtime json hash ids lock io paginate logging auth uri policy tools_policy registry spec tools resources prompts completion timeout rpc core validate"
 	local lib
 
 	for lib in ${required_libs}; do
@@ -93,6 +120,8 @@ initialize_runtime_paths() {
 	. "${MCPBASH_HOME}/lib/paginate.sh"
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME}/lib/logging.sh"
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME}/lib/auth.sh"
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME}/lib/uri.sh"
 	# shellcheck disable=SC1090
@@ -164,7 +193,7 @@ case "${1-}" in
 	;;
 --version | -v)
 	# Read framework version from VERSION file
-	_version_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION"
+	_version_file="${MCPBASH_HOME}/VERSION"
 	if [ -f "${_version_file}" ]; then
 		printf 'mcp-bash %s\n' "$(tr -d '[:space:]' <"${_version_file}")"
 	else
@@ -209,6 +238,13 @@ if [ "${cli_cmd}" = "doctor" ]; then
 	# shellcheck source=lib/cli/doctor.sh disable=SC1091
 	. "${MCPBASH_HOME}/lib/cli/doctor.sh"
 	mcp_cli_doctor "$@"
+fi
+
+if [ "${cli_cmd}" = "--health" ] || [ "${cli_cmd}" = "--ready" ] || [ "${cli_cmd}" = "health" ] || [ "${cli_cmd}" = "ready" ]; then
+	shift
+	# shellcheck source=lib/cli/health.sh disable=SC1091
+	. "${MCPBASH_HOME}/lib/cli/health.sh"
+	mcp_cli_health "$@"
 fi
 
 if [ "${cli_cmd}" = "new" ]; then

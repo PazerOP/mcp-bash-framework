@@ -1,4 +1,4 @@
-# 04-resources-basics
+# 05-resources-basics
 
 **What you’ll learn**
 - Discovering resources and reading a file via the built-in file provider
@@ -11,7 +11,7 @@
 
 **Run**
 ```
-./examples/run 04-resources-basics
+./examples/run 05-resources-basics
 ```
 
 **Transcript**
@@ -27,7 +27,7 @@
 - `resources/read` returns the greeting text
 
 **Troubleshooting**
-- Ensure files are in place (`examples/04-resources-basics/resources/*`) and readable.
+- Ensure files are in place (`examples/05-resources-basics/resources/*`) and readable.
 - Install jq/gojq; minimal mode disables tools/resources/prompts.
 - Avoid CRLF in requests; send LF-only NDJSON.
 - For live updates, see `resources/subscribe` in docs (not part of this basic run).

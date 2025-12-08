@@ -1,16 +1,95 @@
 # MCP Protocol Compliance
 
-This document tracks `mcp-bash` compliance with the [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-06-18) (version **2025-06-18**).
+This document tracks `mcp-bash` compliance with the [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/2025-11-25) (version **2025-11-25**).
+
+## Feature Support Matrix
+
+This table shows when features were introduced in the MCP specification and when mcp-bash added support.
+
+| MCP Feature | MCP Version | mcpbash Version | Status | Notes |
+|-------------|-------------|-----------------|--------|-------|
+| **Core Protocol** | | | | |
+| JSON-RPC 2.0 | 2024-11-05 | 0.1.0 | ✅ Full | Standard message format |
+| Lifecycle (initialize/initialized) | 2024-11-05 | 0.1.0 | ✅ Full | Bootstrap handshake |
+| Strict Lifecycle (initialize → initialized required) | 2025-06-18 | 0.1.0 | ✅ Full | State machine enforced before serving requests |
+| Ping | 2024-11-05 | 0.1.0 | ✅ Full | Heartbeat mechanism |
+| Capability Negotiation | 2024-11-05 | 0.1.0 | ✅ Full | Client/server capabilities |
+| Protocol Downgrades | 2024-11-05 | 0.1.0 | ✅ Full | Supports 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05 |
+| Server Info (name, version, title) | 2024-11-05 | 0.1.0 | ✅ Full | Required fields in initialize response |
+| Server Info (description, websiteUrl, icons) | 2024-11-05 | 0.2.0 | ✅ Full | Optional fields via server.meta.json |
+| **Transport** | | | | |
+| Stdio Transport | 2024-11-05 | 0.1.0 | ✅ Full | Standard input/output |
+| HTTP/SSE Transport | 2024-11-05 | ❌ Not supported | ❌ Not supported | Stdio-only design; see REMOTE.md for proxy options |
+| Streamable HTTP Transport | 2025-03-26 | ❌ Not supported | ❌ Not supported | Stdio-only design |
+| **Tools** | | | | |
+| Tools (list/call) | 2024-11-05 | 0.1.0 | ✅ Full | Auto-discovery and execution |
+| Tool Annotations | 2025-03-26 | 0.6.0 | ✅ Full | Read-only/destructive behavior metadata |
+| Tools listChanged Notification | 2025-06-18 | 0.1.0 | ✅ Full | Registry change detection |
+| Request Metadata (`_meta`) | 2025-06-18 | 0.6.0 | ✅ Full | Client-provided metadata surfaced to tools (MCP_TOOL_META_JSON / MCP_TOOL_META_FILE) |
+| Tool Execution Errors (SEP-1303) | 2025-11-25 | 0.5.0 | ✅ Full | isError flag for LLM self-correction |
+| Tool Icons (SEP-973) | 2025-11-25 | 0.5.0 | ✅ Full | Local files converted to data URIs |
+| **Resources** | | | | |
+| Resources (list/read) | 2024-11-05 | 0.1.0 | ✅ Full | File/HTTPS/Git providers |
+| Resource Subscriptions | 2024-11-05 | 0.1.0 | ✅ Full | Change notifications |
+| Resource Templates | 2024-11-05 | 0.1.0 | ⚠️ Stub | Returns empty array (discovery not implemented) |
+| Resource Icons (SEP-973) | 2025-11-25 | 0.5.0 | ✅ Full | Local files converted to data URIs |
+| Resources listChanged Notification | 2025-06-18 | 0.1.0 | ✅ Full | Registry change detection |
+| Binary-safe Resource Payloads | 2024-11-05 | 0.6.0 | ✅ Full | Detect binary MIME and emit `blob` base64 instead of raw text |
+| **Prompts** | | | | |
+| Prompts (list/get) | 2024-11-05 | 0.1.0 | ✅ Full | Template discovery and execution |
+| Prompt Arguments | 2024-11-05 | 0.1.0 | ✅ Full | Dynamic prompt parameters |
+| Prompt Icons (SEP-973) | 2025-11-25 | 0.5.0 | ✅ Full | Local files converted to data URIs |
+| Prompts listChanged Notification | 2025-06-18 | 0.1.0 | ✅ Full | Registry change detection |
+| **Utilities** | | | | |
+| Progress Notifications | 2024-11-05 | 0.1.0 | ✅ Full | Long-running operation updates |
+| Progress Message Field | 2025-03-26 | 0.1.0 | ✅ Full | Descriptive status updates |
+| Cancellation | 2024-11-05 | 0.1.0 | ✅ Full | notifications/cancelled support |
+| Logging (notifications/message) | 2024-11-05 | 0.1.0 | ✅ Full | Server-to-client logging |
+| Logging (logging/setLevel) | 2024-11-05 | 0.1.0 | ✅ Full | Dynamic log level control |
+| Completion (completion/complete) | 2025-06-18 | 0.1.0 | ✅ Full | Argument autocompletion |
+| Completions Capability | 2025-06-18 | 0.1.0 | ✅ Full | Explicit capability advertisement |
+| **Pagination** | | | | |
+| Cursor-based Pagination | 2024-11-05 | 0.1.0 | ✅ Full | Opaque cursor format |
+| nextCursor Field | 2024-11-05 | 0.1.0 | ✅ Full | Standard pagination field |
+| **Authorization** | | | | |
+| OAuth 2.1 Framework | 2025-03-26 | ❌ Not applicable | ❌ Not applicable | Only applies to HTTP transport |
+| Resource Indicators (RFC 8707) | 2025-06-18 | ❌ Not applicable | ❌ Not applicable | OAuth-only; out of scope for stdio transport |
+| **Content Types** | | | | |
+| Text Content | 2024-11-05 | 0.1.0 | ✅ Full | Standard text output |
+| Image Content | 2024-11-05 | 0.1.0 | ✅ Full | Base64 or URL references |
+| Embedded Resources | 2024-11-05 | 0.6.0 | ✅ Full | Tool results can embed resource content (text/blob) |
+| Audio Content | 2025-03-26 | ❌ Not yet | ❌ Not yet | Audio data in content responses |
+| **Roots** | | | | |
+| Roots (roots/list) | 2024-11-05 | 0.1.0 | ✅ Full | Server→client request |
+| Roots listChanged Notification | 2024-11-05 | 0.1.0 | ✅ Full | Client notification handled; server re-requests roots and updates env |
+| **Elicitation** | | | | |
+| Elicitation (Form Mode) | 2025-06-18 | 0.1.0 | ✅ Full | In-band user input |
+| Elicitation URL Mode (SEP-1036) | 2025-11-25 | 0.5.0 | ✅ Full | OAuth/payments via browser |
+| Elicitation Enum (basic) | 2025-06-18 | 0.1.0 | ✅ Full | Single-select choices |
+| Elicitation Titled Enum (SEP-1330) | 2025-11-25 | 0.5.0 | ✅ Full | oneOf with const/title |
+| Elicitation Multi-choice (SEP-1330) | 2025-11-25 | 0.5.0 | ✅ Full | Array of enum values |
+| Elicitation Titled Multi-choice (SEP-1330) | 2025-11-25 | 0.5.0 | ✅ Full | anyOf with const/title |
+| **Advanced Features** | | | | |
+| JSON-RPC Batching | 2025-03-26 | ❌ Not supported | ❌ Removed | Removed from spec in 2025-06-18; not implemented |
+| Async Operations (job/poll pattern) | 2025-11-25 | ❌ Not yet | ❌ Not yet | Fire-and-forget jobs with polling responses |
+| Server Identity Discovery | 2025-11-25 | ❌ Not yet | ❌ Not yet | Pre-initialize server identity surface |
+| Sampling (sampling/createMessage) | 2025-11-25 | ❌ Not yet | ❌ Not yet | Server-initiated LLM requests with `includeContext` for agent loops |
+
+### Legend
+- ✅ Full: Complete implementation
+- ⚠️ Stub: Partial/stub implementation
+- ❌ Not yet: Planned but not yet implemented
+- ❌ Not supported: Intentionally out of scope
 
 ## Protocol Version
 
 | Property | Value |
 |----------|-------|
-| Target MCP Version | `2025-06-18` |
+| Target MCP Version | `2025-11-25` |
 | Transport | stdio only (HTTP/SSE out of scope) |
 | JSON-RPC Version | 2.0 |
-| Downgrade Support | Negotiated during `initialize` (to `2025-03-26` or `2024-11-05` when requested) |
-| Accepted Versions | `2025-06-18` (default), `2025-03-26`, `2024-11-05` |
+| Downgrade Support | Negotiated during `initialize` (to `2025-06-18`, `2025-03-26`, or `2024-11-05` when requested) |
+| Accepted Versions | `2025-11-25` (default), `2025-06-18`, `2025-03-26`, `2024-11-05` |
 | Unsupported Versions | Older protocols (for example `2024-10-07`) receive `{"code":-32602,"message":"Unsupported protocol version"}` |
 
 ## Capability Coverage Matrix
@@ -55,19 +134,26 @@ This document tracks `mcp-bash` compliance with the [Model Context Protocol Spec
 
 ## Features Not Implemented
 
-The following MCP features are currently out of scope:
+The following MCP features are currently not implemented:
 
-| Feature | Reason |
-|---------|--------|
-| HTTP/SSE Transport | stdio-only design; see `docs/REMOTE.md` for proxy guidance |
-| OAuth Authorization | Out of scope for stdio transport |
-| Sampling (client feature) | Client-side feature, not applicable to servers |
+| Feature | Status | Reason |
+|---------|--------|--------|
+| HTTP/SSE Transport | Not supported | stdio-only design; see `docs/REMOTE.md` for proxy guidance |
+| OAuth Authorization | Not applicable | Out of scope for stdio transport |
+| Resource Indicators (RFC 8707) | Not applicable | OAuth-only; stdio transport |
+| JSON-RPC Batching | Not supported | Removed from spec in 2025-06-18; not implemented |
+| Async Operations (job/poll pattern) | Not yet | Fire-and-forget jobs with polling surface |
+| Server Identity Discovery | Not yet | Pre-initialize server identity endpoint |
+| Sampling (sampling/createMessage) | Not yet | Server-initiated LLM requests; could be useful for agentic tool behaviors |
+| Audio Content | Not yet | Content type support for audio data |
+| Resource Templates Discovery | Stub only | Returns empty array; full discovery not implemented |
 
 **Applicability notes**
 
 - Roots: Implemented as a server→client request (`roots/list`) per spec; server capabilities do not advertise a roots surface.
 - Elicitation: Implemented when clients advertise support; tools can pause and request additional user input.
 - Resource templates: `resources/templates/list` is implemented but returns an empty `resourceTemplates` array; capability is no longer advertised until discovery is implemented.
+- Completions: Capability is advertised only for protocol versions `2025-06-18` and newer; older protocol downgrades omit completion.
 - List pagination: `tools/list`, `resources/list`, and `prompts/list` include a `total` field alongside the required arrays and optional `nextCursor`. The MCP list result schemas permit additional properties, so `total` is an intentional, spec-compliant extension for clients that want the full count.
 - “Partial” surfaces (e.g., older protocol versions without `listChanged`) are intentionally reduced per back-compat behavior.
 
@@ -83,6 +169,9 @@ Compliance is verified through:
 
 ## References
 
+- [MCP Specification 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25)
 - [MCP Specification 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18)
-- [MCP Architecture](https://modelcontextprotocol.io/specification/2025-06-18/architecture)
-- [MCP Schema Reference](https://modelcontextprotocol.io/specification/2025-06-18/schema)
+- [MCP Specification 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26)
+- [MCP Specification 2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05)
+- [MCP Architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture)
+- [MCP Schema Reference](https://modelcontextprotocol.io/specification/2025-11-25/schema)

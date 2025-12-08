@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Defaults
-INSTALL_DIR="${HOME}/mcp-bash-framework"
+# Defaults (XDG Base Directory compliant)
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/mcp-bash"
+BIN_DIR="${HOME}/.local/bin"
 REPO_URL="${MCPBASH_INSTALL_REPO_URL:-https://github.com/yaniv-golan/mcp-bash-framework.git}"
 BRANCH="main"
 
@@ -61,7 +62,7 @@ mcp-bash installer
 Usage: install.sh [OPTIONS]
 
 Options:
-  --dir DIR      Install location (default: ~/mcp-bash-framework)
+  --dir DIR      Install location (default: ~/.local/share/mcp-bash)
   --branch NAME  Git branch to install (default: main)
   --version TAG  Alias for --branch TAG (install a tagged release)
   --ref REF      Alias for --branch REF (install any ref/tag/commit)
@@ -71,9 +72,11 @@ Options:
 
 Examples:
   curl -fsSL .../install.sh | bash
-  curl -fsSL .../install.sh | bash -s -- --dir ~/.local/mcp-bash
+  curl -fsSL .../install.sh | bash -s -- --dir ~/my-mcp-bash
   curl -fsSL .../install.sh | bash -s -- --yes  # CI-friendly
   curl -fsSL .../install.sh | bash -s -- --version 0.4.0  # install tagged release (auto-prefixes v)
+
+Note: Installs to ~/.local/share/mcp-bash with a symlink in ~/.local/bin (XDG compliant)
 EOF
 		exit 0
 		;;
@@ -101,7 +104,7 @@ printf '==================\n\n'
 
 # Canonicalize INSTALL_DIR to prevent path traversal bypasses (e.g., "$HOME/..")
 # Note: On systems without resolvers, path protection is weaker (string compare only).
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]-$0}")" && pwd)"
 if [ -f "${SCRIPT_ROOT}/lib/path.sh" ]; then
 	# shellcheck source=lib/path.sh disable=SC1090,SC1091
 	. "${SCRIPT_ROOT}/lib/path.sh"
@@ -215,8 +218,13 @@ else
 	fi
 fi
 
-# Detect shell and configure PATH
-info "Configuring shell..."
+# Create symlink in ~/.local/bin (XDG standard location)
+info "Creating symlink..."
+mkdir -p "${BIN_DIR}"
+ln -sf "${INSTALL_DIR}/bin/mcp-bash" "${BIN_DIR}/mcp-bash"
+success "Symlinked ${BIN_DIR}/mcp-bash → ${INSTALL_DIR}/bin/mcp-bash"
+
+# Configure PATH for ~/.local/bin if needed
 SHELL_NAME="$(basename "${SHELL}")"
 case "${SHELL_NAME}" in
 zsh)
@@ -242,26 +250,36 @@ bash)
 	;;
 esac
 
-PATH_LINE="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+PATH_NEEDED=false
 
-if [ -n "${RC_FILE}" ]; then
-	success "Detected shell: ${SHELL_NAME}"
-	# Check for existing PATH entry using the actual install dir (not hardcoded name)
-	if grep -qF "${INSTALL_DIR}/bin" "${RC_FILE}" 2>/dev/null; then
-		warn "PATH already configured in ${RC_FILE}"
+# Check if ~/.local/bin is already in PATH
+if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]] && [[ ":${PATH}:" != *":${HOME}/.local/bin:"* ]]; then
+	PATH_NEEDED=true
+fi
+
+if [ "${PATH_NEEDED}" = "true" ]; then
+	if [ -n "${RC_FILE}" ]; then
+		success "Detected shell: ${SHELL_NAME}"
+		# Check for existing ~/.local/bin PATH entry
+		if grep -qE '(^|:)\$HOME/\.local/bin(:|$)|~/.local/bin' "${RC_FILE}" 2>/dev/null; then
+			info "\$HOME/.local/bin already in ${RC_FILE} (will take effect in new shells)"
+		else
+			printf '\n# Add ~/.local/bin to PATH (XDG standard)\n%s\n' "${PATH_LINE}" >>"${RC_FILE}"
+			success "Added ~/.local/bin to PATH in ${RC_FILE}"
+		fi
 	else
-		printf '\n# mcp-bash framework\n%s\n' "${PATH_LINE}" >>"${RC_FILE}"
-		success "Added to ${RC_FILE}"
+		warn "Add this to your shell config manually:"
+		printf "  %s\n" "${PATH_LINE}"
 	fi
 else
-	warn "Add this to your shell config manually:"
-	printf "  %s\n" "${PATH_LINE}"
+	success "\$HOME/.local/bin already in PATH"
 fi
 
 # Verify installation
 printf "\n"
 info "Verifying installation..."
-export PATH="${INSTALL_DIR}/bin:${PATH}"
+export PATH="${BIN_DIR}:${PATH}"
 
 if "${INSTALL_DIR}/bin/mcp-bash" --version >/dev/null 2>&1; then
 	VERSION="$("${INSTALL_DIR}/bin/mcp-bash" --version | awk '{print $2}')"
@@ -283,13 +301,14 @@ fi
 # Success message
 printf '\n%s\n\n' "${GREEN}Installation complete!${NC}"
 
-if [ -n "${RC_FILE}" ]; then
+if [ "${PATH_NEEDED}" = "true" ] && [ -n "${RC_FILE}" ]; then
 	printf 'To start using mcp-bash, run:\n'
 	printf '  %s%s%s\n\n' "${BLUE}" "source ${RC_FILE}" "${NC}"
 	printf 'Or open a new terminal.\n\n'
 fi
 
-printf 'Quick start:\n'
-printf '  %s%s%s\n' "${BLUE}" 'mkdir my-server && cd my-server' "${NC}"
-printf '  %s%s%s\n' "${BLUE}" 'mcp-bash init --name my-server' "${NC}"
+printf 'Quick start:\n\n'
+printf '  %s%s%s\n' "${BLUE}" 'mcp-bash new my-server && cd my-server' "${NC}"
+printf '  %s%s%s\n\n' "${BLUE}" 'mcp-bash run-tool hello' "${NC}"
+printf 'Test with MCP Inspector:\n\n'
 printf '  %s%s%s\n' "${BLUE}" 'npx @modelcontextprotocol/inspector --transport stdio -- mcp-bash' "${NC}"

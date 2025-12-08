@@ -69,7 +69,7 @@ export WORKSPACE
 		id=$(echo "${line}" | jq -r '.id // empty')
 		if [ "${id}" = "init" ]; then
 			protocol=$(echo "${line}" | jq -r '.result.protocolVersion')
-			if [ "${protocol}" != "2025-06-18" ]; then
+			if [ "${protocol}" != "2025-11-25" ]; then
 				echo "unexpected protocolVersion: ${protocol}" >&2
 				kill "${PID}"
 				exit 1

@@ -74,7 +74,7 @@ assert_json_lines "${WORKSPACE}/responses.ndjson"
 response_file="${WORKSPACE}/responses.ndjson"
 
 # Check init
-if ! jq -e 'select(.id=="init") | .result.protocolVersion == "2025-06-18"' "${response_file}" >/dev/null; then
+if ! jq -e 'select(.id=="init") | .result.protocolVersion == "2025-11-25"' "${response_file}" >/dev/null; then
 	test_fail "protocolVersion mismatch or missing init response"
 fi
 

@@ -19,6 +19,7 @@ mcp_cli_config() {
 	local mode="show" # show | json | wrapper | inspector
 	local client_filter=""
 	local wrapper_env="false"
+	local label_snippets="false"
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -118,7 +119,6 @@ EOF
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRAMEWORK_DIR="${MCPBASH_HOME:-$HOME/mcp-bash-framework}"
 SHELL_PROFILE=""
 
 if [ -f "${HOME}/.zshrc" ]; then
@@ -134,14 +134,24 @@ if [ -n "${SHELL_PROFILE}" ]; then
 	. "${SHELL_PROFILE}"
 fi
 
-if [ ! -f "${FRAMEWORK_DIR}/bin/mcp-bash" ]; then
-	printf 'Error: mcp-bash framework not found at %s\n' "${FRAMEWORK_DIR}" >&2
-	printf 'Install: git clone https://github.com/yaniv-golan/mcp-bash-framework.git "%s"\n' "${FRAMEWORK_DIR}" >&2
+# Find mcp-bash: prefer PATH (via shell profile), then XDG location, then legacy
+MCP_BASH=""
+if command -v mcp-bash >/dev/null 2>&1; then
+	MCP_BASH="$(command -v mcp-bash)"
+elif [ -f "${HOME}/.local/bin/mcp-bash" ]; then
+	MCP_BASH="${HOME}/.local/bin/mcp-bash"
+elif [ -f "${MCPBASH_HOME:-}/bin/mcp-bash" ]; then
+	MCP_BASH="${MCPBASH_HOME}/bin/mcp-bash"
+fi
+
+if [ -z "${MCP_BASH}" ]; then
+	printf 'Error: mcp-bash not found in PATH or ~/.local/bin\n' >&2
+	printf 'Install: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash\n' >&2
 	exit 1
 fi
 
 export MCPBASH_PROJECT_ROOT="${SCRIPT_DIR}"
-exec "${FRAMEWORK_DIR}/bin/mcp-bash" "$@"
+exec "${MCP_BASH}" "$@"
 EOF
 			)"
 		else
@@ -151,16 +161,25 @@ EOF
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRAMEWORK_DIR="${MCPBASH_HOME:-$HOME/mcp-bash-framework}"
 
-if [ ! -f "${FRAMEWORK_DIR}/bin/mcp-bash" ]; then
-	printf 'Error: mcp-bash framework not found at %s\n' "${FRAMEWORK_DIR}" >&2
-	printf 'Install: git clone https://github.com/yaniv-golan/mcp-bash-framework.git "%s"\n' "${FRAMEWORK_DIR}" >&2
+# Find mcp-bash: prefer PATH, then XDG location, then legacy
+MCP_BASH=""
+if command -v mcp-bash >/dev/null 2>&1; then
+	MCP_BASH="$(command -v mcp-bash)"
+elif [ -f "${HOME}/.local/bin/mcp-bash" ]; then
+	MCP_BASH="${HOME}/.local/bin/mcp-bash"
+elif [ -f "${MCPBASH_HOME:-}/bin/mcp-bash" ]; then
+	MCP_BASH="${MCPBASH_HOME}/bin/mcp-bash"
+fi
+
+if [ -z "${MCP_BASH}" ]; then
+	printf 'Error: mcp-bash not found in PATH or ~/.local/bin\n' >&2
+	printf 'Install: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash\n' >&2
 	exit 1
 fi
 
 export MCPBASH_PROJECT_ROOT="${SCRIPT_DIR}"
-exec "${FRAMEWORK_DIR}/bin/mcp-bash" "$@"
+exec "${MCP_BASH}" "$@"
 EOF
 			)"
 		fi
@@ -219,11 +238,20 @@ EOF
 		exit 0
 	fi
 
+	if [ "${mode}" = "show" ] && [ -z "${client_filter}" ]; then
+		label_snippets="true"
+	fi
+
 	print_client() {
 		local client="${1}"
 		local display_command="${command_path_json}"
+		local heading=""
 		case "${client}" in
 		claude-desktop)
+			heading="Claude Desktop"
+			if [ "${label_snippets}" = "true" ]; then
+				printf '# %s\n' "${heading}"
+			fi
 			printf '{\n'
 			printf '  "mcpServers": {\n'
 			printf '    %s: {\n' "${server_name_json}"
@@ -238,6 +266,10 @@ EOF
 			printf '}\n\n'
 			;;
 		cursor)
+			heading="Cursor"
+			if [ "${label_snippets}" = "true" ]; then
+				printf '# %s\n' "${heading}"
+			fi
 			printf '{\n'
 			printf '  "mcpServers": {\n'
 			printf '    %s: {\n' "${server_name_json}"
@@ -252,6 +284,10 @@ EOF
 			printf '}\n\n'
 			;;
 		claude-cli)
+			heading="Claude CLI"
+			if [ "${label_snippets}" = "true" ]; then
+				printf '# %s\n' "${heading}"
+			fi
 			printf '{\n'
 			printf '  "name": %s,\n' "${server_name_json}"
 			printf '  "command": %s' "${display_command}"
@@ -263,6 +299,10 @@ EOF
 			printf '\n}\n\n'
 			;;
 		windsurf)
+			heading="Windsurf"
+			if [ "${label_snippets}" = "true" ]; then
+				printf '# %s\n' "${heading}"
+			fi
 			printf '{\n'
 			printf '  "mcpServers": {\n'
 			printf '    %s: {\n' "${server_name_json}"
@@ -277,6 +317,10 @@ EOF
 			printf '}\n\n'
 			;;
 		librechat)
+			heading="LibreChat"
+			if [ "${label_snippets}" = "true" ]; then
+				printf '# %s\n' "${heading}"
+			fi
 			printf '{\n'
 			printf '  "name": %s,\n' "${server_name_json}"
 			printf '  "command": %s' "${display_command}"

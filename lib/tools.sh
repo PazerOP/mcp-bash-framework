@@ -37,6 +37,20 @@ if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
 fi
+if ! command -v mcp_json_icons_to_data_uris >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/json.sh"
+fi
+
+if ! command -v mcp_uri_file_uri_from_path >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/uri.sh"
+fi
+
+if ! command -v mcp_resource_content_object_from_file >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/resource_content.sh"
+fi
 
 # Provide defaults if policy helpers were not sourced (older bootstraps).
 if ! declare -F mcp_tools_policy_check >/dev/null 2>&1; then
@@ -104,11 +118,13 @@ mcp_tools_manual_finalize() {
 			inputSchema: (.inputSchema // .arguments // {type: "object", properties: {}}),
 			timeoutSecs: (.timeoutSecs // null),
 			outputSchema: (.outputSchema // null),
-			icons: (.icons // null)
+			icons: (.icons // null),
+			annotations: (.annotations // null)
 		}) |
 		map(
 			if .outputSchema == null then del(.outputSchema) else . end |
-			if .icons == null then del(.icons) else . end
+			if .icons == null then del(.icons) else . end |
+			if .annotations == null then del(.annotations) else . end
 		) |
 		sort_by(.name) |
 		{
@@ -170,6 +186,142 @@ mcp_tools_normalize_schema() {
 	printf '%s' "${normalized}"
 }
 
+mcp_tools_normalize_local_path() {
+	local raw="$1"
+	if [ -z "${raw}" ]; then
+		return 1
+	fi
+	local abs="${raw}"
+	if [[ "${abs}" != /* ]]; then
+		if [ -n "${MCPBASH_PROJECT_ROOT:-}" ]; then
+			abs="${MCPBASH_PROJECT_ROOT%/}/${abs}"
+		else
+			abs="$(pwd)/${abs}"
+		fi
+	fi
+	if declare -F mcp_roots_normalize_path >/dev/null 2>&1; then
+		if ! abs="$(mcp_roots_normalize_path "${abs}")"; then
+			return 1
+		fi
+	else
+		local dir base
+		dir="$(cd "$(dirname "${abs}")" 2>/dev/null && pwd -P)" || return 1
+		base="$(basename "${abs}")"
+		abs="${dir}/${base}"
+	fi
+	printf '%s' "${abs}"
+}
+
+mcp_tools_embed_resource_from_path() {
+	local path="$1"
+	local mime_hint="${2:-}"
+	local uri_hint="${3:-}"
+
+	local abs
+	if ! abs="$(mcp_tools_normalize_local_path "${path}")"; then
+		return 1
+	fi
+	if declare -F mcp_roots_contains_path >/dev/null 2>&1; then
+		if ! mcp_roots_contains_path "${abs}"; then
+			mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Embedded resource skipped (outside allowed roots): ${abs}"
+			return 1
+		fi
+	fi
+	if [ ! -r "${abs}" ]; then
+		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "Embedded resource unreadable: ${abs}"
+		return 1
+	fi
+
+	local uri="${uri_hint}"
+	if [ -z "${uri}" ] && command -v mcp_uri_file_uri_from_path >/dev/null 2>&1; then
+		uri="$(mcp_uri_file_uri_from_path "${abs}" 2>/dev/null || true)"
+	elif [ -z "${uri}" ]; then
+		uri="file://${abs}"
+	fi
+
+	local content_obj
+	if ! content_obj="$(mcp_resource_content_object_from_file "${abs}" "${mime_hint}" "${uri}")"; then
+		return 1
+	fi
+	printf '%s' "${content_obj}"
+}
+
+mcp_tools_collect_embedded_resources() {
+	local spec_file="$1"
+
+	if [ "${MCPBASH_JSON_TOOL:-none}" = "none" ]; then
+		return 0
+	fi
+
+	local specs_json=""
+	if [ -s "${spec_file}" ]; then
+		specs_json="$("${MCPBASH_JSON_TOOL_BIN}" -c '
+			def normalize:
+				if type == "string" then {path: ., mimeType: null, uri: null}
+				elif type == "object" then {path: (.path // ""), mimeType: (.mimeType // null), uri: (.uri // null)}
+				else empty end;
+			try (
+				if type == "array" then . else [.] end
+				| map(normalize | select(.path != ""))
+			) catch []
+		' "${spec_file}" 2>/dev/null || true)"
+	fi
+
+	if [ -z "${specs_json}" ]; then
+		specs_json="$("${MCPBASH_JSON_TOOL_BIN}" -Rs '
+			if length == 0 then [] else
+				split("\n")
+				| map(select(length > 0))
+				| map(split("\t"))
+				| map({path: (.[0] // ""), mimeType: (.[1]? // null), uri: (.[2]? // null)})
+				| map(select(.path != ""))
+			end
+		' "${spec_file}" 2>/dev/null || true)"
+	fi
+
+	if [ -z "${specs_json}" ] || [ "${specs_json}" = "[]" ]; then
+		return 0
+	fi
+
+	local contents=()
+	local embed_attempts=0
+	local embed_added=0
+
+	while IFS=$'\t' read -r path mime uri || [ -n "${path}" ]; do
+		[ -n "${path}" ] || continue
+		((embed_attempts++)) || true
+		local content_obj
+		content_obj="$(mcp_tools_embed_resource_from_path "${path}" "${mime}" "${uri}" 2>/dev/null || true)"
+		if [ -n "${content_obj}" ]; then
+			content_obj="$(
+				printf '%s' "${content_obj}" | "${MCPBASH_JSON_TOOL_BIN}" -c '{type:"resource",resource:.}' 2>/dev/null || true
+			)"
+			if [ -n "${content_obj}" ]; then
+				contents+=("${content_obj}")
+				((embed_added++)) || true
+			fi
+		else
+			if declare -F mcp_logging_debug >/dev/null 2>&1; then
+				mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Embedded resource skipped for path=${path}"
+			fi
+		fi
+	done < <(printf '%s' "${specs_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '
+		.[]
+		| "\(.path // "")\t\(.mimeType // "")\t\(.uri // "")"
+	')
+
+	if [ "${#contents[@]}" -eq 0 ]; then
+		if [ "${embed_attempts}" -gt 0 ] && declare -F mcp_logging_debug >/dev/null 2>&1; then
+			mcp_logging_debug "${MCP_TOOLS_LOGGER}" "No embedded resources added from ${spec_file}; check roots, readability, or format"
+		fi
+		return 0
+	fi
+
+	printf '[%s]' "$(
+		IFS=,
+		printf '%s' "${contents[*]}"
+	)"
+}
 mcp_tools_registry_max_bytes() {
 	mcp_registry_global_max_bytes
 }
@@ -533,8 +685,8 @@ mcp_tools_scan() {
 			local arguments="{}"
 			local timeout=""
 			local output_schema="null"
-
 			local icons="null"
+			local annotations="null"
 
 			if [ -f "${meta_json}" ]; then
 				# Read fields individually to avoid collapsing empty columns
@@ -546,6 +698,7 @@ mcp_tools_scan() {
 				timeout="$("${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' "${meta_json}" 2>/dev/null || printf '')"
 				output_schema="$("${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' "${meta_json}" 2>/dev/null || printf 'null')"
 				icons="$("${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' "${meta_json}" 2>/dev/null || printf 'null')"
+				annotations="$("${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' "${meta_json}" 2>/dev/null || printf 'null')"
 				# Convert local file paths to data URIs
 				local meta_dir
 				meta_dir="$(dirname "${meta_json}")"
@@ -570,6 +723,7 @@ mcp_tools_scan() {
 					timeout="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
 					output_schema="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
 					icons="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
+					annotations="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' 2>/dev/null)"
 					# Convert local file paths to data URIs (relative to tool script dir)
 					local script_dir
 					script_dir="$(dirname "${path}")"
@@ -588,6 +742,7 @@ mcp_tools_scan() {
 				--arg timeout "$timeout" \
 				--argjson out "$output_schema" \
 				--argjson icons "$icons" \
+				--argjson annotations "$annotations" \
 				'{
 					name: $name,
 					description: $desc,
@@ -596,7 +751,8 @@ mcp_tools_scan() {
 					timeoutSecs: (if ($timeout|test("^[0-9]+$")) then ($timeout|tonumber) else null end)
 				}
 				+ (if $out != null then {outputSchema: $out} else {} end)
-				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
+				+ (if $icons != null then {icons: $icons} else {} end)
+				+ (if $annotations != null then {annotations: $annotations} else {} end)' >>"${items_file}"
 		done
 	fi
 
@@ -761,15 +917,136 @@ mcp_tools_metadata_for_name() {
 	printf '%s' "${metadata}"
 }
 
+mcp_tools_stderr_capture_enabled() {
+	local flag="${MCPBASH_TOOL_STDERR_CAPTURE:-true}"
+	case "${flag}" in
+	"" | "1" | "true" | "TRUE" | "yes" | "on") return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+mcp_tools_timeout_capture_enabled() {
+	local flag="${MCPBASH_TOOL_TIMEOUT_CAPTURE:-true}"
+	case "${flag}" in
+	"" | "1" | "true" | "TRUE" | "yes" | "on") return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+mcp_tools_stderr_tail() {
+	local file="$1"
+	local limit="${2:-4096}"
+	[ -n "${file}" ] || return 0
+	[ -f "${file}" ] || return 0
+	tail -c "${limit}" "${file}" 2>/dev/null | tr -d '\0'
+}
+
+mcp_tools_trace_enabled() {
+	local flag="${MCPBASH_TRACE_TOOLS:-false}"
+	case "${flag}" in
+	"1" | "true" | "TRUE" | "yes" | "on") return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+mcp_tools_trace_ps4() {
+	if [ -n "${MCPBASH_TRACE_PS4:-}" ]; then
+		printf '%s' "${MCPBASH_TRACE_PS4}"
+		return 0
+	fi
+	printf '+ ${BASH_SOURCE[0]##*/}:${LINENO}: '
+}
+
+mcp_tools_json_escape() {
+	local value="${1:-}"
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	value="${value//$'\n'/\\n}"
+	value="${value//$'\r'/\\r}"
+	printf '%s' "${value}"
+}
+
+mcp_tools_gh_escape() {
+	local value="${1:-}"
+	value="${value//%/%25}"
+	value="${value//$'\r'/%0D}"
+	value="${value//$'\n'/%0A}"
+	printf '%s' "${value}"
+}
+
+mcp_tools_emit_github_annotation() {
+	local tool="$1"
+	local message="$2"
+	local trace_line="$3"
+	[ "${GITHUB_ACTIONS:-false}" = "true" ] || return 0
+	[ -n "${trace_line}" ] || return 0
+	# Expect trace format "+ file:line: rest"
+	local file=""
+	local line=""
+	if [[ "${trace_line}" =~ ^\+?[[:space:]]*([^:]+):([0-9]+):[[:space:]]* ]]; then
+		file="${BASH_REMATCH[1]}"
+		line="${BASH_REMATCH[2]}"
+	fi
+	[ -n "${file}" ] && [ -n "${line}" ] || return 0
+	local msg="Tool ${tool} failed: ${message}"
+	printf '::error file=%s,line=%s::%s\n' "$(mcp_tools_gh_escape "${file}")" "$(mcp_tools_gh_escape "${line}")" "$(mcp_tools_gh_escape "${msg}")" >&2
+}
+
+mcp_tools_append_failure_summary() {
+	local name="$1"
+	local exit_code="$2"
+	local message="$3"
+	local stderr_tail="$4"
+	local trace_line="$5"
+	local arg_count="$6"
+	local arg_bytes="$7"
+	local meta_keys="$8"
+	local roots_count="$9"
+	local timed_out="${10:-false}"
+	if [ "${MCPBASH_CI_MODE:-false}" != "true" ]; then
+		return 0
+	fi
+	if [ -z "${MCPBASH_LOG_DIR:-}" ]; then
+		return 0
+	fi
+	local summary_file="${MCPBASH_LOG_DIR}/failure-summary.jsonl"
+	local ts
+	ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf '')"
+	local args_hash="n/a"
+	if command -v sha256sum >/dev/null 2>&1; then
+		args_hash="$(printf '%s' "${MCP_TOOL_ARGS_JSON:-}" | sha256sum | cut -d' ' -f1)"
+	elif command -v shasum >/dev/null 2>&1; then
+		args_hash="$(printf '%s' "${MCP_TOOL_ARGS_JSON:-}" | shasum -a 256 | cut -d' ' -f1)"
+	fi
+	{
+		printf '{'
+		printf '"ts":"%s",' "${ts}"
+		printf '"tool":"%s",' "$(mcp_tools_json_escape "${name}")"
+		printf '"exitCode":%s,' "${exit_code:-0}"
+		printf '"timedOut":%s,' "${timed_out}"
+		printf '"argCount":%s,' "${arg_count:-0}"
+		printf '"argBytes":%s,' "${arg_bytes:-0}"
+		printf '"argHash":"%s",' "${args_hash}"
+		printf '"metaKeys":%s,' "${meta_keys:-0}"
+		printf '"roots":%s,' "${roots_count:-0}"
+		printf '"message":"%s",' "$(mcp_tools_json_escape "${message}")"
+		printf '"stderrTail":"%s",' "$(mcp_tools_json_escape "${stderr_tail}")"
+		printf '"traceLine":"%s"' "$(mcp_tools_json_escape "${trace_line}")"
+		printf '}\n'
+	} >>"${summary_file}" 2>/dev/null || true
+}
+
 # shellcheck disable=SC2031  # Subshell env exports are deliberate; parent values remain unchanged.
 mcp_tools_call() {
 	local name="$1"
 	local args_json="$2"
 	local timeout_override="$3"
+	local request_meta="${4:-"{}"}"
 	# Args:
 	#   name             - tool name as registered.
 	#   args_json        - JSON string of parameters (object shape, possibly "{}").
 	#   timeout_override - optional numeric seconds to override metadata timeout.
+	#   request_meta     - optional JSON string of _meta from the tools/call request.
 	# shellcheck disable=SC2034
 	_MCP_TOOLS_ERROR_CODE=0
 	# shellcheck disable=SC2034
@@ -833,6 +1110,30 @@ mcp_tools_call() {
 		# Fallback: invoke via shell if not marked executable but looks runnable
 		tool_runner=(bash "${absolute_path}")
 	fi
+	local trace_enabled="false"
+	local trace_file=""
+	local trace_ps4=""
+	local trace_max_bytes="${MCPBASH_TRACE_MAX_BYTES:-1048576}"
+	case "${trace_max_bytes}" in
+	'' | *[!0-9]*) trace_max_bytes=1048576 ;;
+	esac
+	if mcp_tools_trace_enabled && [ -n "${MCPBASH_STATE_DIR:-}" ]; then
+		trace_enabled="true"
+		trace_ps4="$(mcp_tools_trace_ps4)"
+		local safe_name
+		safe_name="$(printf '%s' "${name}" | tr -c 'A-Za-z0-9._-' '_')"
+		local trace_base="${MCPBASH_LOG_DIR:-${MCPBASH_STATE_DIR}}"
+		mkdir -p "${trace_base}" 2>/dev/null || true
+		trace_file="${trace_base}/trace.${safe_name}.${BASHPID:-$$}.${RANDOM}.log"
+		# Prefer bash -x when we can detect shell scripts.
+		if [ "${tool_runner[0]}" = "bash" ]; then
+			tool_runner=(bash -x "${tool_runner[@]:1}")
+		else
+			if [[ "${absolute_path}" =~ \.(sh|bash)$ ]] || head -n1 "${absolute_path}" 2>/dev/null | grep -qi 'bash\|sh'; then
+				tool_runner=(bash -x "${absolute_path}")
+			fi
+		fi
+	fi
 
 	local env_limit="${MCPBASH_ENV_PAYLOAD_THRESHOLD:-65536}"
 	case "${env_limit}" in
@@ -865,6 +1166,18 @@ mcp_tools_call() {
 		metadata_env_value=""
 	fi
 
+	# Request _meta (client-provided metadata from tools/call request)
+	local request_meta_env_value="${request_meta}"
+	local request_meta_file=""
+	if [ "${#request_meta}" -gt "${env_limit}" ]; then
+		request_meta_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tool-request-meta.XXXXXX")"
+		printf '%s' "${request_meta}" >"${request_meta_file}"
+		request_meta_env_value=""
+	fi
+
+	local tool_resources_file
+	tool_resources_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tool-resources.XXXXXX")"
+
 	local tool_error_file
 	tool_error_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tool-error.XXXXXX")"
 
@@ -876,12 +1189,18 @@ mcp_tools_call() {
 	'' | *[!0-9]*) effective_timeout="" ;;
 	esac
 
+	local arg_count=0
+	local arg_bytes=0
+	local meta_count=0
+	if [ -n "${args_json}" ] && [ "${args_json}" != "{}" ]; then
+		arg_count="$(printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
+		arg_bytes="$(printf '%s' "${args_json}" | wc -c | tr -d ' ')"
+	fi
+	if [ -n "${metadata}" ] && [ "${metadata}" != "{}" ]; then
+		meta_count="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
+	fi
 	if mcp_logging_is_enabled "debug"; then
-		local arg_count=0
-		if [ -n "${args_json}" ] && [ "${args_json}" != "{}" ]; then
-			arg_count="$(printf '%s' "${args_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'keys | length' 2>/dev/null || echo 0)"
-		fi
-		mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Invoke tool=${name} arg_count=${arg_count} timeout=${effective_timeout:-none}"
+		mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Invoke tool=${name} arg_count=${arg_count} arg_bytes=${arg_bytes} meta_keys=${meta_count} roots=${MCP_ROOTS_COUNT:-0} timeout=${effective_timeout:-none} trace=${trace_enabled}"
 		if mcp_logging_verbose_enabled; then
 			mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Tool path=${absolute_path}"
 		fi
@@ -927,9 +1246,11 @@ mcp_tools_call() {
 			return 0
 		fi
 		rm -f "${stdout_file}" "${stderr_file}"
+		[ -n "${tool_resources_file:-}" ] && rm -f "${tool_resources_file}"
 		[ -n "${tool_error_file}" ] && rm -f "${tool_error_file}"
 		[ -n "${args_file}" ] && rm -f "${args_file}"
 		[ -n "${metadata_file}" ] && rm -f "${metadata_file}"
+		[ -n "${request_meta_file}" ] && rm -f "${request_meta_file}"
 	}
 
 	local exit_code
@@ -946,6 +1267,7 @@ mcp_tools_call() {
 		MCP_TOOL_PATH="${absolute_path}"
 		MCP_TOOL_ARGS_JSON="${args_env_value}"
 		MCP_TOOL_METADATA_JSON="${metadata_env_value}"
+		MCP_TOOL_META_JSON="${request_meta_env_value}"
 		MCP_TOOL_ERROR_FILE="${tool_error_file}"
 		if [ -n "${args_file}" ]; then
 			MCP_TOOL_ARGS_FILE="${args_file}"
@@ -957,6 +1279,11 @@ mcp_tools_call() {
 		else
 			unset MCP_TOOL_METADATA_FILE 2>/dev/null || true
 		fi
+		if [ -n "${request_meta_file}" ]; then
+			MCP_TOOL_META_FILE="${request_meta_file}"
+		else
+			unset MCP_TOOL_META_FILE 2>/dev/null || true
+		fi
 
 		local tool_env_mode
 		tool_env_mode="$(printf '%s' "${MCPBASH_TOOL_ENV_MODE:-minimal}" | tr '[:upper:]' '[:lower:]')"
@@ -966,6 +1293,7 @@ mcp_tools_call() {
 		esac
 
 		local env_exec=()
+		local trace_active="${trace_enabled}"
 		if [ "${tool_env_mode}" != "inherit" ]; then
 			env_exec=(
 				env -i
@@ -992,7 +1320,9 @@ mcp_tools_call() {
 				"MCP_TOOL_PATH=${MCP_TOOL_PATH}"
 				"MCP_TOOL_ARGS_JSON=${MCP_TOOL_ARGS_JSON}"
 				"MCP_TOOL_METADATA_JSON=${MCP_TOOL_METADATA_JSON}"
+				"MCP_TOOL_META_JSON=${MCP_TOOL_META_JSON}"
 				"MCP_TOOL_ERROR_FILE=${MCP_TOOL_ERROR_FILE}"
+				"MCP_TOOL_RESOURCES_FILE=${tool_resources_file}"
 				"MCP_ELICIT_SUPPORTED=${elicit_supported}"
 				"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL:-}"
 				"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN:-}"
@@ -1005,9 +1335,23 @@ mcp_tools_call() {
 			fi
 			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && env_exec+=("MCP_TOOL_ARGS_FILE=${MCP_TOOL_ARGS_FILE}")
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && env_exec+=("MCP_TOOL_METADATA_FILE=${MCP_TOOL_METADATA_FILE}")
+			[ -n "${MCP_TOOL_META_FILE:-}" ] && env_exec+=("MCP_TOOL_META_FILE=${MCP_TOOL_META_FILE}")
+			[ -n "${tool_resources_file:-}" ] && env_exec+=("MCP_TOOL_RESOURCES_FILE=${tool_resources_file}")
 			if [ "${elicit_supported}" = "1" ]; then
 				env_exec+=("MCP_ELICIT_REQUEST_FILE=${elicit_request_file}")
 				env_exec+=("MCP_ELICIT_RESPONSE_FILE=${elicit_response_file}")
+			fi
+
+			if [ "${trace_enabled}" = "true" ]; then
+				if exec 9>"${trace_file}"; then
+					BASH_XTRACEFD=9
+					PS4="${trace_ps4}"
+					export BASH_XTRACEFD PS4
+					: >"${trace_file}"
+					env_exec+=("BASH_XTRACEFD=9" "PS4=${trace_ps4}" "MCPBASH_TRACE_FILE=${trace_file}")
+				else
+					trace_active="false"
+				fi
 			fi
 
 			if [ "${tool_env_mode}" = "allowlist" ]; then
@@ -1022,10 +1366,12 @@ mcp_tools_call() {
 				done
 			fi
 		else
-			export MCP_SDK MCP_TOOL_NAME MCP_TOOL_PATH MCP_TOOL_ARGS_JSON MCP_TOOL_METADATA_JSON
+			export MCP_SDK MCP_TOOL_NAME MCP_TOOL_PATH MCP_TOOL_ARGS_JSON MCP_TOOL_METADATA_JSON MCP_TOOL_META_JSON
 			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && export MCP_TOOL_ARGS_FILE
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && export MCP_TOOL_METADATA_FILE
+			[ -n "${MCP_TOOL_META_FILE:-}" ] && export MCP_TOOL_META_FILE
 			export MCP_TOOL_ERROR_FILE
+			export MCP_TOOL_RESOURCES_FILE="${tool_resources_file}"
 			export MCP_ELICIT_SUPPORTED="${elicit_supported}"
 			export MCPBASH_JSON_TOOL="${MCPBASH_JSON_TOOL:-}"
 			export MCPBASH_JSON_TOOL_BIN="${MCPBASH_JSON_TOOL_BIN:-}"
@@ -1034,11 +1380,25 @@ mcp_tools_call() {
 				export MCP_ELICIT_REQUEST_FILE="${elicit_request_file}"
 				export MCP_ELICIT_RESPONSE_FILE="${elicit_response_file}"
 			fi
+			if [ "${trace_enabled}" = "true" ]; then
+				if exec 9>"${trace_file}"; then
+					export BASH_XTRACEFD=9
+					export PS4="${trace_ps4}"
+					export MCPBASH_TRACE_FILE="${trace_file}"
+					: >"${trace_file}"
+				else
+					trace_active="false"
+				fi
+			fi
 			if declare -F mcp_roots_wait_ready >/dev/null 2>&1; then
 				export MCP_ROOTS_JSON="${MCP_ROOTS_JSON:-[]}"
 				export MCP_ROOTS_PATHS="${MCP_ROOTS_PATHS:-}"
 				export MCP_ROOTS_COUNT="${MCP_ROOTS_COUNT:-0}"
 			fi
+		fi
+
+		if [ "${trace_active}" = "true" ]; then
+			set -x
 		fi
 
 		mcp_tools_can_stream_stderr() {
@@ -1162,6 +1522,15 @@ mcp_tools_call() {
 	stderr_content="${stderr_file}"
 	stdout_content="${stdout_file}"
 
+	local stderr_tail_limit="${MCPBASH_TOOL_STDERR_TAIL_LIMIT:-4096}"
+	case "${stderr_tail_limit}" in
+	'' | *[!0-9]*) stderr_tail_limit=4096 ;;
+	esac
+	local stderr_tail=""
+	if mcp_tools_stderr_capture_enabled && [ -s "${stderr_content}" ]; then
+		stderr_tail="$(mcp_tools_stderr_tail "${stderr_content}" "${stderr_tail_limit}")"
+	fi
+
 	local cancelled_flag="false"
 	if [ -n "${MCP_CANCEL_FILE:-}" ] && [ -f "${MCP_CANCEL_FILE}" ]; then
 		cancelled_flag="true"
@@ -1181,6 +1550,20 @@ mcp_tools_call() {
 		esac
 	fi
 
+	if [ "${trace_enabled}" = "true" ] && [ -n "${trace_file}" ] && [ -f "${trace_file}" ]; then
+		local trace_size
+		trace_size="$(wc -c <"${trace_file}" | tr -d ' ')" || trace_size=0
+		if [ "${trace_size}" -gt "${trace_max_bytes}" ]; then
+			local trace_tmp="${trace_file}.tmp"
+			tail -c "${trace_max_bytes}" "${trace_file}" >"${trace_tmp}" 2>/dev/null || true
+			mv "${trace_tmp}" "${trace_file}" 2>/dev/null || true
+		fi
+	fi
+	local trace_line=""
+	if [ "${trace_enabled}" = "true" ] && [ -n "${trace_file}" ] && [ -f "${trace_file}" ]; then
+		trace_line="$(tail -n 1 "${trace_file}" 2>/dev/null | head -c 512 | tr -d '\0')"
+	fi
+
 	if [ "${cancelled_flag}" = "true" ]; then
 		_mcp_tools_emit_error -32001 "Tool cancelled" "null"
 		cleanup_tool_temp_files
@@ -1188,7 +1571,26 @@ mcp_tools_call() {
 	fi
 
 	if [ "${timed_out}" = "true" ]; then
-		_mcp_tools_emit_error -32603 "Tool timed out" "null"
+		local timeout_data="null"
+		if mcp_tools_timeout_capture_enabled && [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
+			timeout_data="$(
+				"${MCPBASH_JSON_TOOL_BIN}" -n \
+					--argjson code "${exit_code}" \
+					--arg stderr "${stderr_tail}" \
+					--arg traceLine "${trace_line}" \
+					'
+					{
+						exitCode: $code,
+						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
+					}
+					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					| if ($traceLine|length) > 0 then .traceLine = $traceLine else . end
+					'
+			)"
+		fi
+		mcp_tools_emit_github_annotation "${name}" "Tool timed out" "${trace_line}"
+		mcp_tools_append_failure_summary "${name}" "${exit_code}" "Tool timed out" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "true"
+		_mcp_tools_emit_error -32603 "Tool timed out" "${timeout_data}"
 		cleanup_tool_temp_files
 		return 1
 	fi
@@ -1228,7 +1630,7 @@ mcp_tools_call() {
 	fi
 
 	if [ "${exit_code}" -ne 0 ]; then
-		local stderr_preview message_from_stderr data_json="" stdout_error_json="" stdout_raw=""
+		local message_from_stderr data_json="" stdout_error_json="" stdout_raw=""
 		if [ -s "${stdout_content}" ]; then
 			stdout_raw="$(cat "${stdout_content}")"
 			if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ]; then
@@ -1282,8 +1684,7 @@ mcp_tools_call() {
 			fi
 		fi
 
-		stderr_preview="$(head -c 2048 "${stderr_content}" | tr -d '\0')"
-		message_from_stderr="$(printf '%s' "${stderr_preview}" | head -n 1 | tr -d '\r')"
+		message_from_stderr="$(printf '%s' "${stderr_tail}" | head -n 1 | tr -d '\r')"
 		if [ -z "${message_from_stderr}" ]; then
 			message_from_stderr="Tool failed"
 		fi
@@ -1292,14 +1693,20 @@ mcp_tools_call() {
 			data_json="$(
 				"${MCPBASH_JSON_TOOL_BIN}" -n \
 					--argjson code "${exit_code}" \
-					--arg stderr "${stderr_preview}" \
+					--arg stderr "${stderr_tail}" \
+					--arg traceLine "${trace_line}" \
 					'
 					{
+						exitCode: $code,
 						_meta: ({exitCode: $code} + (if ($stderr|length) > 0 then {stderr: $stderr} else {} end))
 					}
-				'
+					| if ($stderr|length) > 0 then .stderrTail = $stderr else . end
+					| if ($traceLine|length) > 0 then .traceLine = $traceLine else . end
+					'
 			)"
 		fi
+		mcp_tools_emit_github_annotation "${name}" "${message_from_stderr}" "${trace_line}"
+		mcp_tools_append_failure_summary "${name}" "${exit_code}" "${message_from_stderr}" "${stderr_tail}" "${trace_line}" "${arg_count}" "${arg_bytes}" "${meta_count}" "${MCP_ROOTS_COUNT:-0}" "false"
 		_mcp_tools_emit_error -32603 "${message_from_stderr}" "${data_json}"
 		cleanup_tool_temp_files
 		return 1
@@ -1317,7 +1724,7 @@ mcp_tools_call() {
 		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg name "${name}" \
 			--rawfile stdout "${stdout_content}" \
-			--rawfile stderr "${stderr_content}" \
+			--arg stderr "${stderr_tail}" \
 			--argjson exit_code "${exit_code}" \
 			--arg has_json "${has_json_tool}" \
 			'
@@ -1349,12 +1756,24 @@ mcp_tools_call() {
 			._meta.stderr = $stderr
 		else . end |
 		
-		# Set isError if exit code non-zero
-		if $exit_code != 0 then
-			.isError = true
-		else . end
-		'
+			# Set isError if exit code non-zero
+			if $exit_code != 0 then
+				.isError = true
+			else . end
+			'
 	)"
+
+	local embedded_resources=""
+	if [ -s "${tool_resources_file}" ]; then
+		embedded_resources="$(mcp_tools_collect_embedded_resources "${tool_resources_file}" 2>/dev/null || true)"
+	fi
+	if [ -n "${embedded_resources}" ]; then
+		result_json="$(
+			printf '%s' "${result_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson embeds "${embedded_resources}" '
+				.content += ($embeds // [])
+			'
+		)" || result_json=""
+	fi
 
 	cleanup_tool_temp_files
 

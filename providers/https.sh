@@ -36,6 +36,15 @@ mcp_https_load_policy() {
 	fi
 }
 
+mcp_https_log_block() {
+	local host="$1"
+	if command -v mcp_logging_warning >/dev/null 2>&1; then
+		mcp_logging_warning "mcp.https" "Blocked host ${host}"
+	else
+		printf '%s\n' "HTTPS provider blocked host ${host}" >&2
+	fi
+}
+
 mcp_https_main() {
 	mcp_https_load_policy
 	local uri="${1:-}"
@@ -47,15 +56,15 @@ mcp_https_main() {
 	local host
 	host="$(mcp_policy_extract_host_from_url "${uri}")"
 	if [ -z "${host}" ]; then
-		printf '%s\n' "HTTPS provider blocked internal/unsupported host" >&2
+		mcp_https_log_block "<empty>"
 		return 4
 	fi
 	if mcp_policy_host_is_private "${host}"; then
-		printf '%s\n' "HTTPS provider blocked internal/unsupported host" >&2
+		mcp_https_log_block "${host}"
 		return 4
 	fi
 	if ! mcp_policy_host_allowed "${host}" "${MCPBASH_HTTPS_ALLOW_HOSTS:-}" "${MCPBASH_HTTPS_DENY_HOSTS:-}"; then
-		printf '%s\n' "HTTPS provider blocked internal/unsupported host" >&2
+		mcp_https_log_block "${host}"
 		return 4
 	fi
 
@@ -96,14 +105,27 @@ mcp_https_main() {
 			esac
 		fi
 	elif command -v wget >/dev/null 2>&1; then
-		if ! wget -q --timeout="${timeout_secs}" --max-redirect=0 --https-only -O "${tmp_file}" "${uri}"; then
-			return 5
+		local limit_plus_one=$((max_bytes + 1))
+		local wget_status=0
+		local head_status=0
+		if ! wget -q --timeout="${timeout_secs}" --max-redirect=0 --https-only -O - "${uri}" | head -c "${limit_plus_one}" >"${tmp_file}"; then
+			wget_status=${PIPESTATUS[0]:-0}
+			head_status=${PIPESTATUS[1]:-0}
+			if [ "${head_status}" -eq 141 ]; then
+				head_status=0
+			fi
+		else
+			wget_status=${PIPESTATUS[0]:-0}
+			head_status=${PIPESTATUS[1]:-0}
 		fi
 		local local_size
 		local_size="$(wc -c <"${tmp_file}" | tr -d ' ')"
 		if [ "${local_size}" -gt "${max_bytes}" ]; then
 			printf 'Payload exceeds %s bytes\n' "${max_bytes}" >&2
 			return 6
+		fi
+		if [ "${wget_status}" -ne 0 ] || [ "${head_status}" -ne 0 ]; then
+			return 5
 		fi
 	else
 		printf '%s\n' "Neither curl nor wget available for HTTPS provider" >&2

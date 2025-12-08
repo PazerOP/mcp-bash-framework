@@ -18,6 +18,14 @@ test_require_command jq
 test_create_tmpdir
 WORKSPACE="${TEST_TMPDIR}/tool-errors"
 test_stage_workspace "${WORKSPACE}"
+mkdir -p "${WORKSPACE}/tmp"
+STATE_DIR="${WORKSPACE}/tmp/mcpbash.state.test"
+mkdir -p "${STATE_DIR}"
+LOG_DIR="${WORKSPACE}/logs"
+rm -rf "${LOG_DIR}" 2>/dev/null || true
+mkdir -p "${LOG_DIR}"
+RESPONSES="${WORKSPACE}/responses.ndjson"
+STDERR_LOG="${WORKSPACE}/stderr.log"
 
 mkdir -p "${WORKSPACE}/tools/fail"
 
@@ -53,13 +61,16 @@ JSON
 
 (
 	cd "${WORKSPACE}" || exit 1
-	MCPBASH_PROJECT_ROOT="${WORKSPACE}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
+	TMPDIR="${MCPBASH_INTEGRATION_TMP:-${TMPDIR:-/tmp}}" MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCPBASH_TMP_ROOT="${WORKSPACE}/tmp" MCPBASH_STATE_DIR="${STATE_DIR}" MCPBASH_TRACE_TOOLS=true MCPBASH_PRESERVE_STATE=true MCPBASH_CI_MODE=true MCPBASH_LOG_DIR="${LOG_DIR}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${RESPONSES}"
 )
 
 assert_json_lines "${WORKSPACE}/responses.ndjson"
 
-fail_resp="$(jq -c 'select(.id=="fail")' "${WORKSPACE}/responses.ndjson")"
+fail_resp="$(jq -c 'select(.id=="fail")' "${RESPONSES}")"
 if [ -z "${fail_resp}" ]; then
+	if [ -f "${RESPONSES}" ]; then
+		printf 'Responses content:\n%s\n' "$(cat "${RESPONSES}")" >&2
+	fi
 	test_fail "missing fail response"
 fi
 if jq -e 'select(.id=="fail") | .error._mcpToolError' "${WORKSPACE}/responses.ndjson" >/dev/null 2>&1; then
@@ -71,12 +82,48 @@ test_assert_eq "${fail_code}" "-32603"
 if [ -z "${fail_stderr}" ] || [[ "${fail_stderr}" != *"nope"* ]]; then
 	test_fail "stderr not propagated from fail.tool"
 fi
+fail_exit_code="$(echo "${fail_resp}" | jq -r '.error.data.exitCode // empty')"
+test_assert_eq "${fail_exit_code}" "7"
+fail_stderr_tail="$(echo "${fail_resp}" | jq -r '.error.data.stderrTail // empty')"
+if [ -z "${fail_stderr_tail}" ] || [[ "${fail_stderr_tail}" != *"nope"* ]]; then
+	test_fail "stderrTail missing or incorrect for fail.tool"
+fi
 
-slow_resp="$(jq -c 'select(.id=="slow")' "${WORKSPACE}/responses.ndjson")"
+slow_resp="$(jq -c 'select(.id=="slow")' "${RESPONSES}")"
 if [ -z "${slow_resp}" ]; then
 	test_fail "missing slow response"
 fi
 slow_code="$(echo "${slow_resp}" | jq -r '.error.code')"
 test_assert_eq "${slow_code}" "-32603"
+slow_exit_code="$(echo "${slow_resp}" | jq -r '.error.data.exitCode // empty')"
+case "${slow_exit_code}" in
+124 | 137 | 143) ;;
+*) test_fail "unexpected timeout exit code: ${slow_exit_code}" ;;
+esac
+slow_stderr_tail="$(echo "${slow_resp}" | jq -r '.error.data.stderrTail // empty')"
+if [ -n "${slow_stderr_tail}" ] && [ "${#slow_stderr_tail}" -gt 4096 ]; then
+	test_fail "timeout stderrTail exceeds expected cap"
+fi
+
+trace_file="$(find "${LOG_DIR}" "${STATE_DIR}" -name 'trace.*.log' -type f -print -quit 2>/dev/null || true)"
+if [ -z "${trace_file}" ] || [ ! -f "${trace_file}" ]; then
+	test_fail "trace file missing"
+fi
+
+summary_file="$(find "${LOG_DIR}" "${WORKSPACE}/tmp" "${TMPDIR:-/tmp}" -maxdepth 4 -name 'failure-summary.jsonl' -type f -print -quit 2>/dev/null || true)"
+if [ -z "${summary_file}" ] || [ ! -f "${summary_file}" ]; then
+	test_fail "failure summary missing"
+fi
+fail_summary_tool="$(head -n1 "${summary_file}" | jq -r '.tool // empty')"
+if [ "${fail_summary_tool}" != "fail.tool" ]; then
+	test_fail "failure summary missing fail.tool entry"
+fi
+env_snapshot="$(find "${LOG_DIR}" "${WORKSPACE}/tmp" "${TMPDIR:-/tmp}" -maxdepth 4 -name 'env-snapshot.json' -type f -print -quit 2>/dev/null || true)"
+if [ -z "${env_snapshot}" ] || [ ! -f "${env_snapshot}" ]; then
+	test_fail "env snapshot missing"
+fi
+if ! jq -e '.bashVersion and .os and .cwd' "${env_snapshot}" >/dev/null 2>&1; then
+	test_fail "env snapshot missing required fields"
+fi
 
 printf 'Tool error and timeout tests passed.\n'

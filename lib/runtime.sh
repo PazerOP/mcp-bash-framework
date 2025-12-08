@@ -13,7 +13,6 @@
 : "${MCPBASH_STATE_SEED:=}"
 : "${MCPBASH_CLEANUP_REGISTERED:=false}"
 : "${MCPBASH_JOB_CONTROL_ENABLED:=false}"
-: "${MCPBASH_PROCESS_GROUP_WARNED:=false}"
 : "${MCPBASH_LOG_JSON_TOOL:=quiet}"
 : "${MCPBASH_LOG_STARTUP:=false}"
 : "${MCPBASH_BOOTSTRAP_STAGED:=false}"
@@ -21,6 +20,24 @@
 : "${MCPBASH_HOME:=}"
 : "${MCPBASH_TRANSPORT:=}"
 : "${MCPBASH_TRANSPORT_STDIO:=false}"
+: "${MCPBASH_REMOTE_TOKEN:=}"
+: "${MCPBASH_REMOTE_TOKEN_KEY:=}"
+: "${MCPBASH_REMOTE_TOKEN_FALLBACK_KEY:=}"
+: "${MCPBASH_REMOTE_TOKEN_ENABLED:=false}"
+: "${MCPBASH_CI_MODE:=false}"
+: "${MCPBASH_KEEP_LOGS:=false}"
+: "${MCPBASH_LOG_LEVEL_DEFAULT:=info}"
+: "${MCPBASH_LOG_DIR:=}"
+: "${MCPBASH_LOG_TIMESTAMP:=false}"
+
+mcp_runtime_json_escape() {
+	local value="${1:-}"
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	value="${value//$'\n'/\\n}"
+	value="${value//$'\r'/}"
+	printf '%s' "${value}"
+}
 
 # Path normalization helpers (Bash 3.2+). Load if not already present.
 if ! command -v mcp_path_normalize >/dev/null 2>&1; then
@@ -146,7 +163,9 @@ mcp_runtime_stage_bootstrap_project() {
 	fi
 
 	local tmp_base tmp_root
-	tmp_base="${TMPDIR:-/tmp}"
+	# Prefer MCPBASH_TMP_ROOT (set in CI mode) over TMPDIR to ensure cleanup
+	# safety checks pass (they compare against MCPBASH_TMP_ROOT).
+	tmp_base="${MCPBASH_TMP_ROOT:-${TMPDIR:-/tmp}}"
 	tmp_base="${tmp_base%/}"
 	tmp_root="$(mktemp -d "${tmp_base}/mcpbash.bootstrap.XXXXXX")"
 	if [ -z "${tmp_root}" ] || [ ! -d "${tmp_root}" ]; then
@@ -183,6 +202,32 @@ mcp_runtime_init_paths() {
 	local mode="${1:-server}"
 	local allow_bootstrap="${2:-}"
 
+	# CI mode: set safe defaults only when unset.
+	if [ "${MCPBASH_CI_MODE:-false}" = "true" ]; then
+		if [ -z "${MCPBASH_TMP_ROOT:-}" ]; then
+			if [ -n "${RUNNER_TEMP:-}" ]; then
+				MCPBASH_TMP_ROOT="${RUNNER_TEMP%/}"
+			elif [ -n "${GITHUB_WORKSPACE:-}" ]; then
+				MCPBASH_TMP_ROOT="${GITHUB_WORKSPACE%/}/.mcpbash-tmp"
+			else
+				MCPBASH_TMP_ROOT="${TMPDIR%/:-/tmp}"
+			fi
+		fi
+		if [ -z "${MCPBASH_KEEP_LOGS:-}" ]; then
+			MCPBASH_KEEP_LOGS="true"
+		fi
+		if [ -z "${MCPBASH_LOG_LEVEL:-}" ] && [ -z "${MCPBASH_LOG_LEVEL_DEFAULT:-}" ]; then
+			if [ "${MCPBASH_CI_VERBOSE:-false}" = "true" ]; then
+				MCPBASH_LOG_LEVEL_DEFAULT="debug"
+			else
+				MCPBASH_LOG_LEVEL_DEFAULT="info"
+			fi
+		fi
+		if [ -z "${MCPBASH_LOG_TIMESTAMP:-}" ]; then
+			MCPBASH_LOG_TIMESTAMP="true"
+		fi
+	fi
+
 	if [ -z "${allow_bootstrap}" ]; then
 		if [ "${mode}" = "server" ]; then
 			allow_bootstrap="true"
@@ -196,6 +241,9 @@ mcp_runtime_init_paths() {
 	# 2. Otherwise, auto-detect from current directory
 	# 3. For server mode with bootstrap allowed, stage bootstrap project
 	# 4. Otherwise, emit a clear error
+	if [ -n "${MCPBASH_TMP_ROOT:-}" ]; then
+		MCPBASH_TMP_ROOT="${MCPBASH_TMP_ROOT%/}"
+	fi
 	if [ -n "${MCPBASH_PROJECT_ROOT:-}" ]; then
 		if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
 			printf 'mcp-bash: MCPBASH_PROJECT_ROOT directory does not exist: %s\n' "${MCPBASH_PROJECT_ROOT}" >&2
@@ -246,6 +294,51 @@ mcp_runtime_init_paths() {
 		# Default lock root is instance-scoped to avoid cross-process interference (e.g., lingering servers on Windows).
 		if [ -z "${MCPBASH_LOCK_ROOT}" ]; then
 			MCPBASH_LOCK_ROOT="${MCPBASH_STATE_DIR}/locks"
+		fi
+	fi
+
+	# Log directory (CI mode only): default to a dedicated path when unset.
+	if [ "${MCPBASH_CI_MODE:-false}" = "true" ] && [ -z "${MCPBASH_LOG_DIR}" ]; then
+		local log_pid_component
+		if [ -n "${BASHPID-}" ]; then
+			log_pid_component="${BASHPID}"
+		else
+			log_pid_component="$$"
+		fi
+		local log_seed="${MCPBASH_STATE_SEED:-${log_pid_component}}"
+		MCPBASH_LOG_DIR="${MCPBASH_TMP_ROOT}/mcpbash.logs.${PPID}.${log_pid_component}.${log_seed}"
+	fi
+	if [ -n "${MCPBASH_LOG_DIR}" ]; then
+		(umask 077 && mkdir -p "${MCPBASH_LOG_DIR}") >/dev/null 2>&1 || true
+	fi
+	if [ "${MCPBASH_CI_MODE:-false}" = "true" ] && [ -n "${MCPBASH_LOG_DIR:-}" ]; then
+		local env_snapshot="${MCPBASH_LOG_DIR}/env-snapshot.json"
+		if [ ! -f "${env_snapshot}" ]; then
+			local path_entries path_count path_first path_last os_name cwd
+			path_entries="${PATH:-}"
+			path_count=0
+			path_first=""
+			path_last=""
+			os_name="$(uname -s 2>/dev/null || printf '')"
+			cwd="$(pwd 2>/dev/null || printf '')"
+			if [ -n "${path_entries}" ]; then
+				IFS=':' read -r -a path_array <<<"${path_entries}"
+				path_count="${#path_array[@]}"
+				if [ "${path_count}" -gt 0 ]; then
+					path_first="${path_array[0]}"
+					path_last="${path_array[$((path_count - 1))]}"
+				fi
+			fi
+			{
+				printf '{'
+				printf '"bashVersion":"%s",' "$(mcp_runtime_json_escape "${BASH_VERSION:-}")"
+				printf '"os":"%s",' "$(mcp_runtime_json_escape "${os_name}")"
+				printf '"cwd":"%s",' "$(mcp_runtime_json_escape "${cwd}")"
+				printf '"pathCount":%s,' "${path_count}"
+				printf '"pathFirst":"%s",' "$(mcp_runtime_json_escape "${path_first}")"
+				printf '"pathLast":"%s"' "$(mcp_runtime_json_escape "${path_last}")"
+				printf '}\n'
+			} >"${env_snapshot}" 2>/dev/null || true
 		fi
 	fi
 
@@ -329,7 +422,13 @@ mcp_runtime_cleanup() {
 	fi
 
 	if [ -n "${MCPBASH_STATE_DIR}" ] && [ -d "${MCPBASH_STATE_DIR}" ]; then
-		mcp_runtime_safe_rmrf "${MCPBASH_STATE_DIR}"
+		if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
+			if mcp_runtime_log_allowed; then
+				printf 'mcp-bash: state preserved at %s\n' "${MCPBASH_STATE_DIR}" >&2
+			fi
+		else
+			mcp_runtime_safe_rmrf "${MCPBASH_STATE_DIR}"
+		fi
 	fi
 
 	if [ -n "${MCPBASH_LOCK_ROOT}" ] && [ -d "${MCPBASH_LOCK_ROOT}" ]; then

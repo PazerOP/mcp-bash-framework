@@ -75,7 +75,8 @@ For validation that happens early in a tool (before doing real work), prefer ret
 
 ## General Error Handling
 
-- Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; timeouts and cancellation surface as JSON-RPC errors before tool output is returned.
+- Tool failures return `isError=true` with `_meta.exitCode` and captured stderr; error responses include `error.data.exitCode`, `error.data.stderrTail` (bounded), and `error.data.traceLine` when tracing is enabled, with the same `_meta.stderr` for compatibility. Disable capture with `MCPBASH_TOOL_STDERR_CAPTURE=false`; adjust the tail cap with `MCPBASH_TOOL_STDERR_TAIL_LIMIT` (default 4096 bytes).
+- Timeouts and cancellation surface as JSON-RPC errors before tool output is returned; timeouts include `error.data.exitCode`, `error.data.stderrTail`, and `error.data.traceLine` (when tracing) when `MCPBASH_TOOL_TIMEOUT_CAPTURE` is enabled (default).
 - Resource failures use JSON-RPC errors (no `isError` flag) consistent with the MCP spec: invalid cursors/params return `-32602`, provider failures and oversized payloads return `-32603`.
 - Malformed tool output triggers a substitution with an error payload and a logged incident.
 - Registry or discovery errors fall back to minimal capabilities while emitting `notifications/message` with severity `error`.
@@ -94,7 +95,7 @@ Example `resources/read` error payload:
 | `-32700` | Parse errors and invalid JSON normalization | `lib/core.sh` |
 | `-32600` | Invalid request (missing method, batch arrays when disabled) | `lib/core.sh` |
 | `-32601` | Unknown or disallowed method (`notifications/message` from client, missing handler, not found) | `lib/core.sh`, `handlers/*` |
-| `-32602` | Invalid params (unsupported protocol version, invalid cursor, invalid log level) | `handlers/lifecycle.sh`, `handlers/completion.sh`, `handlers/logging.sh`, registry cursors |
+| `-32602` | Invalid params (unsupported protocol version, invalid cursor/log level, missing/invalid remote token) | `handlers/lifecycle.sh`, `handlers/completion.sh`, `handlers/logging.sh`, `lib/auth.sh`, registry cursors |
 | `-32603` | Internal errors (empty handler response, registry size/parse failures, tool output/stderr over limits, provider failures); also used for tool timeouts | `lib/core.sh`, `lib/tools.sh`, `lib/resources.sh`, `lib/prompts.sh` |
 | `-32001` | Tool cancelled (SIGTERM/INT from client) | `lib/tools.sh` |
 | `-32002` | Server not initialized (`initialize` not completed) | `lib/core.sh` |
@@ -110,7 +111,7 @@ Size guardrails: `mcp_core_guard_response_size` rejects oversized responses with
 - Any other provider exit code maps to `-32603` with stderr text when available.
 
 ## Troubleshooting Quick Hits
-- **Unsupported protocol (`-32602`)**: Client requested an older MCP version. Update the client or request `2025-03-26`/`2025-06-18`.
+- **Unsupported protocol (`-32602`)**: Client requested an older MCP version. Update the client or request `2025-11-25`/`2025-06-18`/`2025-03-26`/`2024-11-05`.
 - **Invalid cursor (`-32602`)**: Drop the cursor to restart pagination; ensure clients do not cache cursors across registry refreshes.
 - **Tool timed out (`-32603`, message includes "timed out" or "killed")**: Reduce workload or raise `timeoutSecs` in `<tool>.meta.json`; defaults come from `MCPBASH_DEFAULT_TOOL_TIMEOUT`.
 - **Resource/provider failures (`-32603`, message includes provider detail such as "Unable to read resource")**: Confirm the provider is supported (`file`, `git`, `https`), URI is valid, and payload size is within `MCPBASH_MAX_RESOURCE_BYTES`.

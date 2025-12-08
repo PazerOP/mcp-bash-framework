@@ -47,6 +47,8 @@ EOF
 		local framework_version="unknown"
 		local path_ok="false"
 		local jq_path gojq_path json_tool="none"
+		local tmp_root="${MCPBASH_TMP_ROOT:-}"
+		local tmp_root_writable="false"
 		local project_root="" server_meta_valid="null" tools_count=0 registry_exists="false"
 		local is_darwin="false" quarantine_supported="false"
 		local framework_quarantine="null" project_quarantine="null"
@@ -76,6 +78,23 @@ EOF
 			json_tool="gojq"
 		else
 			errors=$((errors + 1))
+		fi
+
+		if [ -n "${tmp_root}" ]; then
+			if mkdir -p "${tmp_root}" 2>/dev/null; then
+				local tmp_probe=""
+				tmp_probe="$(mktemp "${tmp_root%/}/mcpbash.doctor.XXXXXX" 2>/dev/null || printf '')"
+				if [ -n "${tmp_probe}" ]; then
+					tmp_root_writable="true"
+					rm -f "${tmp_probe}" 2>/dev/null || true
+				else
+					errors=$((errors + 1))
+				fi
+			else
+				errors=$((errors + 1))
+			fi
+		else
+			warnings=$((warnings + 1))
 		fi
 
 		if project_root="$(mcp_runtime_find_project_root "${PWD}" 2>/dev/null)"; then
@@ -139,7 +158,9 @@ EOF
     "bashVersion": $(mcp_json_escape_string "${BASH_VERSION}"),
     "jqPath": $(mcp_json_escape_string "${jq_path}"),
     "gojqPath": $(mcp_json_escape_string "${gojq_path}"),
-    "jsonTool": $(mcp_json_escape_string "${json_tool}")
+    "jsonTool": $(mcp_json_escape_string "${json_tool}"),
+    "tmpRoot": $(mcp_json_escape_string "${tmp_root}"),
+    "tmpRootWritable": ${tmp_root_writable}
   },
   "macOS": {
     "detected": ${is_darwin},
@@ -222,6 +243,18 @@ EOF
 	else
 		printf '  ✗ jq/gojq not installed (required for full functionality)\n'
 		printf '    Install: brew install jq  OR  apt install jq\n'
+		errors=$((errors + 1))
+	fi
+
+	local tmp_root="${MCPBASH_TMP_ROOT:-}"
+	if [ -z "${tmp_root}" ]; then
+		printf '  ⚠ MCPBASH_TMP_ROOT not set (using system TMPDIR)\n'
+		warnings=$((warnings + 1))
+	elif mkdir -p "${tmp_root}" 2>/dev/null && tmp_probe="$(mktemp "${tmp_root%/}/mcpbash.doctor.XXXXXX" 2>/dev/null || printf '')"; then
+		printf '  ✓ TMP root writable: %s\n' "${tmp_root}"
+		rm -f "${tmp_probe}" 2>/dev/null || true
+	else
+		printf '  ✗ TMP root not writable: %s\n' "${tmp_root}"
 		errors=$((errors + 1))
 	fi
 

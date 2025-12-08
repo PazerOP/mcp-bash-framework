@@ -32,7 +32,7 @@ Fixes:
   Point Claude Desktop at that wrapper as the `command`.
 - macOS quarantine can silently block downloaded binaries/scripts. Browser/DMG/AirDrop downloads are commonly quarantined; CLI fetches (curl/wget/git) often are not. Clear quarantine, then restart Claude Desktop:
   ```bash
-  xattr -r -d com.apple.quarantine /path/to/mcp-bash-framework
+  xattr -r -d com.apple.quarantine ~/.local/share/mcp-bash
   xattr -r -d com.apple.quarantine /path/to/project
   ```
   Helper: `scripts/macos-dequarantine.sh [path]` clears quarantine for the repo or a custom path. `xattr -cr` removes all extended attributes—only use it on trusted paths.
@@ -108,7 +108,7 @@ timestamp|category|key|status|payload
 Example entries:
 ```
 1732900000|request|-|recv|{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}
-1732900000|response|1|ok|{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":"2025-06-18",...}}
+1732900000|response|1|ok|{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":"2025-11-25",...}}
 1732900001|request|-|recv|{"jsonrpc":"2.0","method":"notifications/initialized"}
 ```
 
@@ -145,6 +145,22 @@ For manual control without the `debug` subcommand:
 | `MCPBASH_PRESERVE_STATE` | (unset) | Set to `true` to keep state directory after exit |
 | `MCPBASH_LOG_LEVEL` | `info` | Set to `debug` for verbose stderr logging |
 | `MCPBASH_LOG_VERBOSE` | (unset) | Set to `true` to include file paths in logs |
+| `MCPBASH_TOOL_STDERR_CAPTURE` | `true` | Include a bounded stderr tail in tool error responses (`error.data._meta.stderr` / `stderrTail`) |
+| `MCPBASH_TOOL_STDERR_TAIL_LIMIT` | `4096` | Max bytes of stderr tail to attach to responses |
+| `MCPBASH_TOOL_TIMEOUT_CAPTURE` | `true` | Include timeout exit code and stderr tail (when available) in timeout errors |
+| `MCPBASH_TRACE_TOOLS` | `false` | Enable `set -x` tracing for shell tools; traces go to per-invocation logs under `MCPBASH_STATE_DIR` |
+| `MCPBASH_TRACE_PS4` | `+ ${BASH_SOURCE[0]##*/}:${LINENO}: ` | Override PS4 used for traces (timestamps or custom format) |
+| `MCPBASH_TRACE_MAX_BYTES` | `1048576` | Max bytes to retain per trace log (truncated to tail when exceeded) |
+| `MCPBASH_CI_MODE` | `false` | Opt-in CI defaults: safe `TMP_ROOT`, log dir, keep logs, timestamps; emits failure summaries and env snapshot; GH annotations when `GITHUB_ACTIONS=true` |
+| `MCPBASH_CI_VERBOSE` | `false` | With CI mode, start at debug log level instead of info |
+| `MCPBASH_LOG_DIR` | (unset) | Log directory; CI mode sets a default when unset |
+| `MCPBASH_KEEP_LOGS` | `false` | Preserve state/log files on exit (`true` by default in CI mode) |
+| `MCPBASH_LOG_TIMESTAMP` | `false` | Prefix log messages with UTC timestamp (`true` by default in CI mode) |
+
+## CI Mode Notes
+- Enable with `MCPBASH_CI_MODE=true` to get CI-friendly defaults: tmp root under `RUNNER_TEMP`/`$GITHUB_WORKSPACE/.mcpbash-tmp`/`TMPDIR`, default log dir, keep-logs, and timestamped log messages.
+- CI mode writes `failure-summary.jsonl` (per-tool summaries: exit code, timeout flag, stderr tail, trace line, hashed args, counts) and a one-time `env-snapshot.json` (bash version, OS, cwd, PATH first/last/count) under the log dir.
+- On GitHub Actions, if tracing provides a file:line, CI mode emits `::error` annotations for tool failures/timeouts.
 
 Example:
 ```bash

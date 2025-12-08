@@ -19,6 +19,20 @@ REQUESTS="${TEST_TMPDIR}/requests.ndjson"
 RESPONSES="${TEST_TMPDIR}/responses.ndjson"
 STDERR_LOG="${TEST_TMPDIR}/stderr.log"
 
+# Dump diagnostic info on failure (stderr/responses are redirected separately)
+dump_diagnostics() {
+	local exit_code=$?
+	if [ "${exit_code}" -ne 0 ]; then
+		printf '\n%s\n' '--- mcp-bash stderr ---' >&2
+		cat "${STDERR_LOG}" 2>/dev/null || printf '%s\n' '(no stderr log)' >&2
+		printf '%s\n' '--- mcp-bash responses ---' >&2
+		cat "${RESPONSES}" 2>/dev/null || printf '%s\n' '(no responses)' >&2
+		printf '%s\n' '--- end diagnostics ---' >&2
+	fi
+	test_cleanup_tmpdir
+}
+trap dump_diagnostics EXIT
+
 cat <<'JSON' >"${REQUESTS}"
 {"jsonrpc":"2.0","id":"bootstrap-init","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
@@ -28,7 +42,9 @@ JSON
 
 (
 	cd "${MCPBASH_TEST_ROOT}" || exit 1
-	MCPBASH_PROJECT_ROOT="" MCPBASH_REGISTRY_DIR="" MCPBASH_LOG_JSON_TOOL="quiet" ./bin/mcp-bash <"${REQUESTS}" >"${RESPONSES}" 2>"${STDERR_LOG}"
+	TMPDIR="${MCPBASH_INTEGRATION_TMP:-${TMPDIR:-/tmp}}" \
+		MCPBASH_PROJECT_ROOT="" MCPBASH_REGISTRY_DIR="" MCPBASH_LOG_JSON_TOOL="quiet" \
+		./bin/mcp-bash <"${REQUESTS}" >"${RESPONSES}" 2>"${STDERR_LOG}"
 )
 
 assert_json_lines "${RESPONSES}"
@@ -48,8 +64,16 @@ assert_contains "docs/PROJECT-STRUCTURE.md" "${call_text}" "helper output should
 assert_contains "MCPBASH_PROJECT_ROOT" "${call_text}" "helper output should mention MCPBASH_PROJECT_ROOT"
 
 bootstrap_dir="$(grep -oE '/[^ )]*mcpbash\.bootstrap\.[A-Za-z0-9]+' "${STDERR_LOG}" | tail -n1 || true)"
-if [ -n "${bootstrap_dir}" ] && [ -d "${bootstrap_dir}" ]; then
-	test_fail "bootstrap workspace not cleaned up: ${bootstrap_dir}"
+if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
+	printf 'Note: KEEP_LOGS enabled; bootstrap workspace may be preserved: %s\n' "${bootstrap_dir:-<none>}"
+else
+	# On Windows/Git Bash, the TMP root uses a Windows path; the helper emits
+	# a best-effort cleanup warning for /tmp paths. Skip strict removal checks there.
+	if ! uname -s 2>/dev/null | grep -qiE 'mingw|msys|cygwin'; then
+		if [ -n "${bootstrap_dir}" ] && [ -d "${bootstrap_dir}" ]; then
+			test_fail "bootstrap workspace not cleaned up: ${bootstrap_dir}"
+		fi
+	fi
 fi
 
 printf 'Bootstrap helper test passed.\n'

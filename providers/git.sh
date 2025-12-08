@@ -3,6 +3,15 @@
 
 set -euo pipefail
 
+mcp_git_log_block() {
+	local host="$1"
+	if command -v mcp_logging_warning >/dev/null 2>&1; then
+		mcp_logging_warning "mcp.git" "Blocked host ${host}"
+	else
+		printf '%s\n' "git provider blocked host ${host}" >&2
+	fi
+}
+
 if [ "${MCPBASH_ENABLE_GIT_PROVIDER:-false}" != "true" ]; then
 	printf '%s\n' "git provider is disabled (set MCPBASH_ENABLE_GIT_PROVIDER=true to enable)" >&2
 	exit 4
@@ -44,22 +53,22 @@ fi
 
 host="$(mcp_policy_extract_host_from_url "${uri}")"
 if [ -z "${host}" ]; then
-	printf '%s\n' "git provider blocked internal/unsupported host" >&2
+	mcp_git_log_block "<empty>"
 	exit 4
 fi
 if mcp_policy_host_is_private "${host}"; then
-	printf '%s\n' "git provider blocked internal/unsupported host" >&2
+	mcp_git_log_block "${host}"
 	exit 4
 fi
 if ! mcp_policy_host_allowed "${host}" "${MCPBASH_GIT_ALLOW_HOSTS:-}" "${MCPBASH_GIT_DENY_HOSTS:-}"; then
-	printf '%s\n' "git provider blocked internal/unsupported host" >&2
+	mcp_git_log_block "${host}"
 	exit 4
 fi
 if command -v getent >/dev/null 2>&1 && getent ahosts "${host}" >/dev/null 2>&1; then
 	while read -r ip _; do
 		case "${ip}" in
 		10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[0-1].* | 127.* | 169.254.* | ::1 | fe80:* | fc??:* | fd??:*)
-			printf '%s\n' "git provider blocked internal/unsupported host" >&2
+			mcp_git_log_block "${host}"
 			exit 4
 			;;
 		esac

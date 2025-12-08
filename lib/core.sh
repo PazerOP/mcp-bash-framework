@@ -17,9 +17,9 @@ MCPBASH_LAST_REGISTRY_POLL=""
 MCPBASH_DEFAULT_MAX_CONCURRENT_REQUESTS="${MCPBASH_DEFAULT_MAX_CONCURRENT_REQUESTS:-16}"
 MCPBASH_DEFAULT_MAX_OUTPUT_BYTES="${MCPBASH_DEFAULT_MAX_OUTPUT_BYTES:-10485760}"
 MCPBASH_DEFAULT_PROGRESS_PER_MIN="${MCPBASH_DEFAULT_PROGRESS_PER_MIN:-100}"
-MCPBASH_BASE_SHUTDOWN_TIMEOUT="${MCPBASH_BASE_SHUTDOWN_TIMEOUT:-5}"
-MCPBASH_BASE_SUBSCRIBE_TIMEOUT="${MCPBASH_BASE_SUBSCRIBE_TIMEOUT:-120}"
-MCPBASH_BASE_TOOL_TIMEOUT="${MCPBASH_BASE_TOOL_TIMEOUT:-30}"
+MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
+MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
+MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
 
 mcp_register_tool() {
 	local payload="$1"
@@ -61,6 +61,9 @@ mcp_core_bootstrap_state() {
 	MCPBASH_INITIALIZE_HANDSHAKE_DONE=false
 	_MCP_NOTIFICATION_PAYLOAD=""
 	mcp_runtime_init_paths
+	if ! mcp_auth_init; then
+		exit 1
+	fi
 	mcp_runtime_load_server_meta
 	mcp_ids_init_state
 	mcp_lock_init
@@ -72,9 +75,9 @@ mcp_core_bootstrap_state() {
 	MCPBASH_MAX_TOOL_OUTPUT_SIZE="${MCPBASH_MAX_TOOL_OUTPUT_SIZE:-${MCPBASH_DEFAULT_MAX_OUTPUT_BYTES}}"
 	MCPBASH_MAX_PROGRESS_PER_MIN="${MCPBASH_MAX_PROGRESS_PER_MIN:-${MCPBASH_DEFAULT_PROGRESS_PER_MIN}}"
 	MCPBASH_MAX_LOGS_PER_MIN="${MCPBASH_MAX_LOGS_PER_MIN:-${MCPBASH_MAX_PROGRESS_PER_MIN}}"
-	MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-${MCPBASH_BASE_TOOL_TIMEOUT}}"
-	MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-${MCPBASH_BASE_SUBSCRIBE_TIMEOUT}}"
-	MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-${MCPBASH_BASE_SHUTDOWN_TIMEOUT}}"
+	MCPBASH_DEFAULT_TOOL_TIMEOUT="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
+	MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
+	MCPBASH_SHUTDOWN_TIMEOUT="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
 	MCPBASH_SHUTDOWN_TIMER_STARTED=false
 	MCPBASH_RESOURCE_POLL_PID=""
 	MCPBASH_CLIENT_SUPPORTS_ELICITATION=0
@@ -472,11 +475,18 @@ mcp_core_dispatch_object() {
 	local handler=""
 	local async="false"
 	local id_json
+	local is_notification="false"
 
 	# Args:
 	#   json_line - normalized JSON-RPC object (single request/notification).
 	#   method    - extracted method name used to resolve handler.
 	if [ "${method}" = "notifications/cancelled" ]; then
+		if ! id_json="$(mcp_json_extract_id "${json_line}")"; then
+			id_json="null"
+		fi
+		if ! mcp_auth_guard_request "${json_line}" "${method}" "${id_json}"; then
+			return
+		fi
 		mcp_core_handle_cancel_notification "${json_line}"
 		return
 	fi
@@ -490,23 +500,36 @@ mcp_core_dispatch_object() {
 		mcp_core_emit_parse_error "Invalid Request" -32600 "Unable to extract id"
 		return
 	fi
+	if ! mcp_json_has_key "${json_line}" "id"; then
+		is_notification="true"
+	fi
+
+	if ! mcp_auth_guard_request "${json_line}" "${method}" "${id_json}"; then
+		return
+	fi
 
 	if mcp_logging_is_enabled "debug"; then
 		mcp_logging_debug "mcp.core" "Dispatch method=${method} id=${id_json}"
 	fi
 
 	if [ "${MCPBASH_INITIALIZED}" != true ] && ! mcp_core_method_allowed_preinit "${method}"; then
-		mcp_core_emit_not_initialized "${id_json}"
+		if [ "${is_notification}" != "true" ]; then
+			mcp_core_emit_not_initialized "${id_json}"
+		fi
 		return
 	fi
 
 	if [ "${MCPBASH_SHUTDOWN_PENDING}" = true ] && ! mcp_core_method_allowed_during_shutdown "${method}"; then
-		mcp_core_emit_shutting_down "${id_json}"
+		if [ "${is_notification}" != "true" ]; then
+			mcp_core_emit_shutting_down "${id_json}"
+		fi
 		return
 	fi
 
 	if ! mcp_core_resolve_handler "${method}"; then
-		mcp_core_emit_method_not_found "${id_json}"
+		if [ "${is_notification}" != "true" ]; then
+			mcp_core_emit_method_not_found "${id_json}"
+		fi
 		return
 	fi
 
@@ -699,10 +722,10 @@ mcp_core_timeout_for_method() {
 	if [ -z "${timeout_value}" ]; then
 		case "${method}" in
 		tools/*)
-			timeout_value="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-${MCPBASH_BASE_TOOL_TIMEOUT}}"
+			timeout_value="${MCPBASH_DEFAULT_TOOL_TIMEOUT:-30}"
 			;;
 		resources/subscribe)
-			timeout_value="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-${MCPBASH_BASE_SUBSCRIBE_TIMEOUT}}"
+			timeout_value="${MCPBASH_DEFAULT_SUBSCRIBE_TIMEOUT:-120}"
 			;;
 		esac
 	fi
@@ -929,6 +952,9 @@ mcp_core_method_allowed_during_shutdown() {
 
 mcp_core_emit_not_initialized() {
 	local id_json="$1"
+	case "${id_json}" in
+	null | '') return 0 ;;
+	esac
 	if [ -z "${id_json}" ]; then
 		id_json="null"
 	fi
@@ -937,6 +963,9 @@ mcp_core_emit_not_initialized() {
 
 mcp_core_emit_shutting_down() {
 	local id_json="$1"
+	case "${id_json}" in
+	null | '') return 0 ;;
+	esac
 	if [ -z "${id_json}" ]; then
 		id_json="null"
 	fi
@@ -985,6 +1014,9 @@ mcp_core_emit_parse_error() {
 
 mcp_core_emit_method_not_found() {
 	local id_json="$1"
+	case "${id_json}" in
+	null | '') return 0 ;;
+	esac
 	rpc_send_line "$(mcp_core_build_error_response "${id_json}" -32601 "Method not found" "")"
 }
 

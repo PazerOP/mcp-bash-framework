@@ -1,4 +1,4 @@
-# 06-manual-registration
+# 09-manual-registration
 
 **What you’ll learn**
 - Replacing auto-discovery with curated registry entries via `server.d/register.sh`
@@ -11,7 +11,7 @@
 
 **Run**
 ```bash
-./examples/run 06-manual-registration
+./examples/run 09-manual-registration
 ```
 
 **Transcript (abridged)**
@@ -29,7 +29,7 @@
 - `echo.hello` returns the echoed payload via custom provider; `manual.prompt` renders with optional `topic`.
 
 **Troubleshooting**
-- Ensure scripts are executable (`chmod +x examples/06-manual-registration/server.d/register.sh examples/06-manual-registration/tools/*.sh`).
+- Ensure scripts are executable (`chmod +x examples/09-manual-registration/server.d/register.sh examples/09-manual-registration/tools/*.sh`).
 - Live progress requires `MCPBASH_ENABLE_LIVE_PROGRESS=true`; otherwise notifications flush at completion.
 - If you see minimal-mode warnings, install jq/gojq; minimal mode disables tools/resources/prompts.
 - Avoid CRLF in requests; send LF-only NDJSON.

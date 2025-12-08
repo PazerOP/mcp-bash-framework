@@ -55,8 +55,14 @@ if [ -z "${TMPDIR:-}" ] || [ ! -d "${TMPDIR}" ]; then
 	export TMPDIR
 fi
 
-# Tar staging is enabled by default; set MCPBASH_STAGING_TAR=0 to opt out.
-MCPBASH_STAGING_TAR="${MCPBASH_STAGING_TAR:-1}"
+# Tar staging: on in CI (MCPBASH_CI_MODE=1), off by default locally. Override with MCPBASH_STAGING_TAR=1/0.
+if [ -z "${MCPBASH_STAGING_TAR:-}" ]; then
+	if [[ "${MCPBASH_CI_MODE:-0}" =~ ^(1|true|yes)$ ]]; then
+		MCPBASH_STAGING_TAR=1
+	else
+		MCPBASH_STAGING_TAR=0
+	fi
+fi
 # Shared cache location for the base tarball; reused across test scripts in a run.
 MCPBASH_TAR_DIR="${MCPBASH_TAR_DIR:-${TMPDIR%/}/mcpbash.staging}"
 MCPBASH_BASE_TAR="${MCPBASH_BASE_TAR:-${MCPBASH_TAR_DIR}/base.tar}"
@@ -73,6 +79,9 @@ test_create_tmpdir() {
 }
 
 test_cleanup_tmpdir() {
+	if [ "${MCPBASH_KEEP_LOGS:-false}" = "true" ]; then
+		return 0
+	fi
 	if [ -n "${TEST_TMPDIR:-}" ] && [ -d "${TEST_TMPDIR}" ]; then
 		rm -rf "${TEST_TMPDIR}" 2>/dev/null || true
 	fi
@@ -215,7 +224,7 @@ test_prepare_base_tar() {
 		fi
 
 		local -a tar_args
-		tar_args=("${TEST_TAR_BIN}" "${tar_flags[@]}" -cf "${tmp_tar}" -C "${MCPBASH_HOME}")
+		tar_args=("${TEST_TAR_BIN}" "${tar_flags[@]:-}" -cf "${tmp_tar}" -C "${MCPBASH_HOME}")
 		local dir
 		for dir in bin lib handlers providers sdk bootstrap scaffold; do
 			if [ -e "${MCPBASH_HOME}/${dir}" ]; then
@@ -261,7 +270,7 @@ test_extract_base_tar() {
 	fi
 
 	mkdir -p "${dest}"
-	if "${TEST_TAR_BIN}" "${tar_flags[@]}" -xf "${MCPBASH_BASE_TAR}" -C "${dest}"; then
+	if "${TEST_TAR_BIN}" "${tar_flags[@]:-}" -xf "${MCPBASH_BASE_TAR}" -C "${dest}"; then
 		return 0
 	fi
 	return 1
@@ -276,6 +285,9 @@ test_stage_workspace() {
 	mkdir -p "${dest}"
 	if test_prepare_base_tar && test_extract_base_tar "${dest}"; then
 		return 0
+	fi
+	if [ "${VERBOSE:-0}" = "1" ]; then
+		printf ' -> base tar unavailable; falling back to copy\n' >&2
 	fi
 	# Copy framework files
 	cp -a "${MCPBASH_HOME}/bin" "${dest}/"
@@ -310,6 +322,9 @@ test_run_mcp() {
 		MCPBASH_PROJECT_ROOT="${workspace}" \
 			MCPBASH_LOG_LEVEL="${MCPBASH_LOG_LEVEL:-info}" \
 			MCPBASH_DEBUG_PAYLOADS="${MCPBASH_DEBUG_PAYLOADS:-}" \
+			MCPBASH_REMOTE_TOKEN="${MCPBASH_REMOTE_TOKEN:-}" \
+			MCPBASH_REMOTE_TOKEN_KEY="${MCPBASH_REMOTE_TOKEN_KEY:-}" \
+			MCPBASH_REMOTE_TOKEN_FALLBACK_KEY="${MCPBASH_REMOTE_TOKEN_FALLBACK_KEY:-}" \
 			./bin/mcp-bash <"${requests_file}" >"${responses_file}"
 	)
 }

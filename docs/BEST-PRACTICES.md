@@ -298,6 +298,23 @@ mcp_emit_json "$(mcp_json_arr "item1" "item2" "item3")"
 mcp_emit_text "Hello, ${name}!"
 ```
 
+#### Embedded resources (`type:"resource"`)
+
+Add file content to the `result.content` array so clients receive both text and attached files:
+
+- Write to `MCP_TOOL_RESOURCES_FILE` while the tool runs. TSV format: `path<TAB>mimeType<TAB>uri` (mime/uri optional). Example:
+	```bash
+	payload_path="${MCPBASH_PROJECT_ROOT}/resources/report.txt"
+	printf 'Report content' >"${payload_path}"
+	if [ -n "${MCP_TOOL_RESOURCES_FILE:-}" ]; then
+		printf '%s\ttext/plain\n' "${payload_path}" >>"${MCP_TOOL_RESOURCES_FILE}"
+	fi
+	mcp_emit_text "See embedded report"
+	```
+- JSON format is also accepted: `[{"path":"/tmp/result.png","mimeType":"image/png","uri":"file:///tmp/result.png"}]` (a single object or string path works too).
+- Binary files are base64-encoded into the `blob` field; text stays in `text`.
+- Keep paths inside allowed roots; invalid/unreadable entries are skipped (debug logs will mention the skip).
+
 #### Error handling
 
 **`mcp_fail`** – Return structured JSON-RPC error and exit:
@@ -406,6 +423,33 @@ Set per-tool `timeoutSecs` inside `<tool>.meta.json` when default (30 seconds) i
 }
 ```
 
+#### Tool annotations
+
+Declare behavior hints in `<tool>.meta.json` to help clients present appropriate UI cues (MCP 2025-03-26):
+
+```json
+{
+  "name": "file-delete",
+  "description": "Delete a file from the filesystem",
+  "inputSchema": { ... },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
+  }
+}
+```
+
+| Annotation | Default | Description |
+|------------|---------|-------------|
+| `readOnlyHint` | `false` | Tool does not modify its environment |
+| `destructiveHint` | `true` | Tool may destructively modify environment (only when `readOnlyHint` is `false`) |
+| `idempotentHint` | `false` | Multiple calls with same args have same effect as one call |
+| `openWorldHint` | `true` | Tool may interact with external systems |
+
+Clients may use these hints to show confirmation dialogs, group tools by risk level, or enable/disable tools based on user preferences. Annotations are advisory—do not rely on them for security decisions.
+
 #### Shared code
 
 Place reusable scripts under `lib/` in your project and source them via `MCPBASH_PROJECT_ROOT`:
@@ -489,6 +533,8 @@ fi
 - Only return `-32603` (internal error) for unknown failures; otherwise map to specific JSON-RPC errors spelled out in the protocol.
 - Capture stderr and propagate actionable diagnostics; see `examples/01-args-and-validation/tools/echo-arg/tool.sh:30-36` for human-readable error surfaces.
 - Wrap risky filesystem/network calls in helper functions so they can be retried or mocked in unit tests.
+- For richer tool failure context, enable `MCPBASH_TOOL_STDERR_CAPTURE` and tune `MCPBASH_TOOL_STDERR_TAIL_LIMIT` (default 4096 bytes). Timeouts include exit code and stderr tail when `MCPBASH_TOOL_TIMEOUT_CAPTURE` is on (default).
+- For tricky shell tools, opt into tracing with `MCPBASH_TRACE_TOOLS=true`; traces go to per-invocation logs under `MCPBASH_STATE_DIR` (cap via `MCPBASH_TRACE_MAX_BYTES`, adjust PS4 with `MCPBASH_TRACE_PS4`). Trace lines are added to `error.data.traceLine` when enabled.
 
 ### 4.4 Logging & instrumentation
 - Use `MCPBASH_LOG_LEVEL` for startup defaults, then rely on `logging/setLevel` requests for runtime tuning (§6.2).
@@ -548,6 +594,11 @@ mcp-bash run-tool my-tool --args '{}' --project-root /path/to/project
 ```
 
 > **Windows/Git Bash users**: Set `MSYS2_ARG_CONV_EXCL="*"` before running commands with path arguments (`--roots`, `--project-root`) to prevent automatic path mangling. Example: `MSYS2_ARG_CONV_EXCL="*" mcp-bash run-tool my-tool --roots '/repo'`. See [docs/WINDOWS.md](WINDOWS.md) for details.
+
+Notes:
+- `--roots` and `MCPBASH_ROOTS` require existing, readable paths; invalid entries fail fast.
+- If no roots are provided by client/env/config, the project root is used as a single default.
+- Client roots timeouts keep the current cache; no warning is emitted for the fallback.
 
 **Use cases:**
 
