@@ -51,6 +51,5 @@ Behavior:
 - Relative paths in `MCPBASH_ROOTS` or `config/roots.json` resolve against `MCPBASH_PROJECT_ROOT`.
 
 ## Logging and safety
-- Only `file://` URIs are accepted; non-local authorities are rejected.
 - Paths are percent-decoded, normalized via `realpath`, and deduplicated before use.
 - Late/stale responses are dropped using a generation counter so they cannot overwrite newer roots.

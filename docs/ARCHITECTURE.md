@@ -12,37 +12,47 @@ _Figure: High-level dataflow—MCP client sends JSON-RPC over stdio to mcp-bash 
 ~/.local/share/mcp-bash/   # or mcp-bash-framework/ if cloned manually
 ├─ bin/mcp-bash
 ├─ lib/
+│  ├─ auth.sh
 │  ├─ core.sh
+│  ├─ completion.sh
+│  ├─ elicitation.sh
 │  ├─ hash.sh
-│  ├─ rpc.sh
 │  ├─ json.sh
 │  ├─ lock.sh
-│  ├─ timeout.sh
-│  ├─ io.sh
 │  ├─ ids.sh
+│  ├─ io.sh
 │  ├─ paginate.sh
+│  ├─ path.sh
+│  ├─ policy.sh
 │  ├─ progress.sh
 │  ├─ logging.sh
 │  ├─ runtime.sh
-│  ├─ completion.sh
 │  ├─ registry.sh
+│  ├─ resource_content.sh
 │  ├─ resource_providers.sh
 │  ├─ resources.sh
+│  ├─ roots.sh
+│  ├─ rpc.sh
 │  ├─ prompts.sh
 │  ├─ tools.sh
-│  └─ spec.sh
+│  ├─ tools_policy.sh
+│  ├─ timeout.sh
+│  ├─ uri.sh
+│  ├─ validate.sh
+│  ├─ spec.sh
+│  └─ cli/
 ├─ handlers/
+│  ├─ completion.sh
 │  ├─ lifecycle.sh
 │  ├─ ping.sh
 │  ├─ logging.sh
+│  ├─ roots.sh
 │  ├─ tools.sh
 │  ├─ resources.sh
-│  ├─ prompts.sh
-│  └─ completion.sh
+│  └─ prompts.sh
 ├─ providers/
 ├─ sdk/
 ├─ server.d/
-│  ├─ policy.sh
 │  ├─ env.sh
 │  └─ register.sh
 ├─ scaffold/
