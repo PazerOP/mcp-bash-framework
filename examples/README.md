@@ -9,16 +9,13 @@ Run any example from the repo root:
 ```bash
 tmp=/tmp/mcp-example
 rm -rf "$tmp"
-cp -a examples/08-roots-basics/. "$tmp"
+cp -a examples/04-roots-basics/. "$tmp"
 MCPBASH_HOME=$(pwd) MCPBASH_PROJECT_ROOT="$tmp" ./bin/mcp-bash
 ```
 Browse `$tmp` after the run to see outputs and registries.
 
 MCP Inspector (stdio) quickstart:
 ```bash
-npx @modelcontextprotocol/inspector --transport stdio -- ./examples/run 07-elicitation
+npx @modelcontextprotocol/inspector --transport stdio -- ./examples/run 08-elicitation
 ```
-The `--` separator prevents the inspector from treating `./examples/run` as its own flag. Replace `07-elicitation` with any example ID (e.g., `advanced/ffmpeg-studio`).
-
-New example:
-- `09-embedded-resources` shows how a tool embeds a file in the MCP response (`type:"resource"`).
+The `--` separator prevents the inspector from treating `./examples/run` as its own flag. Replace `08-elicitation` with any example ID (e.g., `advanced/ffmpeg-studio`).

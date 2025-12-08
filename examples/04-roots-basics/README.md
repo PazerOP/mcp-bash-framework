@@ -1,4 +1,4 @@
-# 08-roots-basics
+# 04-roots-basics
 
 **What you'll learn**
 - How MCP Roots scope tool filesystem access
@@ -13,7 +13,7 @@
 **Run**
 ```
 # From repo root
-./examples/run 08-roots-basics
+./examples/run 04-roots-basics
 ```
 
 **Try it**
@@ -44,7 +44,7 @@ See `docs/ERRORS.md` for full guidance on when to use each error type.
 
 **Roots configuration**
 - Default fallback: `config/roots.json` includes `./data` so the example works out of the box.
-- Override via env: `MCPBASH_ROOTS="/tmp/myroot:/var/tmp/other" ./examples/run 08-roots-basics`
+- Override via env: `MCPBASH_ROOTS="/tmp/myroot:/var/tmp/other" ./examples/run 04-roots-basics`
 - Client-provided roots: if your MCP client supports roots, the server will request them and use those instead of the fallback.
 
 **Success criteria**

@@ -1,4 +1,4 @@
-# 07-elicitation
+# 08-elicitation
 
 **What you'll learn**
 - How tools invoke the elicitation flow using SDK helpers
@@ -11,7 +11,7 @@
 
 **Run**
 ```
-./examples/run 07-elicitation
+./examples/run 08-elicitation
 ```
 
 **What it does**

@@ -1,4 +1,4 @@
-# 05-prompts-basics
+# 07-prompts-basics
 
 **What you’ll learn**
 - Discovering prompts and rendering a simple template
@@ -10,7 +10,7 @@
 
 **Run**
 ```
-./examples/run 05-prompts-basics
+./examples/run 07-prompts-basics
 ```
 
 **Transcript**
@@ -27,5 +27,5 @@
 
 **Troubleshooting**
 - Prompts are unavailable in minimal mode; install jq/gojq.
-- Ensure files are present (`examples/05-prompts-basics/prompts/*`).
+- Ensure files are present (`examples/07-prompts-basics/prompts/*`).
 - Avoid CRLF in requests; send LF-only NDJSON.

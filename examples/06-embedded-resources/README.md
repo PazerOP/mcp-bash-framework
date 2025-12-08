@@ -1,4 +1,4 @@
-# 09-embedded-resources
+# 06-embedded-resources
 
 **What you’ll learn**
 - Attach file content to a tool result via `type:"resource"` content
@@ -11,7 +11,7 @@
 
 **Run**
 ```
-./examples/run 09-embedded-resources
+./examples/run 06-embedded-resources
 ```
 
 **Transcript**

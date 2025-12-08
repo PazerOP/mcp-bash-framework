@@ -286,11 +286,12 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | [**01-args-and-validation**](examples/01-args-and-validation/) | Handling JSON arguments and input validation. |
 | [**02-logging-and-levels**](examples/02-logging-and-levels/) | Sending logs to the client and managing verbosity. |
 | [**03-progress-and-cancellation**](examples/03-progress-and-cancellation/) | Long-running tasks, reporting progress, and handling user cancellation. |
-| [**04-resources-basics**](examples/04-resources-basics/) | Listing and reading resources via the built-in file provider. |
-| [**05-prompts-basics**](examples/05-prompts-basics/) | Discovering and rendering prompt templates. |
-| [**06-manual-registration**](examples/06-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
-| [**07-elicitation**](examples/07-elicitation/) | Client-driven elicitation prompts that gate tool execution. |
-| [**08-roots-basics**](examples/08-roots-basics/) | MCP roots scoping for tools; allows/denies file reads based on configured roots. |
+| [**04-roots-basics**](examples/04-roots-basics/) | MCP roots scoping for tools; allows/denies file reads based on configured roots. |
+| [**05-resources-basics**](examples/05-resources-basics/) | Listing and reading resources via the built-in file provider. |
+| [**06-embedded-resources**](examples/06-embedded-resources/) | Embedding file content directly in tool responses. |
+| [**07-prompts-basics**](examples/07-prompts-basics/) | Discovering and rendering prompt templates. |
+| [**08-elicitation**](examples/08-elicitation/) | Client-driven elicitation prompts that gate tool execution. |
+| [**09-manual-registration**](examples/09-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
 | [**Advanced: ffmpeg-studio**](examples/advanced/ffmpeg-studio/) | Real-world application: video processing pipeline with media inspection (optional, heavy deps). |
 
 ## Features at a Glance
@@ -446,7 +447,7 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 	  fi
 	  printf 'See embedded report for details'
 	  ```
-- See the dedicated example at `examples/09-embedded-resources/`.
+	- See the dedicated example at `examples/06-embedded-resources/`.
 
 ### Protocol Version Compatibility
 This server targets MCP protocol version `2025-11-25` (the current stable specification) and supports negotiated downgrades during `initialize`.

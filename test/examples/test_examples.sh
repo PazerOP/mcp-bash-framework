@@ -66,7 +66,7 @@ JSON
 
 	if [ -n "${tool_name}" ]; then
 		printf '{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{"limit":5}}\n' >>"${workdir}/requests.ndjson"
-		if [ "${example_id}" = "09-embedded-resources" ]; then
+		if [ "${example_id}" = "06-embedded-resources" ]; then
 			printf '{"jsonrpc":"2.0","id":"embed-call","method":"tools/call","params":{"name":"%s","arguments":{}}}\n' "${tool_name}" >>"${workdir}/requests.ndjson"
 		fi
 	fi
@@ -100,7 +100,7 @@ JSON
 		)
 	' "${workdir}/responses.ndjson" >/dev/null
 
-	if [ "${example_id}" = "09-embedded-resources" ]; then
+	if [ "${example_id}" = "06-embedded-resources" ]; then
 		jq -e -s '
 			def by_id(id): first(.[] | select(.id == id));
 			(by_id("embed-call").result.content // []) as $content |

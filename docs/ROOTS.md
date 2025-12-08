@@ -41,7 +41,7 @@ Behavior:
 - Client roots replace the current cache on success; malformed client payloads keep the previous roots.
 
 ## Try it
-- Run `./examples/run 08-roots-basics` and call `example.roots.read` with `./data/sample.txt` (allowed) and `/etc/passwd` (denied).
+- Run `./examples/run 04-roots-basics` and call `example.roots.read` with `./data/sample.txt` (allowed) and `/etc/passwd` (denied).
 - In the advanced ffmpeg-studio example, paths are scoped by client roots; if none are provided, it falls back to the bundled `./media`.
 
 ## Path requirements

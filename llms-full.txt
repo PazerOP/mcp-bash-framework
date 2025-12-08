@@ -231,12 +231,12 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Args + validation: `examples/01-args-and-validation/tools/echo-arg/tool.sh`.
   - Logging + levels: `examples/02-logging-and-levels/tools/logger/tool.sh`.
   - Progress + cancellation: `examples/03-progress-and-cancellation/tools/slow/tool.sh`.
-  - Resources basics: `examples/04-resources-basics`.
-  - Prompts basics: `examples/05-prompts-basics`.
-  - Manual registration + live progress: `examples/06-manual-registration`.
-  - Elicitation: `examples/07-elicitation`.
-  - Roots basics: `examples/08-roots-basics`.
-  - Embedded resources: `examples/09-embedded-resources`.
+  - Roots basics: `examples/04-roots-basics`.
+  - Resources basics: `examples/05-resources-basics`.
+  - Embedded resources: `examples/06-embedded-resources`.
+  - Prompts basics: `examples/07-prompts-basics`.
+  - Elicitation: `examples/08-elicitation`.
+  - Manual registration + live progress: `examples/09-manual-registration`.
   - Advanced ffmpeg studio: `examples/advanced/ffmpeg-studio`.
 
 ## COMMANDS & TESTING
