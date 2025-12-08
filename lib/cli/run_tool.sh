@@ -41,8 +41,11 @@ mcp_cli_run_tool_load_cache() {
 
 mcp_cli_run_tool_prepare_roots() {
 	local roots_arg="$1"
+	# shellcheck disable=SC2034  # Consumed by roots helpers after CLI setup
 	MCPBASH_ROOTS_PATHS=()
+	# shellcheck disable=SC2034
 	MCPBASH_ROOTS_URIS=()
+	# shellcheck disable=SC2034
 	MCPBASH_ROOTS_NAMES=()
 	[ -z "${roots_arg}" ] && return 0
 	local had_error=0

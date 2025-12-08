@@ -5,8 +5,31 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mcp_resolve_script_path() {
+	local source="${BASH_SOURCE[0]-$0}"
+	local dir=""
+
+	while [ -L "${source}" ]; do
+		dir="$(cd -P "$(dirname "${source}")" && pwd)"
+		source="$(readlink "${source}")"
+		if [[ "${source}" != /* ]]; then
+			source="${dir}/${source}"
+		fi
+	done
+
+	dir="$(cd -P "$(dirname "${source}")" && pwd)"
+	printf '%s/%s\n' "${dir}" "$(basename "${source}")"
+}
+
+script_path="$(mcp_resolve_script_path)"
+MCPBASH_SCRIPT_PATH="${script_path}"
+script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
 MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
+
+if [ ! -r "${MCPBASH_HOME}/lib/runtime.sh" ]; then
+	printf '%s\n' "mcp-bash install looks broken: expected ${MCPBASH_HOME}/lib/runtime.sh (resolved from ${script_path})." >&2
+	exit 1
+fi
 
 usage() {
 	cat <<'EOF'
@@ -62,9 +85,10 @@ require_bash_runtime() {
 
 # Establish project root and source runtime detection helpers.
 initialize_runtime_paths() {
+	local resolved="${MCPBASH_SCRIPT_PATH:-${BASH_SOURCE[0]-$0}}"
 	local script_dir=""
 
-	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	script_dir="$(cd "$(dirname "${resolved}")" && pwd)"
 	MCPBASH_HOME="$(cd "${script_dir}/.." && pwd)"
 
 	local required_libs="runtime json hash ids lock io paginate logging uri policy tools_policy registry spec tools resources prompts completion timeout rpc core validate"
