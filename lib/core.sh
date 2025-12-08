@@ -481,6 +481,12 @@ mcp_core_dispatch_object() {
 	#   json_line - normalized JSON-RPC object (single request/notification).
 	#   method    - extracted method name used to resolve handler.
 	if [ "${method}" = "notifications/cancelled" ]; then
+		if ! id_json="$(mcp_json_extract_id "${json_line}")"; then
+			id_json="null"
+		fi
+		if ! mcp_auth_guard_request "${json_line}" "${method}" "${id_json}"; then
+			return
+		fi
 		mcp_core_handle_cancel_notification "${json_line}"
 		return
 	fi
