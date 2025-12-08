@@ -24,6 +24,8 @@ mkdir -p "${STATE_DIR}"
 LOG_DIR="${WORKSPACE}/logs"
 rm -rf "${LOG_DIR}" 2>/dev/null || true
 mkdir -p "${LOG_DIR}"
+RESPONSES="${WORKSPACE}/responses.ndjson"
+STDERR_LOG="${WORKSPACE}/stderr.log"
 
 mkdir -p "${WORKSPACE}/tools/fail"
 
@@ -59,13 +61,16 @@ JSON
 
 (
 	cd "${WORKSPACE}" || exit 1
-	MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCPBASH_TMP_ROOT="${WORKSPACE}/tmp" MCPBASH_STATE_DIR="${STATE_DIR}" MCPBASH_TRACE_TOOLS=true MCPBASH_PRESERVE_STATE=true MCPBASH_CI_MODE=true MCPBASH_LOG_DIR="${LOG_DIR}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${WORKSPACE}/responses.ndjson"
+	TMPDIR="${MCPBASH_INTEGRATION_TMP:-${TMPDIR:-/tmp}}" MCPBASH_PROJECT_ROOT="${WORKSPACE}" MCPBASH_TMP_ROOT="${WORKSPACE}/tmp" MCPBASH_STATE_DIR="${STATE_DIR}" MCPBASH_TRACE_TOOLS=true MCPBASH_PRESERVE_STATE=true MCPBASH_CI_MODE=true MCPBASH_LOG_DIR="${LOG_DIR}" ./bin/mcp-bash <"${WORKSPACE}/requests.ndjson" >"${RESPONSES}"
 )
 
 assert_json_lines "${WORKSPACE}/responses.ndjson"
 
-fail_resp="$(jq -c 'select(.id=="fail")' "${WORKSPACE}/responses.ndjson")"
+fail_resp="$(jq -c 'select(.id=="fail")' "${RESPONSES}")"
 if [ -z "${fail_resp}" ]; then
+	if [ -f "${RESPONSES}" ]; then
+		printf 'Responses content:\n%s\n' "$(cat "${RESPONSES}")" >&2
+	fi
 	test_fail "missing fail response"
 fi
 if jq -e 'select(.id=="fail") | .error._mcpToolError' "${WORKSPACE}/responses.ndjson" >/dev/null 2>&1; then
@@ -84,7 +89,7 @@ if [ -z "${fail_stderr_tail}" ] || [[ "${fail_stderr_tail}" != *"nope"* ]]; then
 	test_fail "stderrTail missing or incorrect for fail.tool"
 fi
 
-slow_resp="$(jq -c 'select(.id=="slow")' "${WORKSPACE}/responses.ndjson")"
+slow_resp="$(jq -c 'select(.id=="slow")' "${RESPONSES}")"
 if [ -z "${slow_resp}" ]; then
 	test_fail "missing slow response"
 fi
