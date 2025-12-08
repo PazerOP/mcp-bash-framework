@@ -317,10 +317,12 @@ mcp_runtime_init_paths() {
 			os_name="$(uname -s 2>/dev/null || printf '')"
 			cwd="$(pwd 2>/dev/null || printf '')"
 			if [ -n "${path_entries}" ]; then
-				IFS=':' read -r path_first _ <<<"${path_entries}"
 				IFS=':' read -r -a path_array <<<"${path_entries}"
 				path_count="${#path_array[@]}"
-				path_last="${path_array[-1]}"
+				if [ "${path_count}" -gt 0 ]; then
+					path_first="${path_array[0]}"
+					path_last="${path_array[$((path_count - 1))]}"
+				fi
 			fi
 			{
 				printf '{'
