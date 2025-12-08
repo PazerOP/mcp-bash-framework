@@ -163,7 +163,9 @@ mcp_runtime_stage_bootstrap_project() {
 	fi
 
 	local tmp_base tmp_root
-	tmp_base="${TMPDIR:-/tmp}"
+	# Prefer MCPBASH_TMP_ROOT (set in CI mode) over TMPDIR to ensure cleanup
+	# safety checks pass (they compare against MCPBASH_TMP_ROOT).
+	tmp_base="${MCPBASH_TMP_ROOT:-${TMPDIR:-/tmp}}"
 	tmp_base="${tmp_base%/}"
 	tmp_root="$(mktemp -d "${tmp_base}/mcpbash.bootstrap.XXXXXX")"
 	if [ -z "${tmp_root}" ] || [ ! -d "${tmp_root}" ]; then
