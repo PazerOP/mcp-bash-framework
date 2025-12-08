@@ -25,9 +25,9 @@ Ordered by impact on debuggability.
 - **Rationale:** Knowing which tool ran with what (sanitized) args helps reconstruct failure sequences.
 - **Status:** Implemented logging at debug level with redacted details: arg count/bytes, metadata key count, roots count, timeout, trace flag; path only when verbose logging is enabled. No argument values are logged.
 
-## 6. Environment doctor (`mcp-bash doctor`)
+## 6. Environment doctor (`mcp-bash doctor`) — **Implemented**
 - **Rationale:** Pre-flight checks prevent debugging dead-ends caused by bad shells, missing jq/gojq, or unwritable temp dirs.
-- **Suggested implementation:** Add a fast subcommand that verifies bash version, jq/gojq availability, temp directory writability (including `MCPBASH_TMP_ROOT` when set), and optionally macOS quarantine/TCC hints. Offer a `--json` mode for programmatic consumption. No network access; exit 0 on pass, non-zero with actionable messages on failure.
+- **Status:** `mcp-bash doctor` already exists with `--json`; enhanced to check `MCPBASH_TMP_ROOT` writability alongside bash/jq/gojq/quarantine. No network access; exits non-zero on failure with actionable messages.
 
 ## 7. CI-focused debugging bundle (`MCPBASH_CI_MODE` and artifacts)
 - **Rationale:** CI jobs benefit from predictable log locations, terse summaries, and inline surfacing (e.g., GitHub annotations) to cut triage time.
