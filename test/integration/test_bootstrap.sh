@@ -23,11 +23,11 @@ STDERR_LOG="${TEST_TMPDIR}/stderr.log"
 dump_diagnostics() {
 	local exit_code=$?
 	if [ "${exit_code}" -ne 0 ]; then
-		printf '\n--- mcp-bash stderr ---\n' >&2
-		cat "${STDERR_LOG}" 2>/dev/null || printf '(no stderr log)\n' >&2
-		printf '--- mcp-bash responses ---\n' >&2
-		cat "${RESPONSES}" 2>/dev/null || printf '(no responses)\n' >&2
-		printf '--- end diagnostics ---\n' >&2
+		printf '\n%s\n' '--- mcp-bash stderr ---' >&2
+		cat "${STDERR_LOG}" 2>/dev/null || printf '%s\n' '(no stderr log)' >&2
+		printf '%s\n' '--- mcp-bash responses ---' >&2
+		cat "${RESPONSES}" 2>/dev/null || printf '%s\n' '(no responses)' >&2
+		printf '%s\n' '--- end diagnostics ---' >&2
 	fi
 	test_cleanup_tmpdir
 }
