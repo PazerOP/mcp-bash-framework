@@ -3,11 +3,10 @@
   "description": "One-line summary for __NAME__ tool",
   "inputSchema": {
     "type": "object",
-    "required": ["name"],
     "properties": {
       "name": {
         "type": "string",
-        "description": "Optional name to include in the greeting"
+        "description": "Name to include in the greeting (defaults to World)"
       }
     }
   },

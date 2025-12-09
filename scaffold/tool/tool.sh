@@ -6,8 +6,8 @@ set -euo pipefail
 source "${MCP_SDK:?MCP_SDK environment variable not set}/tool-sdk.sh"
 
 # Parse arguments
-# String (required): name
-name="$(mcp_args_require '.name')"
+# String (optional with default): name
+name="$(mcp_args_get '.name' --default 'World')"
 # Bool (optional): verbose flag
 # verbose_flag="$(mcp_args_bool '.verbose' --default false)"
 # Int (optional with bounds): limit
