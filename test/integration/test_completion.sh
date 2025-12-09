@@ -24,6 +24,11 @@ JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
 
+init_caps="$(grep '"id":"1"' "${TMP}/responses.ndjson" | head -n1)"
+if ! echo "${init_caps}" | jq -e '.result.capabilities.completions? | . == {}' >/dev/null; then
+	test_fail "initialize response missing completions capability"
+fi
+
 if ! grep -q '"id":"2"' "${TMP}/responses.ndjson"; then
 	test_fail "completion/complete response missing"
 fi
