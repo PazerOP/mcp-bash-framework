@@ -22,9 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server now advertises the spec-compliant `completions` capability in initialize responses; tests assert capability presence.
 - Tool metadata parsing consolidates to a single jq pass per meta file, reducing per-tool process overhead during registry scans.
 - Scaffolded tool template now treats `name` as optional with a default, matching the description.
+- JSON tool detection now prefers jq over gojq, supports explicit MCPBASH_JSON_TOOL(_BIN) overrides, and validates candidates via `--version` before enabling full protocol mode.
 
 ### Fixed
 - Removed duplicate YAML meta from the progress-and-cancellation example (JSON is canonical).
+- Windows CI failures caused by `gojq` `E2BIG` exec errors are avoided by the jq-first detection order and exec sanity check.
 
 ## [0.6.0] - 2025-12-08
 

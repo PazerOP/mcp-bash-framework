@@ -12,6 +12,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck disable=SC1091
 . "${REPO_ROOT}/test/common/assert.sh"
 
+unset -f jq 2>/dev/null || true
+
 test_require_command jq
 
 test_create_tmpdir
@@ -34,8 +36,7 @@ EOF
 cat >"${PROJECT_ROOT}/tools/hello/tool.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${MCP_SDK}/tool-sdk.sh"
-mcp_emit_json "$(mcp_json_obj ok true)"
+printf '%s\n' '{"ok":true}'
 EOF
 chmod +x "${PROJECT_ROOT}/tools/hello/tool.sh"
 

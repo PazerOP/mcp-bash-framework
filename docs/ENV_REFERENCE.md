@@ -30,6 +30,8 @@ Authoritative list of supported environment variables. Defaults shown are the sh
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
 | `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env names when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
 | `MCPBASH_FORCE_MINIMAL` | (unset) | Force minimal capability tier even when JSON tooling is present. |
+| `MCPBASH_JSON_TOOL` | (auto-detect jq → gojq) | Explicit JSON tool selection: `jq`, `gojq`, or `none`. Default order is jq-first (Windows E2BIG mitigation). |
+| `MCPBASH_JSON_TOOL_BIN` | (derived from tool) | Explicit path to JSON tool; infers `MCPBASH_JSON_TOOL` from basename if unset and treats unknown names as jq-compatible (behavior may differ if flags differ). |
 | `MCPBASH_COMPAT_BATCHES` | (unset) | Enable legacy batch request support. |
 | `MCPBASH_DEBUG_PAYLOADS` | (unset) | Write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
 | `MCPBASH_PRESERVE_STATE` | (unset) | Preserve state dir after exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |

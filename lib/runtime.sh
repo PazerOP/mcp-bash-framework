@@ -469,7 +469,7 @@ mcp_runtime_cleanup_bootstrap() {
 }
 
 mcp_runtime_detect_json_tool() {
-	# JSON tool detection: detection order is gojq → jq.
+	# JSON tool detection: prefer jq to avoid Windows E2BIG issues; aligns with json-handling.mdc.
 	if mcp_runtime_force_minimal_mode_requested; then
 		MCPBASH_MODE="minimal"
 		MCPBASH_JSON_TOOL="none"
@@ -478,25 +478,64 @@ mcp_runtime_detect_json_tool() {
 		return 0
 	fi
 
-	local candidate=""
-
-	candidate="$(command -v gojq 2>/dev/null || true)"
-	if [ -n "${candidate}" ]; then
-		MCPBASH_JSON_TOOL="gojq"
-		MCPBASH_JSON_TOOL_BIN="${candidate}"
-		MCPBASH_MODE="full"
-		if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
-			if mcp_logging_verbose_enabled; then
-				printf '%s\n' "JSON tooling: gojq at ${candidate}; full protocol surface enabled." >&2
-			else
-				printf '%s\n' "JSON tooling: gojq; full protocol surface enabled." >&2
-			fi
+	if [ "${MCPBASH_JSON_TOOL:-}" = "none" ]; then
+		MCPBASH_MODE="minimal"
+		MCPBASH_JSON_TOOL="none"
+		MCPBASH_JSON_TOOL_BIN=""
+		if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+			printf '%s\n' 'JSON tooling override: MCPBASH_JSON_TOOL=none; entering minimal mode.' >&2
 		fi
 		return 0
 	fi
 
-	candidate="$(command -v jq 2>/dev/null || true)"
-	if [ -n "${candidate}" ]; then
+	local candidate=""
+	local override_tool="${MCPBASH_JSON_TOOL:-}"
+	local override_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+
+	if [ -n "${override_tool}" ] || [ -n "${override_bin}" ]; then
+		if [ -z "${override_bin}" ]; then
+			override_bin="$(type -P -- "${override_tool}" 2>/dev/null || true)"
+		fi
+		if [ -z "${override_tool}" ] && [ -n "${override_bin}" ]; then
+			case "$(basename -- "${override_bin}")" in
+			jq | jq.exe)
+				override_tool="jq"
+				;;
+			gojq | gojq.exe)
+				override_tool="gojq"
+				;;
+			*)
+				override_tool="jq"
+				if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+					printf '%s\n' "MCPBASH_JSON_TOOL_BIN=${override_bin}; treating as jq-compatible (basename not jq/gojq)." >&2
+				fi
+				;;
+			esac
+		fi
+		if [ -n "${override_bin}" ] && "${override_bin}" --version >/dev/null 2>&1; then
+			MCPBASH_JSON_TOOL="${override_tool}"
+			MCPBASH_JSON_TOOL_BIN="${override_bin}"
+			MCPBASH_MODE="full"
+			if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
+				if mcp_logging_verbose_enabled; then
+					printf '%s\n' "JSON tooling override: ${override_tool} at ${override_bin}; full protocol surface enabled." >&2
+				else
+					printf '%s\n' "JSON tooling override: ${override_tool}; full protocol surface enabled." >&2
+				fi
+			fi
+			return 0
+		fi
+		if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+			if [ -z "${override_bin}" ]; then
+				printf '%s\n' "MCPBASH_JSON_TOOL=${override_tool:-unset} override not found on PATH; falling back to auto-detect." >&2
+			else
+				printf '%s\n' "MCPBASH_JSON_TOOL=${override_tool:-unset} override failed exec check; falling back to auto-detect." >&2
+			fi
+		fi
+	fi
+
+	candidate="$(type -P -- jq 2>/dev/null || true)"
+	if [ -n "${candidate}" ] && "${candidate}" --version >/dev/null 2>&1; then
 		MCPBASH_JSON_TOOL="jq"
 		MCPBASH_JSON_TOOL_BIN="${candidate}"
 		MCPBASH_MODE="full"
@@ -510,13 +549,28 @@ mcp_runtime_detect_json_tool() {
 		return 0
 	fi
 
+	candidate="$(type -P -- gojq 2>/dev/null || true)"
+	if [ -n "${candidate}" ] && "${candidate}" --version >/dev/null 2>&1; then
+		MCPBASH_JSON_TOOL="gojq"
+		MCPBASH_JSON_TOOL_BIN="${candidate}"
+		MCPBASH_MODE="full"
+		if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
+			if mcp_logging_verbose_enabled; then
+				printf '%s\n' "JSON tooling: gojq at ${candidate}; full protocol surface enabled." >&2
+			else
+				printf '%s\n' "JSON tooling: gojq; full protocol surface enabled." >&2
+			fi
+		fi
+		return 0
+	fi
+
 	# shellcheck disable=SC2034
 	MCPBASH_JSON_TOOL="none"
 	# shellcheck disable=SC2034
 	MCPBASH_JSON_TOOL_BIN=""
 	MCPBASH_MODE="minimal"
 	if mcp_runtime_log_allowed; then
-		printf '%s\n' 'No gojq/jq found; entering minimal mode with reduced capabilities.' >&2
+		printf '%s\n' 'No jq/gojq found; entering minimal mode with reduced capabilities.' >&2
 	fi
 	return 0
 }
