@@ -352,6 +352,7 @@ mcp_completion_decode_cursor() {
 	local cursor="$1"
 	local expected_name="$2"
 	local expected_hash="$3"
+	local allow_hash_mismatch="${4:-false}"
 	local decoded payload offset script hash name
 	if ! decoded="$(mcp_completion_base64_urldecode "${cursor}")"; then
 		return 1
@@ -364,7 +365,7 @@ mcp_completion_decode_cursor() {
 	if [ -z "${name}" ] || [ "${name}" != "${expected_name}" ]; then
 		return 1
 	fi
-	if [ -n "${expected_hash}" ] && [ "${hash}" != "${expected_hash}" ]; then
+	if [ "${allow_hash_mismatch}" != "true" ] && [ -n "${expected_hash}" ] && [ "${hash}" != "${expected_hash}" ]; then
 		return 1
 	fi
 	offset="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.offset // 0')" || return 1
