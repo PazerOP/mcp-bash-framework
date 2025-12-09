@@ -689,20 +689,38 @@ mcp_tools_scan() {
 			local annotations="null"
 
 			if [ -f "${meta_json}" ]; then
-				# Read fields individually to avoid collapsing empty columns
-				local j_name
-				j_name="$("${MCPBASH_JSON_TOOL_BIN}" -r '.name // ""' "${meta_json}" 2>/dev/null || printf '')"
-				[ -n "${j_name}" ] && name="${j_name}"
-				description="$("${MCPBASH_JSON_TOOL_BIN}" -r '.description // ""' "${meta_json}" 2>/dev/null || printf '')"
-				arguments="$("${MCPBASH_JSON_TOOL_BIN}" -c '.inputSchema // .arguments // {type:"object",properties:{}}' "${meta_json}" 2>/dev/null || printf '{}')"
-				timeout="$("${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' "${meta_json}" 2>/dev/null || printf '')"
-				output_schema="$("${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				icons="$("${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				annotations="$("${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				# Convert local file paths to data URIs
-				local meta_dir
-				meta_dir="$(dirname "${meta_json}")"
-				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
+				local meta_assignments
+				meta_assignments="$("${MCPBASH_JSON_TOOL_BIN}" -r '
+					def esc($v): ($v | @sh);
+					{
+						name: (.name // ""),
+						description: (.description // ""),
+						arguments: (.inputSchema // .arguments // {type:"object",properties:{}} | @json),
+						timeout: (.timeoutSecs // ""),
+						output: (.outputSchema // null | @json),
+						icons: (.icons // null | @json),
+						annotations: (.annotations // null | @json)
+					}
+					| "name=\(esc(.name))\n" +
+					  "description=\(esc(.description))\n" +
+					  "arguments=\(esc(.arguments))\n" +
+					  "timeout=\(esc(.timeout))\n" +
+					  "output_schema=\(esc(.output))\n" +
+					  "icons_json=\(esc(.icons))\n" +
+					  "annotations_json=\(esc(.annotations))"
+				' "${meta_json}" 2>/dev/null || printf '')"
+				if [ -n "${meta_assignments}" ]; then
+					local icons_json annotations_json
+					eval "${meta_assignments}"
+					[ -n "${arguments}" ] || arguments='{}'
+					[ -n "${output_schema}" ] || output_schema='null'
+					icons="${icons_json:-null}"
+					annotations="${annotations_json:-null}"
+					# Convert local file paths to data URIs
+					local meta_dir
+					meta_dir="$(dirname "${meta_json}")"
+					icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
+				fi
 			fi
 
 			if [ "${arguments}" = "{}" ]; then
