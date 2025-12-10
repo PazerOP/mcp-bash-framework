@@ -125,7 +125,7 @@ This table shows when features were introduced in the MCP specification and when
 | **Portability** | | |
 | macOS | Bash 3.2+ support | Tested, CI verified |
 | Linux | Bash 3.2+ support | Tested, CI verified |
-| Windows | Git-Bash/WSL compatibility | `providers/file.sh`, `docs/WINDOWS.md` |
+| Windows | Git Bash (CI-tested), WSL (Linux-like) | `providers/file.sh`, `docs/WINDOWS.md` |
 | **Documentation** | | |
 | Security | Threat model and guardrails | `docs/SECURITY.md` |
 | Limits & Performance | Tunable limits, env vars | `docs/LIMITS.md` |

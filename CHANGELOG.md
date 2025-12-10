@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- Clarified Windows support: Git Bash is CI-tested; WSL works like Linux but is not separately validated in CI.
+
 ### Added
 - Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
 - GitHub Actions release workflow (tag-triggered) builds a tarball and publishes SHA256SUMS for installer verification.

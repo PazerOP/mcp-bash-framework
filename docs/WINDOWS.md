@@ -1,9 +1,13 @@
 # Windows Support Notes
 
-mcp-bash works on Windows, but only reliably under WSL. Git Bash and MSYS can run it, but signal handling and performance vary.
+mcp-bash is CI-tested on Windows using Git Bash (MSYS2). WSL also works and behaves like native Linux. Choose based on your needs:
+
+- **Git Bash**: CI-validated, ships with Git for Windows, lower setup friction
+- **WSL**: Behaves like Linux (signal handling, symlinks work correctly), but not separately CI-tested
 
 ## Guidance
-- Use WSL for predictable behavior and clean signal handling.
+- Git Bash is CI-tested and works for most use cases with the documented workarounds.
+- WSL behaves like Linux; if you need reliable signal handling or symlinks, it's a good choice.
 - Git Bash/MSYS may drop signals; prefer short timeouts for long-running tools.
 - Providers translate `C:\foo` to `/c/foo`; avoid mixing Windows and POSIX roots.
 - Set `MSYS2_ARG_CONV_EXCL=*` when passing raw Windows paths to tools.

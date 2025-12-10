@@ -11,7 +11,7 @@ Key points:
 - **Tool policy hook**: Optional `server.d/policy.sh` defines `mcp_tools_policy_check()` to allow/deny tools centrally (read-only, allowlists, audit); default allows all.
 - **Tool annotations**: Declare behavior hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) in `.meta.json` to help clients present appropriate UI cues.
 - **Protocol version**: Targets MCP `2025-11-25` with negotiated downgrades to `2025-06-18`, `2025-03-26`, and `2024-11-05`.
-- **Cross-platform**: macOS, Linux, and Windows (Git Bash/WSL) support.
+- **Cross-platform**: macOS, Linux, and Windows (Git Bash CI-tested; WSL works like Linux).
 - **CLI `run-tool`**: Direct tool invocation with roots, dry-run, timeout override, verbose stderr, `--print-env`; covered by unit and example smoke tests.
 - **Scaffolded smoke scripts**: Each scaffolded tool ships with `tools/<name>/smoke.sh` to validate stdout JSON quickly; update the sample args in the script if you change `tool.meta.json`.
 - **Test harnesses**: `test_run_mcp` (NDJSON batch, preferred) and `test/common/session.sh` (interactive sequential calls; skips notifications, overwrites EXIT traps, no timeout).

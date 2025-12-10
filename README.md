@@ -236,7 +236,7 @@ Every client works the same way: point it at the framework and tell it where you
   ) as server:
       ...
   ```
-- **Windows note**: Use Git Bash or WSL so `/usr/bin/env bash` and your paths resolve; adjust paths to `C:\Users\you\...` as needed.
+- **Windows note**: Git Bash (CI-tested) or WSL both work. Git Bash ships with Git for Windows; WSL behaves like Linux. See [Windows Support](docs/WINDOWS.md) for details.
 
 ## Client Compatibility
 
@@ -464,7 +464,7 @@ If no `server.meta.json` exists, the server uses smart defaults based on your pr
 ## Requirements
 
 ### Runtime Requirements
-*   **Bash**: version 3.2 or higher (standard on macOS, Linux, and WSL).
+*   **Bash**: version 3.2 or higher (standard on macOS, Linux, WSL, and Git Bash on Windows).
 *   **JSON Processor**: `gojq` (recommended) or `jq`.
     *   *Note*: If no JSON tool is found, the server runs in "Minimal Mode" (Lifecycle & Ping only).
 
@@ -517,7 +517,7 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 - [**Remote Connectivity**](docs/REMOTE.md) - Exposing mcp-bash over HTTP/SSE via external gateways.
 
 ### Scope and Goals
-- Bash-only Model Context Protocol server verified on macOS Bash 3.2, Linux Bash ≥3.2, and experimental Git-Bash/WSL environments.
+- Bash-only Model Context Protocol server verified on macOS Bash 3.2, Linux Bash ≥3.2, and Windows (Git Bash is CI-tested; WSL behaves like Linux).
 - Targets MCP protocol version `2025-11-25` while supporting negotiated downgrades.
 - Transport support is limited to stdio; HTTP/SSE/OAuth transports remain out of scope (see [Remote Connectivity](docs/REMOTE.md) for gateway options).
 
