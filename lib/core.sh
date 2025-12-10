@@ -292,9 +292,10 @@ mcp_core_cancel_shutdown_watchdog() {
 		touch "${MCPBASH_SHUTDOWN_WATCHDOG_CANCEL}" 2>/dev/null || true
 	fi
 	# Also try to kill directly (works on Unix, may fail on Windows)
-	if kill "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null; then
-		wait "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null || true
-	fi
+	kill "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null || true
+	# Always wait for the watchdog to exit. On Windows, kill may not interrupt sleep,
+	# but the watchdog will exit after checking the cancel file (within 1 second).
+	wait "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null || true
 	MCPBASH_SHUTDOWN_WATCHDOG_PID=""
 	MCPBASH_SHUTDOWN_WATCHDOG_CANCEL=""
 }
