@@ -157,8 +157,15 @@ mcp_handle_resources() {
 		cursor="$(mcp_json_extract_cursor "${json_payload}")"
 		if ! list_json="$(mcp_resources_templates_list "${limit}" "${cursor}")"; then
 			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			if [ "${code}" = "0" ] && [ -n "${cursor}" ]; then
+				code="-32602"
+			fi
 			local message
-			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resource templates}")
+			local err_text="${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resource templates}"
+			if [ "${code}" = "-32602" ] && [ -z "${_MCP_RESOURCES_ERR_MESSAGE:-}" ]; then
+				err_text="Invalid cursor"
+			fi
+			message=$(mcp_resources_quote "${err_text}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
 			return 0
 		fi

@@ -102,7 +102,7 @@ Metadata precedence order:
 
 ## `.registry/resources.json`
 
-Entries describe resource templates and providers. Paths are relative to `MCPBASH_RESOURCES_DIR`.
+Entries describe resources and providers. Paths are relative to `MCPBASH_RESOURCES_DIR`.
 
 ```json
 {
@@ -132,33 +132,54 @@ Entries describe resource templates and providers. Paths are relative to `MCPBAS
 - The `file` provider fails closed if no resource roots are configured; missing/non-existent roots are ignored, so ensure allowed roots exist before use.
 - Subscription notifications include both `subscriptionId` and a nested `subscription` object (`{id, uri}`) for client convenience; MCP allows additional fields, and clients that only look at `subscriptionId` remain compatible.
 
+## `.registry/resource-templates.json`
+
+Entries describe resource template patterns, sorted by `name`, and are refreshed independently of static resources.
+
+```json
+{
+  "version": 1,
+  "generatedAt": "2025-12-09T10:00:00Z",
+  "items": [
+    {
+      "name": "project-files",
+      "uriTemplate": "file:///{path}",
+      "title": "Project Files",
+      "description": "Access any file in the project",
+      "mimeType": "application/octet-stream"
+    },
+    {
+      "name": "logs-by-date",
+      "uriTemplate": "file:///var/log/{service}/{date}.log",
+      "description": "Log files by service and date"
+    }
+  ],
+  "hash": "abc123...",
+  "total": 2
+}
+```
+
+Registry fields mirror the MCP `ResourceTemplate` schema, plus `generatedAt`, `hash`, and `total`.
+
 ## Resource Templates
 
-The MCP protocol supports **resource templates** — parameterized resources using [RFC 6570 URI templates](https://datatracker.ietf.org/doc/html/rfc6570) (e.g., `file:///{path}`, `logs/{date}.log`). Templates allow servers to expose dynamic access patterns without enumerating every possible resource.
+The MCP protocol supports **resource templates** — parameterized resources using [RFC 6570 URI templates](https://datatracker.ietf.org/doc/html/rfc6570) (e.g., `file:///{path}`, `logs/{date}.log`). Templates expose families of URIs without enumerating every instance.
 
-**Current status:** The `resources/templates/list` endpoint is implemented and returns a valid, paginated empty response. Template discovery from `.meta.json` files (using `uriTemplate` instead of `uri`) is not yet implemented, and the capability is not advertised until discovery is added.
+Key behaviors:
+- Auto-discovery scans `resources/*.meta.json` for `uriTemplate` (string) and ignores entries with `uri` set. If both are present, the entry is skipped with a warning.
+- `uriTemplate` must contain at least one `{variable}` (server policy to catch static URIs).
+- Template names may not collide with resource names; conflicts are skipped with a warning. Manual templates override auto-discovered templates that share a name.
+- Discovery results are cached in `.registry/resource-templates.json` with hash-based pagination. TTL is controlled via `MCP_RESOURCES_TEMPLATES_TTL` (default 5s).
+- Changes to templates trigger the existing `notifications/resources/list_changed` path (`MCP_RESOURCES_CHANGED` flag is shared with resources).
+- `resources/templates/list` supports the same `limit` extension and `total` field as other list endpoints; cursor decoding uses the templates registry hash so stale cursors are rejected after changes.
 
-**Response format:**
-
-```json
-{
-  "resourceTemplates": [],
-  "nextCursor": null
-}
+Manual registration in `server.d/register.sh` mirrors the tools/resources pattern:
+```bash
+mcp_resources_templates_manual_begin
+mcp_resources_templates_register_manual '{"name":"logs-by-date","uriTemplate":"file:///var/log/{service}/{date}.log"}'
+mcp_resources_templates_manual_finalize
 ```
-
-When template discovery is implemented, entries will follow the MCP schema:
-
-```json
-{
-  "name": "project-files",
-  "uriTemplate": "file:///{path}",
-  "description": "Access any file in the project directory",
-  "mimeType": "application/octet-stream"
-}
-```
-
-**Note:** Resource templates are for discovery only. Clients expand the URI template with their own values and call `resources/read` with the resulting concrete URI.
+Manual entries pass through the same validators as auto-discovery and are merged on top of discovered templates (manual wins). Script output can also provide a `resourceTemplates` array for bulk registration. See [`docs/RESOURCE-TEMPLATES.md`](RESOURCE-TEMPLATES.md) for end-to-end guidance and examples.
 
 ## `.registry/prompts.json`
 

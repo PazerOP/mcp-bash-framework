@@ -31,7 +31,7 @@ This table shows when features were introduced in the MCP specification and when
 | **Resources** | | | | |
 | Resources (list/read) | 2024-11-05 | 0.1.0 | ✅ Full | File/HTTPS/Git providers |
 | Resource Subscriptions | 2024-11-05 | 0.1.0 | ✅ Full | Change notifications |
-| Resource Templates | 2024-11-05 | 0.1.0 | ⚠️ Stub | Returns empty array (discovery not implemented) |
+| Resource Templates | 2024-11-05 | 0.6.1 | ✅ Full | Auto-discovery + manual registration with hash-based pagination |
 | Resource Icons (SEP-973) | 2025-11-25 | 0.5.0 | ✅ Full | Local files converted to data URIs |
 | Resources listChanged Notification | 2025-06-18 | 0.1.0 | ✅ Full | Registry change detection |
 | Binary-safe Resource Payloads | 2024-11-05 | 0.6.0 | ✅ Full | Detect binary MIME and emit `blob` base64 instead of raw text |
@@ -111,7 +111,7 @@ This table shows when features were introduced in the MCP specification and when
 | Logging | `notifications/message` for log output | `handlers/logging.sh`, `lib/logging.sh` |
 | Completion | Argument completion for tools/prompts/resources | `lib/completion.sh`, `handlers/completion.sh` |
 | Pagination | Cursor-based result pagination | `lib/paginate.sh` |
-| Resource Templates | `resources/templates/list` (returns empty array; discovery not implemented) | `handlers/resources.sh`, `lib/resources.sh`, `lib/spec.sh` |
+| Resource Templates | `resources/templates/list` with auto/manual discovery (`.registry/resource-templates.json`) | `handlers/resources.sh`, `lib/resources.sh`, `lib/registry.sh`, `docs/RESOURCE-TEMPLATES.md` |
 | **Infrastructure** | | |
 | Runtime Environment | Tooling detection, minimal-mode fallbacks | `bin/mcp-bash`, `lib/runtime.sh` |
 | Concurrency Model | Worker orchestration, cancellation, locks | `lib/core.sh`, `lib/ids.sh`, `lib/lock.sh` |
@@ -146,13 +146,12 @@ The following MCP features are currently not implemented:
 | Server Identity Discovery | Not yet | Pre-initialize server identity endpoint |
 | Sampling (sampling/createMessage) | Not yet | Server-initiated LLM requests; could be useful for agentic tool behaviors |
 | Audio Content | Not yet | Content type support for audio data |
-| Resource Templates Discovery | Stub only | Returns empty array; full discovery not implemented |
 
 **Applicability notes**
 
 - Roots: Implemented as a server→client request (`roots/list`) per spec; server capabilities do not advertise a roots surface.
 - Elicitation: Implemented when clients advertise support; tools can pause and request additional user input.
-- Resource templates: `resources/templates/list` is implemented but returns an empty `resourceTemplates` array; capability is no longer advertised until discovery is implemented.
+- Resource templates: Auto-discovery scans `resources/*.meta.json` for `uriTemplate`, merges manual registrations (manual wins), enforces name collision guard against resources, and shares the `notifications/resources/list_changed` surface. Responses include `limit`/`total` as an allowed extension.
 - Completions: Capability is advertised only for protocol versions `2025-06-18` and newer; older protocol downgrades omit completion.
 - List pagination: `tools/list`, `resources/list`, and `prompts/list` include a `total` field alongside the required arrays and optional `nextCursor`. The MCP list result schemas permit additional properties, so `total` is an intentional, spec-compliant extension for clients that want the full count.
 - “Partial” surfaces (e.g., older protocol versions without `listChanged`) are intentionally reduced per back-compat behavior.

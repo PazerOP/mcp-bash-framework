@@ -10,10 +10,12 @@ MCP_REGISTRY_REGISTER_LAST_RUN=0
 MCP_REGISTRY_REGISTER_COMPLETE=false
 MCP_REGISTRY_REGISTER_STATUS_TOOLS=""
 MCP_REGISTRY_REGISTER_STATUS_RESOURCES=""
+MCP_REGISTRY_REGISTER_STATUS_RESOURCE_TEMPLATES=""
 MCP_REGISTRY_REGISTER_STATUS_PROMPTS=""
 MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS=""
 MCP_REGISTRY_REGISTER_ERROR_TOOLS=""
 MCP_REGISTRY_REGISTER_ERROR_RESOURCES=""
+MCP_REGISTRY_REGISTER_ERROR_RESOURCE_TEMPLATES=""
 MCP_REGISTRY_REGISTER_ERROR_PROMPTS=""
 MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
 
@@ -216,10 +218,12 @@ mcp_registry_register_reset_state() {
 	MCP_REGISTRY_REGISTER_COMPLETE=false
 	MCP_REGISTRY_REGISTER_STATUS_TOOLS=""
 	MCP_REGISTRY_REGISTER_STATUS_RESOURCES=""
+	MCP_REGISTRY_REGISTER_STATUS_RESOURCE_TEMPLATES=""
 	MCP_REGISTRY_REGISTER_STATUS_PROMPTS=""
 	MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS=""
 	MCP_REGISTRY_REGISTER_ERROR_TOOLS=""
 	MCP_REGISTRY_REGISTER_ERROR_RESOURCES=""
+	MCP_REGISTRY_REGISTER_ERROR_RESOURCE_TEMPLATES=""
 	MCP_REGISTRY_REGISTER_ERROR_PROMPTS=""
 	MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
 }
@@ -237,6 +241,10 @@ mcp_registry_register_set_status() {
 		MCP_REGISTRY_REGISTER_STATUS_RESOURCES="${status}"
 		MCP_REGISTRY_REGISTER_ERROR_RESOURCES="${message}"
 		;;
+	resourceTemplates)
+		MCP_REGISTRY_REGISTER_STATUS_RESOURCE_TEMPLATES="${status}"
+		MCP_REGISTRY_REGISTER_ERROR_RESOURCE_TEMPLATES="${message}"
+		;;
 	prompts)
 		MCP_REGISTRY_REGISTER_STATUS_PROMPTS="${status}"
 		MCP_REGISTRY_REGISTER_ERROR_PROMPTS="${message}"
@@ -253,6 +261,7 @@ mcp_registry_register_error_for_kind() {
 	case "${kind}" in
 	tools) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_TOOLS}" ;;
 	resources) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_RESOURCES}" ;;
+	resourceTemplates) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_RESOURCE_TEMPLATES}" ;;
 	prompts) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_PROMPTS}" ;;
 	completions) printf '%s' "${MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS}" ;;
 	*) printf '' ;;
@@ -262,6 +271,7 @@ mcp_registry_register_error_for_kind() {
 mcp_registry_register_abort_all() {
 	mcp_tools_manual_abort 2>/dev/null || true
 	mcp_resources_manual_abort 2>/dev/null || true
+	mcp_resources_templates_manual_abort 2>/dev/null || true
 	mcp_prompts_manual_abort 2>/dev/null || true
 	mcp_completion_manual_abort 2>/dev/null || true
 }
@@ -279,6 +289,11 @@ mcp_registry_register_finalize_kind() {
 				else
 					mcp_registry_register_set_status "tools" "error" "Manual tools registration parsing failed"
 				fi
+				return 0
+			fi
+			if [ -z "${MCP_TOOLS_MANUAL_BUFFER}" ] && [ -z "${script_output}" ]; then
+				mcp_tools_manual_abort
+				mcp_registry_register_set_status "tools" "skipped" ""
 				return 0
 			fi
 			if [ -n "${script_output}" ]; then
@@ -308,6 +323,11 @@ mcp_registry_register_finalize_kind() {
 				fi
 				return 0
 			fi
+			if [ -z "${MCP_RESOURCES_MANUAL_BUFFER}" ] && [ -z "${script_output}" ]; then
+				mcp_resources_manual_abort
+				mcp_registry_register_set_status "resources" "skipped" ""
+				return 0
+			fi
 			if [ -n "${script_output}" ]; then
 				if mcp_logging_verbose_enabled; then
 					mcp_logging_warning "${MCP_RESOURCES_LOGGER}" "Manual registration script output: ${script_output}"
@@ -324,6 +344,38 @@ mcp_registry_register_finalize_kind() {
 			mcp_registry_register_set_status "resources" "skipped" ""
 		fi
 		;;
+	resourceTemplates)
+		if [ "${MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE}" = "true" ]; then
+			if [ -z "${MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
+				mcp_resources_templates_manual_abort
+				if mcp_resources_templates_apply_manual_json "${script_output}"; then
+					mcp_registry_register_set_status "resourceTemplates" "ok" ""
+				else
+					mcp_registry_register_set_status "resourceTemplates" "error" "Manual resourceTemplates registration parsing failed"
+				fi
+				return 0
+			fi
+			if [ -z "${MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER}" ] && [ -z "${script_output}" ]; then
+				mcp_resources_templates_manual_abort
+				mcp_registry_register_set_status "resourceTemplates" "skipped" ""
+				return 0
+			fi
+			if [ -n "${script_output}" ]; then
+				if mcp_logging_verbose_enabled; then
+					mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual registration script output: ${script_output}"
+				else
+					mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual registration script produced output (enable MCPBASH_LOG_VERBOSE=true to view)"
+				fi
+			fi
+			if mcp_resources_templates_manual_finalize; then
+				mcp_registry_register_set_status "resourceTemplates" "ok" ""
+			else
+				mcp_registry_register_set_status "resourceTemplates" "error" "Manual resourceTemplates registration finalize failed"
+			fi
+		else
+			mcp_registry_register_set_status "resourceTemplates" "skipped" ""
+		fi
+		;;
 	prompts)
 		if [ "${MCP_PROMPTS_MANUAL_ACTIVE}" = "true" ]; then
 			if [ -z "${MCP_PROMPTS_MANUAL_BUFFER}" ] && [ -n "${script_output}" ]; then
@@ -333,6 +385,11 @@ mcp_registry_register_finalize_kind() {
 				else
 					mcp_registry_register_set_status "prompts" "error" "Manual prompts registration parsing failed"
 				fi
+				return 0
+			fi
+			if [ -z "${MCP_PROMPTS_MANUAL_BUFFER}" ] && [ -z "${script_output}" ]; then
+				mcp_prompts_manual_abort
+				mcp_registry_register_set_status "prompts" "skipped" ""
 				return 0
 			fi
 			if [ -n "${script_output}" ]; then
@@ -362,6 +419,11 @@ mcp_registry_register_finalize_kind() {
 				else
 					mcp_registry_register_set_status "completions" "error" "Manual completion registration parsing failed"
 				fi
+				return 0
+			fi
+			if [ -z "${MCP_COMPLETION_MANUAL_BUFFER}" ] && [ -z "${script_output}" ]; then
+				mcp_completion_manual_abort
+				mcp_registry_register_set_status "completions" "skipped" ""
 				return 0
 			fi
 			if [ -n "${script_output}" ]; then
@@ -396,10 +458,12 @@ mcp_registry_register_execute() {
 	# Ensure registry paths/dirs are initialized before manual registration writes.
 	mcp_tools_init
 	mcp_resources_init
+	mcp_resources_templates_init
 	mcp_prompts_init
 
 	mcp_tools_manual_begin
 	mcp_resources_manual_begin
+	mcp_resources_templates_manual_begin
 	mcp_prompts_manual_begin
 	mcp_completion_manual_begin
 
@@ -460,6 +524,7 @@ mcp_registry_register_execute() {
 
 	mcp_registry_register_finalize_kind "tools" "${script_output}"
 	mcp_registry_register_finalize_kind "resources" "${script_output}"
+	mcp_registry_register_finalize_kind "resourceTemplates" "${script_output}"
 	mcp_registry_register_finalize_kind "prompts" "${script_output}"
 	mcp_registry_register_finalize_kind "completions" "${script_output}"
 	MCP_REGISTRY_REGISTER_COMPLETE=true
@@ -496,13 +561,17 @@ mcp_registry_register_apply() {
 	case "${kind}" in
 	tools) status="${MCP_REGISTRY_REGISTER_STATUS_TOOLS}" ;;
 	resources) status="${MCP_REGISTRY_REGISTER_STATUS_RESOURCES}" ;;
+	resourceTemplates) status="${MCP_REGISTRY_REGISTER_STATUS_RESOURCE_TEMPLATES}" ;;
 	prompts) status="${MCP_REGISTRY_REGISTER_STATUS_PROMPTS}" ;;
 	completions) status="${MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS}" ;;
 	esac
 
 	case "${status}" in
-	ok | skipped)
+	ok)
 		return 0
+		;;
+	skipped)
+		return 1
 		;;
 	error)
 		return 2

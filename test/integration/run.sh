@@ -55,6 +55,7 @@ TESTS=(
 	"test_tools_schema.sh"
 	"test_prompts.sh"
 	"test_resources.sh"
+	"test_resource_templates.sh"
 	"test_lifecycle_gating.sh"
 	"test_resources_providers.sh"
 	"test_minimal_mode.sh"

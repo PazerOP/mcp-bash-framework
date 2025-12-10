@@ -23,6 +23,18 @@ MCP_RESOURCES_MANUAL_ACTIVE=false
 MCP_RESOURCES_MANUAL_BUFFER=""
 MCP_RESOURCES_MANUAL_DELIM=$'\036'
 MCP_RESOURCES_LOGGER="${MCP_RESOURCES_LOGGER:-mcp.resources}"
+MCP_RESOURCES_TEMPLATES_REGISTRY_JSON=""
+MCP_RESOURCES_TEMPLATES_REGISTRY_HASH=""
+MCP_RESOURCES_TEMPLATES_REGISTRY_PATH=""
+MCP_RESOURCES_TEMPLATES_TOTAL=0
+MCP_RESOURCES_TEMPLATES_LAST_SCAN=0
+MCP_RESOURCES_TEMPLATES_TTL="${MCP_RESOURCES_TEMPLATES_TTL:-5}"
+MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE=false
+MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER=""
+MCP_RESOURCES_TEMPLATES_MANUAL_DELIM=$'\036'
+MCP_RESOURCES_TEMPLATES_MANUAL_JSON="[]"
+MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=false
+MCP_RESOURCES_TEMPLATES_LOGGER="${MCP_RESOURCES_TEMPLATES_LOGGER:-mcp.resources.templates}"
 
 if ! command -v mcp_uri_file_uri_from_path >/dev/null 2>&1; then
 	# shellcheck disable=SC1090
@@ -32,6 +44,11 @@ fi
 if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
 	# shellcheck disable=SC1090
 	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
+fi
+
+if ! command -v mcp_paginate_decode >/dev/null 2>&1; then
+	# shellcheck disable=SC1090
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/paginate.sh"
 fi
 
 if ! command -v mcp_resource_content_object_from_file >/dev/null 2>&1; then
@@ -608,7 +625,9 @@ mcp_resources_decode_cursor() {
 	local cursor="$1"
 	local hash="$2"
 	local offset
-	if ! offset="$(mcp_paginate_decode "${cursor}" "resources" "${hash}")"; then
+	local decode_status=0
+	offset="$(mcp_paginate_decode "${cursor}" "resources" "${hash}")" || decode_status=$?
+	if [ "${decode_status}" -ne 0 ]; then
 		return 1
 	fi
 	printf '%s' "${offset}"
@@ -703,6 +722,7 @@ mcp_resources_poll() {
 	if [ "${MCP_RESOURCES_LAST_SCAN}" -eq 0 ] || [ $((now - MCP_RESOURCES_LAST_SCAN)) -ge "${ttl}" ]; then
 		mcp_resources_refresh_registry || true
 	fi
+	mcp_resources_templates_refresh_registry || true
 	return 0
 }
 
@@ -719,6 +739,524 @@ mcp_resources_metadata_for_name() {
 	printf '%s' "${metadata}"
 }
 
+mcp_resources_templates_has_variable() {
+	local template="$1"
+	printf '%s' "${template}" | grep -q '{[^}]*[^[:space:]][^}]*}'
+}
+
+mcp_resources_templates_collect_resource_names() {
+	local resources_dir="$1"
+	local output_file="$2"
+
+	if [ -z "${resources_dir}" ] || [ ! -d "${resources_dir}" ]; then
+		return 0
+	fi
+
+	while IFS= read -r meta_path; do
+		local meta has_uri has_template name
+		if ! meta="$(cat "${meta_path}")"; then
+			continue
+		fi
+		has_uri="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uri | type == "string") then "yes" else "no" end' 2>/dev/null)"
+		has_template="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uriTemplate | type == "string") then "yes" else "no" end' 2>/dev/null)"
+		if [ "${has_uri}" != "yes" ]; then
+			continue
+		fi
+		if [ "${has_template}" = "yes" ]; then
+			continue
+		fi
+		name="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.name | type == "string") then .name else empty end' 2>/dev/null)"
+		[ -z "${name}" ] && continue
+		printf '%s\n' "${name}" >>"${output_file}"
+	done < <(find "${resources_dir}" -type f -name "*.meta.json" ! -name ".*" 2>/dev/null | LC_ALL=C sort)
+
+	if [ -s "${output_file}" ]; then
+		local tmp
+		tmp="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-names-sort.XXXXXX")"
+		LC_ALL=C sort -u "${output_file}" >"${tmp}"
+		mv "${tmp}" "${output_file}"
+	fi
+}
+
+mcp_resources_templates_enforce_registry_limits() {
+	local total="$1"
+	local json_payload="$2"
+	local limit_or_size
+
+	if ! limit_or_size="$(mcp_registry_check_size "${json_payload}")"; then
+		mcp_resources_error -32603 "Resource templates registry exceeds ${limit_or_size} byte cap"
+		return 1
+	fi
+	if [ "${total}" -gt 500 ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Resource templates registry contains ${total} entries; consider manual registration"
+	fi
+	return 0
+}
+
+mcp_resources_templates_init() {
+	if [ -z "${MCP_RESOURCES_TEMPLATES_REGISTRY_PATH}" ]; then
+		MCP_RESOURCES_TEMPLATES_REGISTRY_PATH="${MCPBASH_REGISTRY_DIR}/resource-templates.json"
+	fi
+	mkdir -p "${MCPBASH_REGISTRY_DIR}"
+	mkdir -p "${MCPBASH_RESOURCES_DIR}" >/dev/null 2>&1 || true
+}
+
+mcp_resources_templates_manual_begin() {
+	MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE=true
+	MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER=""
+	MCP_RESOURCES_TEMPLATES_MANUAL_JSON="[]"
+	MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=true
+}
+
+mcp_resources_templates_manual_abort() {
+	MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE=false
+	MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER=""
+	MCP_RESOURCES_TEMPLATES_MANUAL_JSON="[]"
+	MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=true
+}
+
+mcp_resources_templates_register_manual() {
+	local payload="$1"
+	if [ "${MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE}" != "true" ]; then
+		return 0
+	fi
+	if [ -z "${payload}" ]; then
+		return 0
+	fi
+
+	local json_type
+	if ! json_type="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'type' 2>/dev/null)"; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Invalid JSON in manual template registration"
+		return 1
+	fi
+	if [ "${json_type}" != "object" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template registration must be an object, got: ${json_type}"
+		return 1
+	fi
+
+	local name uri_template uri_present
+	name="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.name | type == "string") then .name else empty end' 2>/dev/null)"
+	uri_template="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uriTemplate | type == "string") then .uriTemplate else empty end' 2>/dev/null)"
+	uri_present="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uri | type == "string") then "yes" else "no" end' 2>/dev/null)"
+
+	if [ -z "${name}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template missing required 'name' field"
+		return 1
+	fi
+	if [ "${uri_present}" = "yes" ] && [ -n "${uri_template}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template '${name}' has both uri and uriTemplate (mutually exclusive)"
+		return 1
+	fi
+	if [ -z "${uri_template}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template missing required 'uriTemplate' field"
+		return 1
+	fi
+	if ! mcp_resources_templates_has_variable "${uri_template}"; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Template '${name}' uriTemplate must contain at least one {variable}"
+		return 1
+	fi
+
+	local compact_payload
+	if ! compact_payload="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.' 2>/dev/null)"; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template registration: invalid JSON payload for '${name}'"
+		return 1
+	fi
+
+	if [ -n "${MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER}" ]; then
+		MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER="${MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER}${MCP_RESOURCES_TEMPLATES_MANUAL_DELIM}${compact_payload}"
+	else
+		MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER="${compact_payload}"
+	fi
+	return 0
+}
+
+mcp_resources_templates_normalize() {
+	local payload="$1"
+	local context="$2"
+	local resource_names_file="${3:-}"
+
+	if ! printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'type == "object"' >/dev/null 2>&1; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: skipping non-object template entry"
+		return 1
+	fi
+
+	local name uri_template uri_value title description mime annotations meta
+	name="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.name | type == "string") then .name else empty end' 2>/dev/null)"
+	uri_template="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uriTemplate | type == "string") then .uriTemplate else empty end' 2>/dev/null)"
+	uri_value="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uri | type == "string") then .uri else empty end' 2>/dev/null)"
+
+	if [ -z "${uri_template}" ] && [ -n "${uri_value}" ]; then
+		return 1
+	fi
+	if [ -z "${uri_template}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: skipping entry without uriTemplate"
+		return 1
+	fi
+	if [ -n "${uri_value}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: '${name:-<unnamed>}' has both uri and uriTemplate (mutually exclusive), skipping"
+		return 1
+	fi
+	if [ -z "${name}" ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: skipping template without name"
+		return 1
+	fi
+
+	uri_template="${uri_template//$'\n'/}"
+	uri_template="${uri_template//$'\r'/}"
+	if ! mcp_resources_templates_has_variable "${uri_template}"; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: '${name}' uriTemplate has no {variable}, skipping"
+		return 1
+	fi
+
+	if [ -n "${resource_names_file}" ] && [ -f "${resource_names_file}" ]; then
+		if grep -Fxq "${name}" "${resource_names_file}"; then
+			mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${context}: template name conflicts with existing resource '${name}', skipping"
+			return 1
+		fi
+	fi
+
+	title="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.title | type == "string") then .title else empty end' 2>/dev/null)"
+	description="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.description | type == "string") then .description else empty end' 2>/dev/null)"
+	mime="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.mimeType | type == "string") then .mimeType else empty end' 2>/dev/null)"
+	annotations="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'try .annotations catch "null"' 2>/dev/null || printf 'null')"
+	meta="$(printf '%s' "${payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'try ._meta catch "null"' 2>/dev/null || printf 'null')"
+	[ -z "${annotations}" ] && annotations="null"
+	[ -z "${meta}" ] && meta="null"
+
+	"${MCPBASH_JSON_TOOL_BIN}" -n \
+		--arg name "${name}" \
+		--arg uriTemplate "${uri_template}" \
+		--arg title "${title}" \
+		--arg description "${description}" \
+		--arg mime "${mime}" \
+		--argjson annotations "${annotations}" \
+		--argjson meta "${meta}" '
+			{
+				name: $name,
+				uriTemplate: $uriTemplate
+			}
+			| (if $title != "" then . + {title: $title} else . end)
+			| (if $description != "" then . + {description: $description} else . end)
+			| (if $mime != "" then . + {mimeType: $mime} else . end)
+			| (if $annotations != null then . + {annotations: $annotations} else . end)
+			| (if $meta != null then . + {_meta: $meta} else . end)
+		'
+}
+
+mcp_resources_templates_apply_manual_json() {
+	local manual_json="$1"
+	local templates_json
+
+	if ! templates_json="$(printf '%s' "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.resourceTemplates // []' 2>/dev/null)"; then
+		return 1
+	fi
+
+	MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER=""
+	MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE=true
+	MCP_RESOURCES_TEMPLATES_MANUAL_JSON="[]"
+	MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=true
+	if [ -n "${templates_json}" ] && [ "${templates_json}" != "[]" ]; then
+		while IFS= read -r entry; do
+			[ -z "${entry}" ] && continue
+			mcp_resources_templates_register_manual "${entry}" || true
+		done < <(printf '%s' "${templates_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.[] // empty' 2>/dev/null)
+	fi
+	if mcp_resources_templates_manual_finalize; then
+		return 0
+	fi
+	return 1
+}
+
+mcp_resources_templates_manual_finalize() {
+	if [ "${MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE}" != "true" ]; then
+		return 0
+	fi
+
+	local resources_available=true
+	if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ]; then
+		if [ "${MCP_REGISTRY_REGISTER_COMPLETE:-false}" != "true" ]; then
+			resources_available=false
+		else
+			if ! mcp_resources_refresh_registry 2>/dev/null; then
+				resources_available=false
+			fi
+			if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ]; then
+				resources_available=false
+			fi
+		fi
+	fi
+	if [ "${resources_available}" = false ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Cannot check for name collisions: resource registry unavailable"
+	fi
+
+	local resource_names_file=""
+	if [ "${resources_available}" = true ]; then
+		resource_names_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-names.XXXXXX")"
+		printf '%s' "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.items[].name // empty' >"${resource_names_file}"
+	fi
+
+	local items_file names_seen_file
+	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-templates-manual.XXXXXX")"
+	names_seen_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-templates-manual-names.XXXXXX")"
+
+	while IFS= read -r item; do
+		[ -z "${item}" ] && continue
+		local normalized name
+		if ! normalized="$(mcp_resources_templates_normalize "${item}" "Manual registration" "${resource_names_file}")"; then
+			continue
+		fi
+		name="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name')"
+		if grep -Fxq "${name}" "${names_seen_file}"; then
+			mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Duplicate template name in manual registration: ${name} (keeping first)"
+			continue
+		fi
+		printf '%s\n' "${name}" >>"${names_seen_file}"
+		printf '%s\n' "${normalized}" >>"${items_file}"
+	done < <(printf '%s' "${MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER}" | awk -v RS='\036' '{if ($0 != "") print $0}')
+
+	local validated="[]"
+	if [ -s "${items_file}" ]; then
+		if ! validated="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"; then
+			validated="[]"
+		fi
+	fi
+
+	rm -f "${items_file}" "${names_seen_file}"
+	if [ -n "${resource_names_file}" ]; then
+		rm -f "${resource_names_file}"
+	fi
+
+	MCP_RESOURCES_TEMPLATES_MANUAL_JSON="${validated}"
+	MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=true
+	MCP_RESOURCES_TEMPLATES_MANUAL_ACTIVE=false
+	MCP_RESOURCES_TEMPLATES_MANUAL_BUFFER=""
+	return 0
+}
+
+mcp_resources_templates_scan() {
+	local resources_dir="${1:-${MCPBASH_RESOURCES_DIR}}"
+	local resource_names_file="${2:-}"
+	local items_file names_seen_file
+	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-templates-items.XXXXXX")"
+	names_seen_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-templates-names.XXXXXX")"
+
+	if [ -d "${resources_dir}" ]; then
+		while IFS= read -r meta_path; do
+			local meta has_template has_uri
+			if ! meta="$(cat "${meta_path}")"; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Unable to read ${meta_path}"
+				continue
+			fi
+			if ! printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Malformed template metadata ${meta_path}, skipping"
+				continue
+			fi
+			has_template="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uriTemplate | type == "string") then "yes" else "no" end' 2>/dev/null)"
+			has_uri="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'if (.uri | type == "string") then "yes" else "no" end' 2>/dev/null)"
+
+			if [ "${has_uri}" = "yes" ] && [ "${has_template}" = "yes" ]; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${meta_path}: uri and uriTemplate are mutually exclusive, skipping"
+				continue
+			fi
+			if [ "${has_template}" != "yes" ]; then
+				continue
+			fi
+			if [ "${has_uri}" = "yes" ]; then
+				continue
+			fi
+
+			local normalized name
+			if ! normalized="$(mcp_resources_templates_normalize "${meta}" "Auto-discovery ${meta_path}" "${resource_names_file}")"; then
+				continue
+			fi
+			name="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name')"
+			if grep -Fxq "${name}" "${names_seen_file}"; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Duplicate template name in auto-discovery: ${name} (keeping first)"
+				continue
+			fi
+			printf '%s\n' "${name}" >>"${names_seen_file}"
+			printf '%s\n' "${normalized}" >>"${items_file}"
+		done < <(find "${resources_dir}" -type f -name "*.meta.json" ! -name ".*" 2>/dev/null | LC_ALL=C sort)
+	fi
+
+	local items_json="[]"
+	if [ -s "${items_file}" ]; then
+		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"
+	fi
+	rm -f "${items_file}" "${names_seen_file}"
+	printf '%s' "${items_json}"
+}
+
+mcp_resources_templates_refresh_registry() {
+	local scan_root
+	scan_root="$(mcp_resources_scan_root)"
+	mcp_resources_templates_init
+
+	local resources_available=true
+	if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ]; then
+		if ! mcp_resources_refresh_registry 2>/dev/null; then
+			resources_available=false
+		fi
+		if [ -z "${MCP_RESOURCES_REGISTRY_JSON}" ]; then
+			resources_available=false
+		fi
+	fi
+	if [ "${resources_available}" = false ]; then
+		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Cannot check for name collisions: resource registry unavailable"
+	fi
+
+	if mcp_registry_register_apply "resourceTemplates"; then
+		:
+	else
+		local manual_status=$?
+		if [ "${manual_status}" -eq 2 ]; then
+			local err
+			err="$(mcp_registry_register_error_for_kind "resourceTemplates")"
+			if [ -z "${err}" ]; then
+				err="Manual registration script returned empty output or non-zero"
+			fi
+			mcp_logging_error "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${err}"
+			return 1
+		fi
+	fi
+
+	local now ttl
+	now="$(date +%s)"
+	ttl="${MCP_RESOURCES_TEMPLATES_TTL:-5}"
+	case "${ttl}" in
+	'' | *[!0-9]*) ttl=5 ;;
+	0) ttl=5 ;;
+	esac
+
+	if [ -z "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" ] && [ -f "${MCP_RESOURCES_TEMPLATES_REGISTRY_PATH}" ]; then
+		local tmp_json=""
+		if tmp_json="$(cat "${MCP_RESOURCES_TEMPLATES_REGISTRY_PATH}")"; then
+			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
+				MCP_RESOURCES_TEMPLATES_REGISTRY_JSON="${tmp_json}"
+				MCP_RESOURCES_TEMPLATES_REGISTRY_HASH="$(echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+				MCP_RESOURCES_TEMPLATES_TOTAL="$(echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
+				if ! mcp_resources_templates_enforce_registry_limits "${MCP_RESOURCES_TEMPLATES_TOTAL}" "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}"; then
+					return 1
+				fi
+			else
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Discarding invalid resource templates registry cache"
+				MCP_RESOURCES_TEMPLATES_REGISTRY_JSON=""
+			fi
+		else
+			if mcp_logging_verbose_enabled; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Failed to read resource templates registry cache ${MCP_RESOURCES_TEMPLATES_REGISTRY_PATH}"
+			else
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Failed to read resource templates registry cache"
+			fi
+			MCP_RESOURCES_TEMPLATES_REGISTRY_JSON=""
+		fi
+	fi
+
+	if [ "${MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED}" != "true" ] && [ -n "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" ] && [ $((now - MCP_RESOURCES_TEMPLATES_LAST_SCAN)) -lt "${ttl}" ]; then
+		return 0
+	fi
+
+	local resource_names_file
+	resource_names_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-resources.XXXXXX")"
+	if [ "${resources_available}" = true ] && [ -n "${MCP_RESOURCES_REGISTRY_JSON}" ]; then
+		printf '%s' "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.items[].name // empty' >"${resource_names_file}"
+	fi
+	mcp_resources_templates_collect_resource_names "${scan_root}" "${resource_names_file}"
+
+	local auto_items_json manual_items_json merged_items_json
+	auto_items_json="$(mcp_resources_templates_scan "${scan_root}" "${resource_names_file}")"
+	manual_items_json="${MCP_RESOURCES_TEMPLATES_MANUAL_JSON:-[]}"
+	if [ -z "${manual_items_json}" ]; then
+		manual_items_json="[]"
+	fi
+
+	if [ -n "${resource_names_file}" ] && [ -f "${resource_names_file}" ] && [ -s "${resource_names_file}" ]; then
+		local manual_filtered_file
+		manual_filtered_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-manual-filtered.XXXXXX")"
+		while IFS= read -r manual_item; do
+			[ -z "${manual_item}" ] && continue
+			local manual_name
+			manual_name="$(printf '%s' "${manual_item}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null || printf '')"
+			if [ -z "${manual_name}" ]; then
+				continue
+			fi
+			if grep -Fxq "${manual_name}" "${resource_names_file}"; then
+				mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template name conflicts with existing resource '${manual_name}', skipping"
+				continue
+			fi
+			printf '%s\n' "${manual_item}" >>"${manual_filtered_file}"
+		done < <(printf '%s' "${manual_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.[] // empty' 2>/dev/null)
+		if [ -s "${manual_filtered_file}" ]; then
+			manual_items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${manual_filtered_file}")"
+		else
+			manual_items_json="[]"
+		fi
+		rm -f "${manual_filtered_file}"
+	fi
+
+	if [ -n "${resource_names_file}" ]; then
+		rm -f "${resource_names_file}"
+	fi
+
+	local auto_names_file
+	auto_names_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-auto-names.XXXXXX")"
+	printf '%s' "${auto_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.[].name // empty' >"${auto_names_file}"
+	while IFS= read -r manual_name; do
+		[ -z "${manual_name}" ] && continue
+		if [ -s "${auto_names_file}" ] && grep -Fxq "${manual_name}" "${auto_names_file}"; then
+			mcp_logging_info "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template overrides auto-discovered template '${manual_name}'"
+		fi
+	done < <(printf '%s' "${manual_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.[].name // empty')
+	rm -f "${auto_names_file}"
+
+	merged_items_json="$("${MCPBASH_JSON_TOOL_BIN}" -n -c \
+		--argjson auto "${auto_items_json:-[]}" \
+		--argjson manual "${manual_items_json:-[]}" '
+			($auto // []) as $a |
+			($manual // []) as $m |
+			($a | reduce .[] as $item ({}; .[$item.name] = $item)) as $auto_map |
+			($m | reduce .[] as $item ($auto_map; .[$item.name] = $item)) as $merged |
+			($merged | to_entries | sort_by(.key) | map(.value))
+		')"
+
+	local timestamp hash total
+	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	hash="$(mcp_hash_string "${merged_items_json}")"
+	total="$(printf '%s' "${merged_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+
+	local previous_hash="${MCP_RESOURCES_TEMPLATES_REGISTRY_HASH}"
+	MCP_RESOURCES_TEMPLATES_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
+		--arg ver "1" \
+		--arg ts "${timestamp}" \
+		--arg hash "${hash}" \
+		--argjson items "${merged_items_json}" \
+		--argjson total "${total}" \
+		'{version: $ver|tonumber, generatedAt: $ts, items: $items, hash: $hash, total: $total}')"
+
+	MCP_RESOURCES_TEMPLATES_REGISTRY_HASH="${hash}"
+	MCP_RESOURCES_TEMPLATES_TOTAL="${total}"
+
+	if ! mcp_resources_templates_enforce_registry_limits "${MCP_RESOURCES_TEMPLATES_TOTAL}" "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}"; then
+		return 1
+	fi
+
+	MCP_RESOURCES_TEMPLATES_LAST_SCAN="${now}"
+	MCP_RESOURCES_TEMPLATES_MANUAL_UPDATED=false
+	local fastpath_snapshot
+	fastpath_snapshot="$(mcp_registry_fastpath_snapshot "${scan_root}")"
+	mcp_registry_fastpath_store "resourceTemplates" "${fastpath_snapshot}" || true
+
+	local write_rc=0
+	mcp_registry_write_with_lock "${MCP_RESOURCES_TEMPLATES_REGISTRY_PATH}" "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" || write_rc=$?
+	if [ "${write_rc}" -ne 0 ]; then
+		return "${write_rc}"
+	fi
+
+	if [ "${previous_hash}" != "${MCP_RESOURCES_TEMPLATES_REGISTRY_HASH}" ]; then
+		MCP_RESOURCES_CHANGED=true
+	fi
+}
+
 mcp_resources_templates_list() {
 	local limit="$1"
 	local cursor="$2"
@@ -726,7 +1264,11 @@ mcp_resources_templates_list() {
 	_MCP_RESOURCES_ERR_CODE=0
 	# shellcheck disable=SC2034
 	_MCP_RESOURCES_ERR_MESSAGE=""
-	# For now, no templates are discovered; return an empty, paginated-compliant payload.
+
+	mcp_resources_templates_refresh_registry || {
+		mcp_resources_error -32603 "Unable to load resource templates registry"
+		return 1
+	}
 
 	local numeric_limit
 	if [ -z "${limit}" ]; then
@@ -742,19 +1284,44 @@ mcp_resources_templates_list() {
 		numeric_limit=200
 	fi
 
-	local hash="resource-templates-v1"
+	local registry_hash="${MCP_RESOURCES_TEMPLATES_REGISTRY_HASH}"
+	if [ -z "${registry_hash}" ] && [ -n "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" ]; then
+		registry_hash="$(printf '%s' "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' 2>/dev/null || printf '')"
+	fi
+
 	local offset=0
+	if [ -n "${cursor}" ] && [ -z "${registry_hash}" ]; then
+		mcp_resources_error -32602 "Invalid cursor"
+		return 1
+	fi
 	if [ -n "${cursor}" ]; then
-		if ! offset="$(mcp_paginate_decode "${cursor}" "resourceTemplates" "${hash}")"; then
+		local decode_status=0
+		local cursor_hash=""
+		if ! cursor_hash="$(mcp_paginate_base64_urldecode "${cursor}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' 2>/dev/null)"; then
+			mcp_resources_error -32602 "Invalid cursor"
+			return 1
+		fi
+		if [ -n "${registry_hash}" ] && [ "${cursor_hash}" != "${registry_hash}" ]; then
+			mcp_resources_error -32602 "Invalid cursor"
+			return 1
+		fi
+		offset="$(mcp_paginate_decode "${cursor}" "resourceTemplates" "${registry_hash}")" || decode_status=$?
+		if [ "${decode_status}" -ne 0 ]; then
 			mcp_resources_error -32602 "Invalid cursor"
 			return 1
 		fi
 	fi
 
+	local total="${MCP_RESOURCES_TEMPLATES_TOTAL}"
 	local result_json
-	result_json="$("${MCPBASH_JSON_TOOL_BIN}" -n -c '{resourceTemplates: [], total: 0}')"
+	result_json="$(echo "${MCP_RESOURCES_TEMPLATES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
+		{
+			resourceTemplates: .items[$offset:$offset+$limit],
+			total: $total
+		}
+	')"
 
-	if ! result_json="$(mcp_paginate_attach_next_cursor "${result_json}" "resourceTemplates" "${offset}" "${numeric_limit}" 0 "${hash}")"; then
+	if ! result_json="$(mcp_paginate_attach_next_cursor "${result_json}" "resourceTemplates" "${offset}" "${numeric_limit}" "${total}" "${registry_hash}")"; then
 		mcp_resources_error -32603 "Unable to encode resource template cursor"
 		return 1
 	fi

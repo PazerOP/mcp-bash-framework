@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Resource templates: auto-discovery of `uriTemplate` metadata, manual registration helpers, `.registry/resource-templates.json` cache with hash-based pagination, and shared `resources/list_changed` notifications. New example and docs cover client-side expansion and collision rules.
+
 ### Documentation
 - Clarified batching as a legacy, opt-in path (disabled by default) in SPEC-COMPLIANCE.md with MCPBASH_COMPAT_BATCHES flag noted.
 - Updated minimal mode docs to note that non-logging methods are omitted from capabilities and only return -32601 if called anyway.
