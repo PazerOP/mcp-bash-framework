@@ -1,0 +1,23 @@
+# Force LF line endings for all text files to ensure consistent behavior
+# across platforms, especially on Windows where Git may auto-convert to CRLF.
+* text=auto eol=lf
+
+# Explicitly mark shell scripts and JSON as text with LF endings
+*.sh text eol=lf
+*.bash text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+
+# Binary files - don't touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.tar binary
+*.tar.gz binary
+*.zip binary
