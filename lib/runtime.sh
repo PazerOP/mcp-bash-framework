@@ -30,6 +30,29 @@
 : "${MCPBASH_LOG_DIR:=}"
 : "${MCPBASH_LOG_TIMESTAMP:=false}"
 
+mcp_runtime_posix_path() {
+	local path="$1"
+	if command -v cygpath >/dev/null 2>&1; then
+		cygpath -m "${path}"
+		return
+	fi
+	case "${path}" in
+	[A-Za-z]:[\\/]*)
+		local drive rest
+		drive="${path%%:*}"
+		rest="${path#?:}"
+		rest="${rest//\\//}"
+		printf '/%s%s' "$(printf '%s' "${drive}" | tr '[:upper:]' '[:lower:]')" "${rest}"
+		;;
+	*\\*)
+		printf '%s' "${path//\\//}"
+		;;
+	*)
+		printf '%s' "${path}"
+		;;
+	esac
+}
+
 mcp_runtime_json_escape() {
 	local value="${1:-}"
 	value="${value//\\/\\\\}"
@@ -206,11 +229,11 @@ mcp_runtime_init_paths() {
 	if [ "${MCPBASH_CI_MODE:-false}" = "true" ]; then
 		if [ -z "${MCPBASH_TMP_ROOT:-}" ]; then
 			if [ -n "${RUNNER_TEMP:-}" ]; then
-				MCPBASH_TMP_ROOT="${RUNNER_TEMP%/}"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${RUNNER_TEMP%/}")"
 			elif [ -n "${GITHUB_WORKSPACE:-}" ]; then
-				MCPBASH_TMP_ROOT="${GITHUB_WORKSPACE%/}/.mcpbash-tmp"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${GITHUB_WORKSPACE%/}")/.mcpbash-tmp"
 			else
-				MCPBASH_TMP_ROOT="${TMPDIR%/:-/tmp}"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${TMPDIR%/:-/tmp}")"
 			fi
 		fi
 		if [ -z "${MCPBASH_KEEP_LOGS:-}" ]; then
@@ -242,7 +265,7 @@ mcp_runtime_init_paths() {
 	# 3. For server mode with bootstrap allowed, stage bootstrap project
 	# 4. Otherwise, emit a clear error
 	if [ -n "${MCPBASH_TMP_ROOT:-}" ]; then
-		MCPBASH_TMP_ROOT="${MCPBASH_TMP_ROOT%/}"
+		MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${MCPBASH_TMP_ROOT%/}")"
 	fi
 	if [ -n "${MCPBASH_PROJECT_ROOT:-}" ]; then
 		if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
@@ -307,6 +330,9 @@ mcp_runtime_init_paths() {
 		fi
 		local log_seed="${MCPBASH_STATE_SEED:-${log_pid_component}}"
 		MCPBASH_LOG_DIR="${MCPBASH_TMP_ROOT}/mcpbash.logs.${PPID}.${log_pid_component}.${log_seed}"
+	fi
+	if [ -n "${MCPBASH_LOG_DIR}" ]; then
+		MCPBASH_LOG_DIR="$(mcp_runtime_posix_path "${MCPBASH_LOG_DIR}")"
 	fi
 	if [ -n "${MCPBASH_LOG_DIR}" ]; then
 		(umask 077 && mkdir -p "${MCPBASH_LOG_DIR}") >/dev/null 2>&1 || true
