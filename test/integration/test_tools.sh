@@ -65,6 +65,13 @@ JSON
 
 run_server "${AUTO_ROOT}" "${AUTO_ROOT}/requests.ndjson" "${AUTO_ROOT}/responses.ndjson"
 
+# Dump responses on verbose mode for debugging Windows CI failures
+if [ "${VERBOSE:-0}" = "1" ]; then
+	echo "=== AUTO_ROOT responses.ndjson ===" >&2
+	cat "${AUTO_ROOT}/responses.ndjson" >&2 || true
+	echo "=== end responses ===" >&2
+fi
+
 list_resp="$(grep '"id":"auto-list"' "${AUTO_ROOT}/responses.ndjson" | head -n1)"
 tools_count="$(echo "$list_resp" | jq '.result.tools | length')"
 next_cursor="$(echo "$list_resp" | jq -r '.result.nextCursor // empty')"
