@@ -302,8 +302,11 @@ mcp_core_cancel_shutdown_watchdog() {
 		sleep 0.1 2>/dev/null || sleep 1
 		attempts=$((attempts + 1))
 	done
-	# Final wait to reap the zombie (if possible)
-	wait "${pid}" 2>/dev/null || true
+	# Avoid a potentially blocking wait on Git Bash (wait can hang for background subshells).
+	# Only attempt to reap if the watchdog has already exited.
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
+	fi
 	MCPBASH_SHUTDOWN_WATCHDOG_PID=""
 	MCPBASH_SHUTDOWN_WATCHDOG_CANCEL=""
 }
@@ -1228,8 +1231,16 @@ mcp_core_stop_progress_flusher() {
 	if [ -z "${MCPBASH_PROGRESS_FLUSHER_PID:-}" ]; then
 		return 0
 	fi
-	if kill "${MCPBASH_PROGRESS_FLUSHER_PID}" 2>/dev/null; then
-		wait "${MCPBASH_PROGRESS_FLUSHER_PID}" 2>/dev/null || true
+	local pid="${MCPBASH_PROGRESS_FLUSHER_PID}"
+	kill "${pid}" 2>/dev/null || true
+	# Git Bash can hang on `wait` even after signaling; poll and only reap if exited.
+	local attempts=0
+	while [ "${attempts}" -lt 30 ] && kill -0 "${pid}" 2>/dev/null; do
+		sleep 0.1 2>/dev/null || sleep 1
+		attempts=$((attempts + 1))
+	done
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
 	fi
 	MCPBASH_PROGRESS_FLUSHER_PID=""
 }
@@ -1264,8 +1275,16 @@ mcp_core_stop_resource_poll() {
 	if [ -z "${MCPBASH_RESOURCE_POLL_PID:-}" ]; then
 		return 0
 	fi
-	if kill "${MCPBASH_RESOURCE_POLL_PID}" 2>/dev/null; then
-		wait "${MCPBASH_RESOURCE_POLL_PID}" 2>/dev/null || true
+	local pid="${MCPBASH_RESOURCE_POLL_PID}"
+	kill "${pid}" 2>/dev/null || true
+	# Git Bash can hang on `wait` even after signaling; poll and only reap if exited.
+	local attempts=0
+	while [ "${attempts}" -lt 30 ] && kill -0 "${pid}" 2>/dev/null; do
+		sleep 0.1 2>/dev/null || sleep 1
+		attempts=$((attempts + 1))
+	done
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
 	fi
 	MCPBASH_RESOURCE_POLL_PID=""
 }
