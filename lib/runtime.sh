@@ -200,6 +200,21 @@ mcp_runtime_stage_bootstrap_project() {
 	cp -a "${bootstrap_dir}/." "${tmp_root}/" 2>/dev/null || true
 	mkdir -p "${tmp_root}/tools" "${tmp_root}/resources" "${tmp_root}/prompts" "${tmp_root}/server.d"
 
+	# Ensure bootstrap tool is registered even if auto-scan fails on Windows paths.
+	cat >"${tmp_root}/server.d/register.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+mcp_register_tool '{
+  "name": "getting_started",
+  "description": "Show setup steps when MCPBASH_PROJECT_ROOT is unset.",
+  "path": "getting-started/tool.sh",
+  "inputSchema": {"type":"object","properties":{}},
+  "timeoutSecs": 5
+}'
+EOF
+	chmod +x "${tmp_root}/server.d/register.sh" 2>/dev/null || true
+
 	# Copy VERSION file so smart defaults can detect framework version.
 	if [ -f "${MCPBASH_HOME}/VERSION" ]; then
 		cp "${MCPBASH_HOME}/VERSION" "${tmp_root}/VERSION" 2>/dev/null || true
