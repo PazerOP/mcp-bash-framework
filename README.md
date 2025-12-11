@@ -48,7 +48,7 @@ mcp-bash targets the **2025-11-25** MCP specification with negotiated downgrades
 |----------|----------|-------|
 | Core Protocol | ✅ Full | Lifecycle, ping, capabilities, downgrades |
 | Tools | ✅ Full | list, call, icons, errors, listChanged, annotations |
-| Resources | ⚠️ Near-full | list, read, subscriptions, binary (templates stub only) |
+| Resources | ✅ Full | list, read, subscriptions, templates, binary |
 | Prompts | ✅ Full | list, get, arguments, icons |
 | Utilities | ✅ Full | Progress, cancellation, logging, completion |
 | Elicitation | ✅ Full | Form, URL, enum, multi-choice modes |

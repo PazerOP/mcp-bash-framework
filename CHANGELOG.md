@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Clarified Windows support: Git Bash is CI-tested; WSL works like Linux but is not separately validated in CI.
+- README MCP spec coverage table now marks Resources as fully supported (templates/binary included).
 
 ### Added
 - Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
