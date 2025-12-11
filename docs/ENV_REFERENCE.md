@@ -29,20 +29,24 @@ Authoritative list of supported environment variables. Defaults shown are the sh
 | `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files above this many bytes. |
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
 | `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env names when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
+| `MCPBASH_TOOL_ENV_INHERIT_ALLOW` | `false` | Must be `true` to allow `MCPBASH_TOOL_ENV_MODE=inherit`. |
 | `MCPBASH_FORCE_MINIMAL` | (unset) | Force minimal capability tier even when JSON tooling is present. |
 | `MCPBASH_JSON_TOOL` | (auto-detect jq → gojq) | Explicit JSON tool selection: `jq`, `gojq`, or `none`. Default order is jq-first (Windows E2BIG mitigation). |
 | `MCPBASH_JSON_TOOL_BIN` | (derived from tool) | Explicit path to JSON tool; infers `MCPBASH_JSON_TOOL` from basename if unset and treats unknown names as jq-compatible (behavior may differ if flags differ). |
+| `MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT` | `false` | Allow `MCPBASH_JSON_TOOL{,_BIN}` overrides when running as root. |
 | `MCPBASH_COMPAT_BATCHES` | (unset) | Enable legacy batch request support (auto-enabled when protocol is `2025-03-26`; use only for out-of-spec clients on newer protocols). |
 | `MCPBASH_DEBUG_PAYLOADS` | (unset) | Write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
 | `MCPBASH_PRESERVE_STATE` | (unset) | Preserve state dir after exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |
-| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments (minimum 32 characters). |
 | `MCPBASH_REMOTE_TOKEN_KEY` | `mcpbash/remoteToken` | JSON path for token lookup. |
 | `MCPBASH_REMOTE_TOKEN_FALLBACK_KEY` | `remoteToken` | Alternate JSON path for token lookup. |
+| `MCPBASH_REMOTE_TOKEN_MAX_FAILURES_PER_MIN` | `10` | Max failed remote-token attempts per minute before throttling responses. |
 | `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. |
 | `MCPBASH_HTTPS_TIMEOUT` | `15` (cap ≤60s) | HTTPS provider timeout. |
 | `MCPBASH_HTTPS_MAX_BYTES` | `10485760` (cap ≤20MB) | HTTPS payload size guard. |
 | `MCPBASH_ENABLE_GIT_PROVIDER` | `false` | Enable Git resource provider. |
-| `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. |
+| `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. Allow list (or `MCPBASH_GIT_ALLOW_ALL=true`) is required when the git provider is enabled. |
+| `MCPBASH_GIT_ALLOW_ALL` | `false` | Explicitly allow all git hosts (unsafe; prefer `MCPBASH_GIT_ALLOW_HOSTS`). |
 | `MCPBASH_GIT_TIMEOUT` | `30` (cap ≤60s) | Git provider timeout (seconds). |
 | `MCPBASH_GIT_MAX_KB` | `51200` (cap ≤1048576) | Git repository size guard (KB). |
 | `MCPBASH_CORRUPTION_WINDOW` | `60` | Stdout corruption tracking window (seconds). |

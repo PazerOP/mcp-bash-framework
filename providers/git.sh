@@ -12,6 +12,29 @@ mcp_git_log_block() {
 	fi
 }
 
+mcp_git_normalize_path() {
+	local target="$1"
+	if command -v mcp_path_normalize >/dev/null 2>&1; then
+		mcp_path_normalize --physical "${target}"
+		return
+	fi
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "${target}" 2>/dev/null
+		return
+	fi
+	(
+		cd "$(dirname "${target}")" 2>/dev/null || exit 1
+		pwd -P 2>/dev/null | awk -v base="$(basename "${target}")" '{print $0"/"base}'
+	)
+}
+
+mcp_git_available_kb() {
+	local target_dir="$1"
+	if command -v df >/dev/null 2>&1; then
+		df -Pk "${target_dir}" 2>/dev/null | awk 'NR==2 {print $4}'
+	fi
+}
+
 if [ "${MCPBASH_ENABLE_GIT_PROVIDER:-false}" != "true" ]; then
 	printf '%s\n' "git provider is disabled (set MCPBASH_ENABLE_GIT_PROVIDER=true to enable)" >&2
 	exit 4
@@ -31,13 +54,47 @@ if ! command -v mcp_policy_extract_host_from_url >/dev/null 2>&1; then
 		host="${host%\]}"
 		printf '%s' "${host}" | tr '[:upper:]' '[:lower:]'
 	}
+	mcp_policy_resolve_ips() {
+		local host="$1"
+		local resolved=""
+		if command -v getent >/dev/null 2>&1; then
+			resolved="$(getent ahosts "${host}" 2>/dev/null | awk '{print $1}')"
+		fi
+		if [ -z "${resolved}" ] && command -v dig >/dev/null 2>&1; then
+			resolved="$(dig +short "${host}" A AAAA 2>/dev/null | sed '/^$/d')"
+		fi
+		if [ -z "${resolved}" ] && command -v host >/dev/null 2>&1; then
+			resolved="$(host "${host}" 2>/dev/null | awk '/has address/{print $4}/IPv6 address/{print $5}')"
+		fi
+		if [ -z "${resolved}" ] && command -v nslookup >/dev/null 2>&1; then
+			resolved="$(nslookup "${host}" 2>/dev/null | awk '/^Address: /{print $2}' | tail -n +2)"
+		fi
+		resolved="$(printf '%s\n' "${resolved}" | sed '/^$/d' | sort -u)"
+		if [ -z "${resolved}" ]; then
+			return 1
+		fi
+		printf '%s\n' "${resolved}"
+	}
 	mcp_policy_host_is_private() {
 		local host="$1"
+		local resolved_ips
 		case "${host}" in
 		"" | localhost | 127.* | 0.0.0.0 | ::1 | "[::1]" | 10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[0-1].* | 169.254.*)
 			return 0
 			;;
 		esac
+		if resolved_ips="$(mcp_policy_resolve_ips "${host}")"; then
+			while IFS= read -r ip; do
+				[ -z "${ip}" ] && continue
+				case "${ip}" in
+				10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[0-1].* | 127.* | 169.254.* | ::1 | fe80:* | fc??:* | fd??:* | ::ffff:127.* | ::ffff:10.* | ::ffff:192.168.* | ::ffff:172.1[6-9].* | ::ffff:172.2[0-9].* | ::ffff:172.3[0-1].* | ::ffff:169.254.* | ::ffff:0:0:127.* | ::ffff:0:0:10.* | ::ffff:0:0:192.168.* | ::ffff:0:0:172.1[6-9].* | ::ffff:0:0:172.2[0-9].* | ::ffff:0:0:172.3[0-1].* | ::ffff:0:0:169.254.*)
+					return 0
+					;;
+				esac
+			done <<EOF
+${resolved_ips}
+EOF
+		fi
 		return 1
 	}
 	mcp_policy_host_allowed() {
@@ -57,6 +114,11 @@ if [ -z "${host}" ]; then
 	exit 4
 fi
 if mcp_policy_host_is_private "${host}"; then
+	mcp_git_log_block "${host}"
+	exit 4
+fi
+if [ -z "${MCPBASH_GIT_ALLOW_HOSTS:-}" ] && [ "${MCPBASH_GIT_ALLOW_ALL:-false}" != "true" ]; then
+	printf '%s\n' "git provider requires MCPBASH_GIT_ALLOW_HOSTS or MCPBASH_GIT_ALLOW_ALL=true when enabled" >&2
 	mcp_git_log_block "${host}"
 	exit 4
 fi
@@ -135,6 +197,16 @@ if [ "${max_kb}" -gt 1048576 ]; then
 	max_kb=1048576
 fi
 
+available_kb="$(mcp_git_available_kb "${workdir}")"
+required_kb=$((max_kb + 1024))
+case "${available_kb}" in
+'' | *[!0-9]*) available_kb=0 ;;
+esac
+if [ "${available_kb}" -gt 0 ] && [ "${available_kb}" -lt "${required_kb}" ]; then
+	printf '%s\n' "Insufficient disk space for git provider (need at least ${required_kb} KB free)" >&2
+	exit 5
+fi
+
 run_git() {
 	if command -v timeout >/dev/null 2>&1; then
 		timeout -k 5 "${timeout_secs}" "$@"
@@ -174,7 +246,19 @@ if [ "${dir_size_kb}" -gt "${max_kb}" ]; then
 	exit 6
 fi
 
-target="${repo_dir}/${path}"
+repo_dir_canonical="$(mcp_git_normalize_path "${repo_dir}" 2>/dev/null || true)"
+target="$(mcp_git_normalize_path "${repo_dir}/${path}" 2>/dev/null || true)"
+if [ -z "${repo_dir_canonical}" ] || [ -z "${target}" ]; then
+	printf '%s\n' "Failed to canonicalize repository paths" >&2
+	exit 5
+fi
+case "${target}" in
+"${repo_dir_canonical}" | "${repo_dir_canonical}"/*) ;;
+*)
+	printf '%s\n' "File ${path} escapes repository root" >&2
+	exit 3
+	;;
+esac
 if [ ! -f "${target}" ]; then
 	printf '%s\n' "File ${path} not found in repository" >&2
 	exit 3

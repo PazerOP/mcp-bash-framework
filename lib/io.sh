@@ -143,6 +143,44 @@ mcp_io_debug_enabled() {
 	[ "${MCPBASH_DEBUG_PAYLOADS:-}" = "true" ] && [ -n "${MCPBASH_STATE_DIR:-}" ]
 }
 
+mcp_io_debug_redact_payload() {
+	local payload="$1"
+	if [ -z "${payload}" ]; then
+		printf '%s' "${payload}"
+		return 0
+	fi
+
+	if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ] && [ -n "${MCPBASH_JSON_TOOL_BIN:-}" ] && command -v "${MCPBASH_JSON_TOOL_BIN}" >/dev/null 2>&1; then
+		local redacted=""
+		local jq_filter
+		read -r -d '' jq_filter <<'JQ' || true
+def redact_meta:
+  if type=="object" then
+    (if has("mcpbash/remoteToken") then .["mcpbash/remoteToken"]="**redacted**" else . end)
+    | (if has("remoteToken") then .remoteToken="**redacted**" else . end)
+  else . end;
+def redact_params:
+  if type=="object" then
+    ._meta = (._meta // {} | redact_meta)
+  else . end;
+if type=="object" then
+  (if has("params") then .params = (.params | redact_params) else . end)
+else .
+end
+JQ
+		if redacted="$("${MCPBASH_JSON_TOOL_BIN}" -c "${jq_filter}" <<<"${payload}" 2>/dev/null)"; then
+			if [ -n "${redacted}" ]; then
+				printf '%s' "${redacted}"
+				return 0
+			fi
+		fi
+	fi
+
+	local redacted_sed
+	redacted_sed="$(printf '%s' "${payload}" | sed -E 's/"mcpbash\\/remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"/"mcpbash\\/remoteToken":"**redacted**"/g; s/"remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"/"remoteToken":"**redacted**"/g' 2>/dev/null)" || redacted_sed="${payload}"
+	printf '%s' "${redacted_sed}"
+}
+
 mcp_io_debug_log() {
 	local category="$1"
 	local key="$2"
@@ -155,7 +193,9 @@ mcp_io_debug_log() {
 
 	local path="${MCPBASH_STATE_DIR}/payload.debug.log"
 	mkdir -p "$(dirname "${path}")" 2>/dev/null || true
-	local sanitized="${payload//$'\r'/\\r}"
+	local redacted_payload
+	redacted_payload="$(mcp_io_debug_redact_payload "${payload}")"
+	local sanitized="${redacted_payload//$'\r'/\\r}"
 	sanitized="${sanitized//$'\n'/\\n}"
 	printf '%s|%s|%s|%s|%s\n' "$(date +%s)" "${category:-rpc}" "${key:-"-"}" "${status:-unknown}" "${sanitized}" >>"${path}"
 }

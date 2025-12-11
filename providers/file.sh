@@ -47,19 +47,28 @@ if [ -z "${path}" ]; then
 	exit 3
 fi
 roots_input="${MCP_RESOURCES_ROOTS:-${MCPBASH_RESOURCES_DIR:-${MCPBASH_PROJECT_ROOT:-}}}"
-allowed=false
-while IFS= read -r root; do
-	[ -z "${root}" ] && continue
-	check_root="$(normalize_path "${root}" 2>/dev/null || true)"
-	[ -z "${check_root}" ] && continue
-	case "${path}" in
-	"${check_root}" | "${check_root}"/*)
-		allowed=true
-		break
-		;;
-	esac
-done <<<"$(printf '%s\n' "${roots_input}" | tr ':' '\n')"
-if [ "${allowed}" != true ]; then
+check_allowed() {
+	local candidate="$1"
+	local allowed=false
+	local check_root=""
+	while IFS= read -r root; do
+		[ -z "${root}" ] && continue
+		check_root="$(normalize_path "${root}" 2>/dev/null || true)"
+		[ -z "${check_root}" ] && continue
+		case "${candidate}" in
+		"${check_root}" | "${check_root}"/*)
+			allowed=true
+			break
+			;;
+		esac
+	done <<<"$(printf '%s\n' "${roots_input}" | tr ':' '\n')"
+	if [ "${allowed}" != true ]; then
+		return 1
+	fi
+	return 0
+}
+
+if ! check_allowed "${path}"; then
 	# Fail closed if no roots were usable or path is outside allowed roots.
 	exit 2
 fi
@@ -72,8 +81,13 @@ if [ -L "${path}" ]; then
 	exit 2
 fi
 
-# Best-effort: recheck symlink just before read, then read.
+if ! exec 3<"${path}"; then
+	exit 3
+fi
+
 if [ -L "${path}" ]; then
+	exec 3<&-
 	exit 2
 fi
-cat -- "${path}"
+cat <&3
+exec 3<&-

@@ -404,8 +404,9 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/log notifications during execution. |
 | `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files above this size. |
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
+| `MCPBASH_TOOL_ENV_INHERIT_ALLOW` | `false` | Must be `true` to allow `MCPBASH_TOOL_ENV_MODE=inherit`. |
 | `MCPBASH_DEFAULT_TOOL_TIMEOUT` | `30` | Default tool timeout (seconds). |
-| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments (minimum 32 chars; failures throttled). |
 | `MCPBASH_CI_MODE` | (unset) | CI defaults: safe tmp/log dirs, keep-logs, timestamped logs, failure summary (`failure-summary.jsonl`), env snapshot (`env-snapshot.json`); `MCPBASH_CI_VERBOSE=true` starts at debug; GH annotations when tracing provides file/line. |
 
 Full list and defaults: see [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md).

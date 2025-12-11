@@ -522,8 +522,36 @@ mcp_runtime_detect_json_tool() {
 	local candidate=""
 	local override_tool="${MCPBASH_JSON_TOOL:-}"
 	local override_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	local running_as_root="false"
+	if command -v id >/dev/null 2>&1; then
+		if [ "$(id -u 2>/dev/null || printf '1')" -eq 0 ]; then
+			running_as_root="true"
+		fi
+	fi
+
+	if [ "${running_as_root}" = "true" ] && { [ -n "${override_tool}" ] || [ -n "${override_bin}" ]; }; then
+		if [ "${MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT:-false}" != "true" ]; then
+			if mcp_runtime_log_allowed; then
+				printf '%s\n' "Ignoring MCPBASH_JSON_TOOL{,_BIN} overrides while running as root; set MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT=true to allow." >&2
+			fi
+			override_tool=""
+			override_bin=""
+		fi
+	fi
 
 	if [ -n "${override_tool}" ] || [ -n "${override_bin}" ]; then
+		if [ -n "${override_bin}" ]; then
+			case "${override_bin}" in
+			/* | [A-Za-z]:[\\/]*) ;;
+			*)
+				if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+					printf '%s\n' "Rejecting MCPBASH_JSON_TOOL_BIN override (must be absolute): ${override_bin}" >&2
+				fi
+				override_bin=""
+				override_tool=""
+				;;
+			esac
+		fi
 		if [ -z "${override_bin}" ]; then
 			override_bin="$(type -P -- "${override_tool}" 2>/dev/null || true)"
 		fi

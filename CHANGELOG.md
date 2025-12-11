@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI env snapshot now runs after JSON tool detection and records PATH/env byte sizes plus `jsonTool`/`jsonToolBin` metadata (counts only; no env contents captured).
 - JSON-RPC batch handling is now protocol-aware: protocol `2025-03-26` auto-accepts batch arrays; newer protocols reject arrays unless `MCPBASH_COMPAT_BATCHES=true` is set for legacy clients, with clearer error messaging.
 - Worker wait loop sleep increased to reduce busy-wait CPU churn when slots are full.
+- Security hardening: git provider now requires allowlists, canonicalizes repo paths, and pre-checks disk space; HTTPS provider resolves hosts and blocks obfuscated private IPs; remote token guard enforces 32+ char secrets, throttles failures, and redacts tokens in debug logs; inherit tool env requires explicit opt-in; file provider closes TOCTOU gap; JSON tool overrides are ignored for root unless explicitly allowed; tool metadata parsing no longer uses eval.
 
 ### Fixed
 - Removed duplicate YAML meta from the progress-and-cancellation example (JSON is canonical).

@@ -689,33 +689,32 @@ mcp_tools_scan() {
 			local annotations="null"
 
 			if [ -f "${meta_json}" ]; then
-				local meta_assignments
-				meta_assignments="$("${MCPBASH_JSON_TOOL_BIN}" -r '
-					def esc($v): ($v | @sh);
-					{
-						name: (.name // ""),
-						description: (.description // ""),
-						arguments: (.inputSchema // .arguments // {type:"object",properties:{}} | @json),
-						timeout: (.timeoutSecs // ""),
-						output: (.outputSchema // null | @json),
-						icons: (.icons // null | @json),
-						annotations: (.annotations // null | @json)
-					}
-					| "name=\(esc(.name))\n" +
-					  "description=\(esc(.description))\n" +
-					  "arguments=\(esc(.arguments))\n" +
-					  "timeout=\(esc(.timeout))\n" +
-					  "output_schema=\(esc(.output))\n" +
-					  "icons_json=\(esc(.icons))\n" +
-					  "annotations_json=\(esc(.annotations))"
-				' "${meta_json}" 2>/dev/null || printf '')"
-				if [ -n "${meta_assignments}" ]; then
-					local icons_json annotations_json
-					eval "${meta_assignments}"
-					[ -n "${arguments}" ] || arguments='{}'
-					[ -n "${output_schema}" ] || output_schema='null'
-					icons="${icons_json:-null}"
-					annotations="${annotations_json:-null}"
+				local meta_parts=()
+				while IFS= read -r field; do
+					meta_parts+=("${field}")
+				done < <("${MCPBASH_JSON_TOOL_BIN}" -r '
+					[
+						(.name // ""),
+						(.description // ""),
+						(.inputSchema // .arguments // {type:"object",properties:{}} | @json),
+						(.timeoutSecs // ""),
+						(.outputSchema // null | @json),
+						(.icons // null | @json),
+						(.annotations // null | @json)
+					]
+					| .[]
+				' "${meta_json}" 2>/dev/null || true)
+
+				if [ "${#meta_parts[@]}" -eq 7 ]; then
+					[ -n "${meta_parts[2]}" ] || meta_parts[2]='{}'
+					[ -n "${meta_parts[4]}" ] || meta_parts[4]='null'
+					name="${meta_parts[0]:-${name}}"
+					description="${meta_parts[1]:-${description}}"
+					arguments="${meta_parts[2]}"
+					timeout="${meta_parts[3]}"
+					output_schema="${meta_parts[4]}"
+					icons="${meta_parts[5]:-${icons}}"
+					annotations="${meta_parts[6]:-${annotations}}"
 					# Convert local file paths to data URIs
 					local meta_dir
 					meta_dir="$(dirname "${meta_json}")"
@@ -1103,6 +1102,10 @@ mcp_tools_call() {
 	if [ "${env_mode_lc}" = "inherit" ] && [ "${MCPBASH_TOOL_ENV_INHERIT_WARNED}" != "true" ]; then
 		MCPBASH_TOOL_ENV_INHERIT_WARNED="true"
 		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "MCPBASH_TOOL_ENV_MODE=inherit; tools receive the full host environment"
+	fi
+	if [ "${env_mode_lc}" = "inherit" ] && [ "${MCPBASH_TOOL_ENV_INHERIT_ALLOW:-false}" != "true" ]; then
+		mcp_tools_error -32602 "MCPBASH_TOOL_ENV_MODE=inherit requires MCPBASH_TOOL_ENV_INHERIT_ALLOW=true"
+		return 1
 	fi
 
 	# Initialize and enforce project policy (server.d/policy.sh can override).
