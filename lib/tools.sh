@@ -279,7 +279,7 @@ mcp_tools_collect_embedded_resources() {
 		' "${spec_file}" 2>/dev/null || true)"
 	fi
 
-	if [ -z "${specs_json}" ] || [ "${specs_json}" = "[]" ]; then
+	if [ -z "${specs_json}" ] || [ "${specs_json}" = "[]" ] || [ "${specs_json}" = "null" ]; then
 		return 0
 	fi
 

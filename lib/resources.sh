@@ -1218,13 +1218,14 @@ mcp_resources_templates_refresh_registry() {
 
 	local auto_names_file
 	auto_names_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-resource-template-auto-names.XXXXXX")"
-	printf '%s' "${auto_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.[].name // empty' >"${auto_names_file}"
+	# Guard against null/empty: use (. // []) to ensure we iterate over an array
+	printf '%s' "${auto_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '(. // []) | .[].name // empty' >"${auto_names_file}" 2>/dev/null || true
 	while IFS= read -r manual_name; do
 		[ -z "${manual_name}" ] && continue
 		if [ -s "${auto_names_file}" ] && grep -Fxq "${manual_name}" "${auto_names_file}"; then
 			mcp_logging_info "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Manual template overrides auto-discovered template '${manual_name}'"
 		fi
-	done < <(printf '%s' "${manual_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.[].name // empty')
+	done < <(printf '%s' "${manual_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '(. // []) | .[].name // empty' 2>/dev/null)
 	rm -f "${auto_names_file}"
 
 	merged_items_json="$("${MCPBASH_JSON_TOOL_BIN}" -n -c \

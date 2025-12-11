@@ -975,14 +975,17 @@ mcp_json_icons_to_data_uris() {
 	# Process each icon in the array
 	printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg base "${base_dir}" '
 		[.[] | . as $icon |
-			if (.src | startswith("data:")) or (.src | startswith("http://")) or (.src | startswith("https://")) then
+			# Skip null elements or objects without src string
+			if ($icon | type) != "object" or (($icon.src // null) | type) != "string" then
+				empty
+			elif ($icon.src | startswith("data:")) or ($icon.src | startswith("http://")) or ($icon.src | startswith("https://")) then
 				$icon
 			else
 				# Local file path - mark for shell processing
 				$icon + {"_local": true, "_base": $base}
 			end
 		]
-	' | while IFS= read -r processed; do
+	' 2>/dev/null | while IFS= read -r processed; do
 		# Check if any icons need local file conversion
 		if printf '%s' "${processed}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'any(._local)' >/dev/null 2>&1; then
 			# Has local files - process them
