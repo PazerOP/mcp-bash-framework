@@ -235,7 +235,7 @@ ${name}"
 	fi
 
 	local items_json
-	items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${tmp_file}")" || {
+	items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${tmp_file}" 2>/dev/null)" || {
 		rm -f "${tmp_file}"
 		return 1
 	}
@@ -244,7 +244,11 @@ ${name}"
 	local timestamp hash total
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	hash="$(mcp_completion_hash_string "${items_json}")"
-	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+	# Ensure total is a valid number
+	case "${total}" in
+	'' | *[!0-9]*) total=0 ;;
+	esac
 
 	MCP_COMPLETION_MANUAL_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ts "${timestamp}" \

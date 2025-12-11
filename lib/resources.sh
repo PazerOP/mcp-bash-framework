@@ -592,14 +592,21 @@ mcp_resources_scan() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
+		local parsed
+		if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}" 2>/dev/null)"; then
+			items_json="${parsed}"
+		fi
 	fi
 	rm -f "${items_file}" "${names_seen_file}"
 
 	local hash
 	hash="$(mcp_resources_hash_payload "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+	# Ensure total is a valid number
+	case "${total}" in
+	'' | *[!0-9]*) total=0 ;;
+	esac
 
 	MCP_RESOURCES_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
@@ -1016,7 +1023,7 @@ mcp_resources_templates_manual_finalize() {
 
 	local validated="[]"
 	if [ -s "${items_file}" ]; then
-		if ! validated="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"; then
+		if ! validated="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}" 2>/dev/null)"; then
 			validated="[]"
 		fi
 	fi
@@ -1081,7 +1088,10 @@ mcp_resources_templates_scan() {
 
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"
+		local parsed
+		if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}" 2>/dev/null)"; then
+			items_json="${parsed}"
+		fi
 	fi
 	rm -f "${items_file}" "${names_seen_file}"
 	printf '%s' "${items_json}"
@@ -1187,7 +1197,12 @@ mcp_resources_templates_refresh_registry() {
 			printf '%s\n' "${manual_item}" >>"${manual_filtered_file}"
 		done < <(printf '%s' "${manual_items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.[] // empty' 2>/dev/null)
 		if [ -s "${manual_filtered_file}" ]; then
-			manual_items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${manual_filtered_file}")"
+			local parsed
+			if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${manual_filtered_file}" 2>/dev/null)"; then
+				manual_items_json="${parsed}"
+			else
+				manual_items_json="[]"
+			fi
 		else
 			manual_items_json="[]"
 		fi

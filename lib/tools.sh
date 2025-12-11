@@ -777,7 +777,10 @@ mcp_tools_scan() {
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
+		local parsed
+		if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}" 2>/dev/null)"; then
+			items_json="${parsed}"
+		fi
 	fi
 	rm -f "${items_file}"
 
@@ -785,7 +788,11 @@ mcp_tools_scan() {
 	hash="$(mcp_hash_string "${items_json}")"
 
 	local total
-	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+	# Ensure total is a valid number
+	case "${total}" in
+	'' | *[!0-9]*) total=0 ;;
+	esac
 
 	MCP_TOOLS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
