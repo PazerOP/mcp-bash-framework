@@ -750,7 +750,13 @@ mcp_tools_scan() {
 
 			arguments="$(mcp_tools_normalize_schema "${arguments}")"
 
-			# Construct item object
+			# Ensure all --argjson values are valid JSON (fallback to safe defaults)
+			[ -z "${arguments}" ] && arguments='{"type":"object","properties":{}}'
+			[ -z "${output_schema}" ] && output_schema='null'
+			[ -z "${icons}" ] && icons='null'
+			[ -z "${annotations}" ] && annotations='null'
+
+			# Construct item object (suppress stderr to avoid noisy output on Windows)
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
@@ -769,7 +775,7 @@ mcp_tools_scan() {
 				}
 				+ (if $out != null then {outputSchema: $out} else {} end)
 				+ (if $icons != null then {icons: $icons} else {} end)
-				+ (if $annotations != null then {annotations: $annotations} else {} end)' >>"${items_file}"
+				+ (if $annotations != null then {annotations: $annotations} else {} end)' >>"${items_file}" 2>/dev/null
 		done
 	fi
 

@@ -568,6 +568,9 @@ mcp_resources_scan() {
 			fi
 			echo "${name}" >>"${names_seen_file}"
 
+			# Ensure icons is valid JSON (fallback to null if empty)
+			[ -z "${icons}" ] && icons='null'
+
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
@@ -577,7 +580,7 @@ mcp_resources_scan() {
 				--arg provider "$provider" \
 				--argjson icons "$icons" \
 				'{name: $name, description: $desc, path: $path, uri: $uri, mimeType: $mime, provider: $provider}
-				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
+				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}" 2>/dev/null
 		done < <(find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | LC_ALL=C sort)
 	fi
 
@@ -947,7 +950,7 @@ mcp_resources_templates_normalize() {
 			| (if $mime != "" then . + {mimeType: $mime} else . end)
 			| (if $annotations != null then . + {annotations: $annotations} else . end)
 			| (if $meta != null then . + {_meta: $meta} else . end)
-		'
+		' 2>/dev/null
 }
 
 mcp_resources_templates_apply_manual_json() {

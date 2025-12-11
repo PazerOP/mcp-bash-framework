@@ -357,6 +357,11 @@ mcp_prompts_scan() {
 				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
 			fi
 
+			# Ensure all --argjson values are valid JSON (fallback to safe defaults)
+			[ -z "${arguments}" ] && arguments='{"type":"object","properties":{}}'
+			[ -z "${metadata}" ] && metadata='null'
+			[ -z "${icons}" ] && icons='null'
+
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
@@ -373,7 +378,7 @@ mcp_prompts_scan() {
 					role: $role,
 					metadata: $meta
 				}
-				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
+				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}" 2>/dev/null
 		done
 	fi
 
