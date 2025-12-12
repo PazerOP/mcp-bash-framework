@@ -685,9 +685,9 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 
 ## 7. Security & compliance
 - Start with [docs/SECURITY.md](SECURITY.md) for threat model context. Apply principle of least privilege by scoping `MCP_RESOURCES_ROOTS` and keeping tool environments minimal (`MCPBASH_TOOL_ENV_MODE`).
-- Never enable untrusted `server.d/register.sh` scripts; treat them like application code subject to review and signing.
+- Manual registry hooks are opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`) and must be owned by the current user with no group/world write bits. Only enable on trusted repos; review and sign `server.d/register.sh` like application code.
 - Secrets management: rely on OS keychains or inject short-lived tokens at launch. Avoid long-lived tokens in `.env` files that might leak through scaffolds.
-- Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers.
+- Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers. Keep `MCPBASH_TOOL_ALLOWLIST` scoped to the minimal set of tools; use `*` only in fully trusted projects.
 - For compliance regimes, map MCP logs and payload dumps to your retention policies; scrub `mcpbash.state.*` directories after incidents.
 - Treat local validation helpers as privileged operations:
   - `mcp-bash validate --fix` is intended for trusted project trees; it will make scripts executable but deliberately skips auto-fixing symlinked scripts and warns instead so you can audit the targets.

@@ -173,7 +173,7 @@ Key behaviors:
 - Changes to templates trigger the existing `notifications/resources/list_changed` path (`MCP_RESOURCES_CHANGED` flag is shared with resources).
 - `resources/templates/list` supports the same `limit` extension and `total` field as other list endpoints; cursor decoding uses the templates registry hash so stale cursors are rejected after changes.
 
-Manual registration in `server.d/register.sh` mirrors the tools/resources pattern:
+Manual registration in `server.d/register.sh` mirrors the tools/resources pattern (only runs when `MCPBASH_ALLOW_PROJECT_HOOKS=true` and the script is owned by the current user with safe permissions):
 ```bash
 mcp_resources_templates_manual_begin
 mcp_resources_templates_register_manual '{"name":"logs-by-date","uriTemplate":"file:///var/log/{service}/{date}.log"}'

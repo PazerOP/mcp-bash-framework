@@ -36,6 +36,25 @@ MCPBASH_INSTALL_LOCAL_SOURCE="${MCPBASH_TEST_ROOT}" "${MCPBASH_TEST_ROOT}/instal
 installed_version_2="$("${INSTALL_ROOT}/bin/mcp-bash" --version | awk '{print $2}')"
 assert_eq "${installed_version}" "${installed_version_2}" "version changed after re-install"
 
+printf ' -> install from local archive (release-style layout)\n'
+ARCHIVE_INSTALL_ROOT="${TEST_TMPDIR}/install-archive"
+ARCHIVE_PATH="${TEST_TMPDIR}/mcp-bash-v0.0.0.tar.gz"
+ARCHIVE_STAGE="${TEST_TMPDIR}/archive-stage"
+mkdir -p "${ARCHIVE_STAGE}/mcp-bash"
+(cd "${MCPBASH_TEST_ROOT}" && tar -cf - --exclude .git .) | (cd "${ARCHIVE_STAGE}/mcp-bash" && tar -xf -)
+(cd "${ARCHIVE_STAGE}" && tar -czf "${ARCHIVE_PATH}" mcp-bash)
+archive_sha=""
+if command -v sha256sum >/dev/null 2>&1; then
+	archive_sha="$(sha256sum "${ARCHIVE_PATH}" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+	archive_sha="$(shasum -a 256 "${ARCHIVE_PATH}" | awk '{print $1}')"
+else
+	test_fail "neither sha256sum nor shasum is available"
+fi
+"${MCPBASH_TEST_ROOT}/install.sh" --dir "${ARCHIVE_INSTALL_ROOT}" --archive "${ARCHIVE_PATH}" --verify "${archive_sha}" --yes
+assert_file_exists "${ARCHIVE_INSTALL_ROOT}/bin/mcp-bash"
+assert_file_exists "${ARCHIVE_INSTALL_ROOT}/VERSION"
+
 printf ' -> installer handles nonexistent local source\n'
 BAD_ROOT="${TEST_TMPDIR}/does-not-exist"
 if MCPBASH_INSTALL_LOCAL_SOURCE="${BAD_ROOT}" "${MCPBASH_TEST_ROOT}/install.sh" --dir "${TEST_TMPDIR}/bad-install" --yes >/dev/null 2>&1; then

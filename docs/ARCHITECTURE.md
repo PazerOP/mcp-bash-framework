@@ -96,7 +96,7 @@ Stable modules live under `bin/` and `lib/`, protocol handlers under `handlers/`
 - `tools/call` wires the SDK env, captures stdout/stderr, surfaces `_meta.stderr`, emits structured content when metadata declares `outputSchema`, and returns `isError` on tool exit codes.
 - Embedded resource content: tools can append to `MCP_TOOL_RESOURCES_FILE` (JSON array or tab-separated `path<TAB>mime<TAB>uri`) to have the framework emit `{type:"resource"}` entries in the result `content` array; binary files are base64 encoded automatically.
 - Tool policy hook: if present, `server.d/policy.sh` defines `mcp_tools_policy_check()` and is invoked before every tool run (default implementation allows all tools).
-- Executable `server.d/register.sh` can return a `tools` array to replace auto-discovery.
+- Executable `server.d/register.sh` (gated by `MCPBASH_ALLOW_PROJECT_HOOKS=true` and safe ownership/permissions) can return a `tools` array to replace auto-discovery.
 
 ### Resources
 - `handlers/resources.sh` supports `resources/list`, `resources/read`, `resources/subscribe`, and `resources/unsubscribe`, declining them in minimal mode.

@@ -17,6 +17,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate tag matches VERSION and rendered README
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${tag}" != v*.*.* ]]; then
+            echo "Unexpected tag format: ${tag}" >&2
+            exit 1
+          fi
+          file_version="$(tr -d '[:space:]' <VERSION)"
+          tag_version="${tag#v}"
+          if [ "${file_version}" != "${tag_version}" ]; then
+            echo "VERSION (${file_version}) does not match tag (${tag_version})" >&2
+            exit 1
+          fi
+          bash scripts/render-readme.sh --check --version "${tag_version}"
+
       - name: Create tarball
         run: |
           set -euo pipefail

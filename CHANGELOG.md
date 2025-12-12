@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
+- Installer `--archive` flag to install from a local tar.gz (or URL) after verifying it externally (or via `--verify`).
 - GitHub Actions release workflow (tag-triggered) builds a tarball and publishes SHA256SUMS for installer verification.
+- Release prep automation: `scripts/bump-version.sh`, `scripts/render-readme.sh`, and a `Prepare Release` workflow to open a PR that bumps `VERSION` and re-renders `README.md`.
+- CI/release guards: validate that `VERSION` matches the tag and that `README.md` is rendered from `README.md.in` for the release version.
 - Unified test wrapper `test/run-all.sh` to sequence lint/unit/integration/examples/stress/smoke suites with skip flags.
 - Windows Git Bash/MSYS guidance surfaced in `mcp-bash doctor` (stdout and `--json`) to set `MCPBASH_JSON_TOOL=jq` and `MSYS2_ARG_CONV_EXCL="*"`.
 - Documentation updates: README troubleshooting section, installer verification example, allowlist env mode examples in README/ENV_REFERENCE, CI-mode guidance in CONTRIBUTING.
@@ -23,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mcp-bash scaffold completion <name>` generates a starter completion script, registers it in `server.d/register.sh`, and wires a default timeout.
 
 ### Changed
+- Installer `--verify` for tagged releases now targets the release-published tarball (`releases/download/vX.Y.Z/mcp-bash-vX.Y.Z.tar.gz`) so it stays in sync with the `SHA256SUMS` asset.
 - Outgoing request IDs are now allocated via a lock-backed counter in the state dir to prevent cross-process ID reuse; elicitation polling in the flusher uses the shared counter.
 - All example tool/resource names switched to hyphenated form to match the validated naming regex.
 - Server now advertises the spec-compliant `completions` capability in initialize responses; tests assert capability presence.
@@ -33,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON-RPC batch handling is now protocol-aware: protocol `2025-03-26` auto-accepts batch arrays; newer protocols reject arrays unless `MCPBASH_COMPAT_BATCHES=true` is set for legacy clients, with clearer error messaging.
 - Worker wait loop sleep increased to reduce busy-wait CPU churn when slots are full.
 - Security hardening: git provider now requires allowlists, canonicalizes repo paths, and pre-checks disk space; HTTPS provider resolves hosts and blocks obfuscated private IPs; remote token guard enforces 32+ char secrets, throttles failures, and redacts tokens in debug logs; inherit tool env requires explicit opt-in; file provider closes TOCTOU gap; JSON tool overrides are ignored for root unless explicitly allowed; tool metadata parsing no longer uses eval.
+- Project registry hooks are now disabled by default; set `MCPBASH_ALLOW_PROJECT_HOOKS=true` to execute `server.d/register.sh`. Hooks are refused if the file is group/world writable or ownership mismatches the current user.
+- Tool execution now defaults to deny unless explicitly allowlisted via `MCPBASH_TOOL_ALLOWLIST` (set to `*` to allow all in trusted projects). Paths are validated for ownership and safe permissions before execution.
+- Debug payload redaction now scrubs common secret keys beyond `remoteToken`.
+- Installer/docs now prefer verified downloads over `curl | bash` (one-liner retained as a labeled fallback).
 
 ### Fixed
 - Removed duplicate YAML meta from the progress-and-cancellation example (JSON is canonical).

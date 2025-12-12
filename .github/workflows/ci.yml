@@ -59,6 +59,8 @@ jobs:
           sudo apt-get install -y shellcheck shfmt
       - name: Lint
         run: test/lint.sh
+      - name: Verify rendered README is up to date
+        run: bash scripts/render-readme.sh --check
 
   unit:
     runs-on: ubuntu-latest

@@ -1,0 +1,41 @@
+name: Prepare Release (bump VERSION + README)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 0.7.1 or v0.7.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump VERSION and render README
+        run: |
+          set -euo pipefail
+          bash scripts/bump-version.sh "${{ inputs.version }}"
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(release): bump VERSION and render README"
+          title: "chore(release): prepare ${{ inputs.version }}"
+          body: |
+            ## Summary
+            - Bumps `VERSION` to match the requested release version.
+            - Re-renders `README.md` from `README.md.in`.
+
+            ## Notes
+            - After merging, tag the release (e.g. `vX.Y.Z`) and the `release` workflow will verify `VERSION` and the rendered README.
+          branch: "automation/prepare-release-${{ inputs.version }}"
+          delete-branch: true
+
