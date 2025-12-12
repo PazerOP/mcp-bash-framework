@@ -34,6 +34,28 @@ Edit README.md.in and run: bash scripts/render-readme.sh
 > - Handles concurrency, timeouts, and cancellation the way production systems need.
 > - You write the tools. The framework stays out of your way.
 
+## TL;DR
+
+**Turn any Bash script into an MCP tool in minutes.** No Node, no Python, no containers.
+
+```bash
+mcp-bash new my-server && cd my-server
+mcp-bash scaffold tool my-tool   # edit tools/my-tool/tool.sh
+mcp-bash config --client cursor  # paste into your MCP client
+```
+
+## What you’ll build
+
+```mermaid
+flowchart TD
+  Client["MCP client<br/>(Claude Desktop / Cursor / Windsurf)"]
+  Transport["stdio (JSON-RPC)"]
+  Framework["mcp-bash framework<br/>(registry + runtime + policy)"]
+  Project["Your project<br/>tools/ resources/ prompts/ server.d/"]
+
+  Client --> Transport --> Framework --> Project
+```
+
 ## Why this exists
 
 Most MCP servers assume you’re willing to spin up heavyweight runtimes and frameworks just to wrap a few shell commands. That’s a lot of machinery for very little gain. mcp-bash takes the opposite approach: your shell is already your automation layer, and the framework is a thin, predictable bridge to MCP clients. If you’re comfortable running Bash in production, you shouldn’t need anything else to expose tools to AI systems.
@@ -81,30 +103,42 @@ If your tools are already shell scripts, wrapping them in Node or Python adds co
 
 When you run `mcp-bash` from inside a project (a directory containing `server.d/server.meta.json`), it auto-detects the project root. Running `mcp-bash` outside any project starts a temporary getting-started helper tool. For MCP clients, set `MCPBASH_PROJECT_ROOT` so the server can find your project regardless of working directory.
 
-### 1. Install the Framework
-
-Preferred (verify before you run anything):
+### 0. Requirements (10 seconds)
 
 ```bash
-version="@VERSION_V@"
-curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/mcp-bash-${version}.tar.gz"
-curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/SHA256SUMS"
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum -c SHA256SUMS
-else
-  shasum -a 256 -c SHA256SUMS
-fi
-curl -fsSLO "https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/${version}/install.sh"
-bash install.sh --archive "mcp-bash-${version}.tar.gz" --version "${version}"
+# Preflight: Bash 3.2+ and jq/gojq for full functionality (tools/resources/prompts).
+bash --version | head -1
+command -v jq >/dev/null 2>&1 || command -v gojq >/dev/null 2>&1 || printf '%s\n' '⚠ jq/gojq missing: minimal mode only (tools/resources/prompts disabled)'
 ```
 
-Fallback (less safe, still supports `--verify`):
+### 1. Install the Framework
+
+Quick install (good for local dev / trusted networks):
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/@VERSION_V@/install.sh" | bash -s -- --yes --version "@VERSION_V@"
 ```
 
-Manual install (for security-conscious environments):
+Verified install (recommended for production / security-sensitive environments):
+
+```bash
+version="@VERSION_V@"
+file="mcp-bash-${version}.tar.gz"
+curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/${file}"
+curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/SHA256SUMS"
+
+# Verify (macOS):
+grep -E "([[:space:]]|\\*)${file}$" SHA256SUMS | shasum -a 256 -c -
+# Verify (Linux):
+grep -E "([[:space:]]|\\*)${file}$" SHA256SUMS | sha256sum -c -
+
+curl -fsSLO "https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/${version}/install.sh"
+bash install.sh --archive "${file}" --version "${version}"
+```
+
+Why this is “verified”: you download the release tarball + `SHA256SUMS`, verify the checksum locally, then run the installer against the verified archive.
+
+Manual/offline install (for policy-driven or air-gapped environments):
 
 ```bash
 git clone https://github.com/yaniv-golan/mcp-bash-framework.git ~/.local/share/mcp-bash
@@ -132,12 +166,28 @@ mcp-bash doctor
 # Quick end-to-end test (optional):
 mcp-bash new demo-server
 cd demo-server
-mcp-bash run-tool hello --args '{"name":"World"}'
-# Expected: {"message":"Hello World"}
+mcp-bash run-tool hello --allow-self --args '{"name":"World"}'
+# Expected output includes: "Hello, World!"
 
 # Cleanup (the demo-server directory persists until you remove it):
 cd .. && rm -rf demo-server
 ```
+
+<details>
+<summary><strong>Something not working?</strong> (click to expand)</summary>
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `mcp-bash: command not found` | PATH not configured | `export PATH="$HOME/.local/bin:$PATH"` then open a new shell |
+| “Operating in minimal mode…” / tools missing | `jq`/`gojq` missing | `brew install jq` or `apt install jq` |
+| “blocked by policy” | Default-deny tool policy | CLI: re-run with `--allow-self`. MCP clients: set `MCPBASH_TOOL_ALLOWLIST` in client config |
+| Claude Desktop starts but shows no tools | GUI non-login env / PATH | Use `mcp-bash config --wrapper-env` and point the client at the wrapper |
+| macOS `Operation not permitted` / quarantine | Gatekeeper quarantine | `scripts/macos-dequarantine.sh ~/.local/share/mcp-bash` (trusted paths only), restart client |
+| Windows Git Bash path weirdness | MSYS path conversion | `MSYS2_ARG_CONV_EXCL="*"` (and prefer `jq` on Windows CI) |
+
+Still stuck? Run `mcp-bash doctor` (or `mcp-bash doctor --json`) and include output when opening an issue.
+
+</details>
 
 ### 2. Create Your Project
 
@@ -254,14 +304,14 @@ Every client works the same way: point it at the framework and tell it where you
 
 ## Client Compatibility
 
-| Client | Status |
-|--------|--------|
-| Claude Desktop | Tested (macOS, Windows) |
-| Claude CLI / Claude Code | Tested |
-| Cursor | Config documented |
-| Windsurf (Cascade) | Config documented |
-| LibreChat | Config documented |
-| OpenAI Agents SDK | Example provided |
+| Client | Status | Known issues / notes |
+|--------|--------|----------------------|
+| Claude Desktop | Tested (macOS, Windows) | macOS: non-login shell PATH/env (use `config --wrapper-env`); macOS quarantine/TCC can block execution; restart required after config changes |
+| Claude CLI / Claude Code | Tested | Generally straightforward; ensure `MCPBASH_PROJECT_ROOT` points at your project |
+| Cursor | Config documented | Config file location differs by install; use `mcp-bash config --client cursor` |
+| Windsurf (Cascade) | Config documented | Use the app’s MCP config UI/file; see snippet in README |
+| LibreChat | Config documented | YAML config format; see snippet in README |
+| OpenAI Agents SDK | Example provided | Python example only; verify SDK version and stdio wiring |
 
 **Tested** = maintainers have manually verified end-to-end. **Config documented** = configuration instructions provided but not regularly tested.
 

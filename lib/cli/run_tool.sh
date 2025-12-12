@@ -75,6 +75,9 @@ mcp_cli_run_tool() {
 	local no_refresh="false"
 	local minimal="false"
 	local print_env="false"
+	local allow_self="false"
+	local allow_all="false"
+	local allow_names=()
 	local tool_name=""
 
 	while [ $# -gt 0 ]; do
@@ -109,6 +112,20 @@ mcp_cli_run_tool() {
 		--print-env)
 			print_env="true"
 			;;
+		--allow-self)
+			allow_self="true"
+			;;
+		--allow)
+			shift
+			if [ -z "${1:-}" ]; then
+				printf 'run-tool: --allow requires a tool name\n' >&2
+				exit 1
+			fi
+			allow_names+=("$1")
+			;;
+		--allow-all)
+			allow_all="true"
+			;;
 		--project-root)
 			shift
 			project_root="${1:-}"
@@ -119,10 +136,16 @@ Usage:
   mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run]
                      [--timeout SECS] [--verbose] [--no-refresh]
                      [--minimal] [--project-root DIR] [--print-env]
+                     [--allow-self] [--allow TOOL] [--allow-all]
 
 Invoke a tool directly with the same env wiring used by the server.
 
 Examples:
+  # Allow just this invocation
+  mcp-bash run-tool hello --allow-self --args @args.json
+  mcp-bash run-tool hello --allow hello --args @args.json
+  # Unsafe (trusted projects only):
+  mcp-bash run-tool hello --allow-all --args @args.json
   mcp-bash run-tool hello --args @args.json --roots .
   mcp-bash run-tool hello --print-env --dry-run
 EOF
@@ -156,6 +179,30 @@ EOF
 			printf 'run-tool: tool name required\n' >&2
 			exit 1
 		fi
+	fi
+
+	# Per-invocation allow policy for CLI runs. This keeps the global default
+	# deny posture while letting explicit CLI calls opt in narrowly.
+	if [ "${allow_all}" = "true" ]; then
+		MCPBASH_TOOL_ALLOWLIST="*"
+		export MCPBASH_TOOL_ALLOWLIST
+	elif [ "${allow_self}" = "true" ] || [ "${#allow_names[@]}" -gt 0 ] 2>/dev/null; then
+		local allowlist="${tool_name}"
+		if [ "${allow_self}" != "true" ]; then
+			allowlist=""
+		fi
+		local idx
+		for idx in "${!allow_names[@]}"; do
+			local entry="${allow_names[${idx}]}"
+			[ -n "${entry}" ] || continue
+			if [ -n "${allowlist}" ]; then
+				allowlist="${allowlist} ${entry}"
+			else
+				allowlist="${entry}"
+			fi
+		done
+		MCPBASH_TOOL_ALLOWLIST="${allowlist}"
+		export MCPBASH_TOOL_ALLOWLIST
 	fi
 
 	# Allow explicit project override
@@ -242,6 +289,10 @@ EOF
 		MCPBASH_TOOL_STREAM_STDERR=true
 		export MCPBASH_TOOL_STREAM_STDERR
 	fi
+
+	# Let the policy layer tailor error messages for explicit CLI invocations.
+	MCPBASH_TOOL_POLICY_CONTEXT="run-tool"
+	export MCPBASH_TOOL_POLICY_CONTEXT
 
 	local result_json=""
 	# CLI invocations don't have request _meta; pass empty object

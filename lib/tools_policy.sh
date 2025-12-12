@@ -27,6 +27,7 @@ mcp_tools_policy_check() {
 	# $1: tool name; $2: tool metadata JSON string
 	local name="$1"
 	local metadata="$2"
+	local policy_context="${MCPBASH_TOOL_POLICY_CONTEXT:-}"
 
 	local allow_default="${MCPBASH_TOOL_ALLOW_DEFAULT:-deny}"
 	local allow_raw="${MCPBASH_TOOL_ALLOWLIST:-}"
@@ -38,7 +39,11 @@ mcp_tools_policy_check() {
 			;;
 		*)
 			_MCP_TOOLS_ERROR_CODE=-32602
-			_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy (set MCPBASH_TOOL_ALLOWLIST)"
+			if [ "${policy_context}" = "run-tool" ]; then
+				_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy. Try: mcp-bash run-tool ${name} --allow-self ..."
+			else
+				_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy. Set MCPBASH_TOOL_ALLOWLIST in your MCP client config."
+			fi
 			return 1
 			;;
 		esac
@@ -64,7 +69,11 @@ mcp_tools_policy_check() {
 
 	if [ "${allowed}" != "true" ]; then
 		_MCP_TOOLS_ERROR_CODE=-32602
-		_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy (not in MCPBASH_TOOL_ALLOWLIST)"
+		if [ "${policy_context}" = "run-tool" ]; then
+			_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy. Try: mcp-bash run-tool ${name} --allow-self ..."
+		else
+			_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy (not in MCPBASH_TOOL_ALLOWLIST)"
+		fi
 		return 1
 	fi
 

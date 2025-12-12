@@ -47,6 +47,7 @@ Usage:
   mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run]
                            [--timeout SECS] [--verbose] [--no-refresh]
                            [--minimal] [--project-root DIR] [--print-env]
+                           [--allow-self] [--allow TOOL] [--allow-all]
   mcp-bash scaffold tool <name>
   mcp-bash scaffold prompt <name>
   mcp-bash scaffold resource <name>

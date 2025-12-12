@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `docs/ERRORS.md` examples to reflect that `result.isError=true` is derived from a non-zero tool exit.
 
 ### Added
+- `mcp-bash run-tool` now supports per-invocation allowlisting via `--allow-self`, `--allow <tool>`, and `--allow-all`.
 - Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
 - Installer `--archive` flag to install from a local tar.gz (or URL) after verifying it externally (or via `--verify`).
 - GitHub Actions release workflow (tag-triggered) builds a tarball and publishes SHA256SUMS for installer verification.

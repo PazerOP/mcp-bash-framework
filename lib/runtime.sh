@@ -228,6 +228,13 @@ EOF
 	export MCPBASH_REGISTRY_DIR
 	mkdir -p "${MCPBASH_REGISTRY_DIR}" >/dev/null 2>&1 || true
 
+	# Bootstrap is a single-tool, framework-shipped helper project. Allow it to
+	# run without requiring callers to set a global allowlist.
+	if [ -z "${MCPBASH_TOOL_ALLOWLIST:-}" ]; then
+		MCPBASH_TOOL_ALLOWLIST="getting_started"
+		export MCPBASH_TOOL_ALLOWLIST
+	fi
+
 	MCPBASH_BOOTSTRAP_TMP_DIR="${tmp_root}"
 	MCPBASH_BOOTSTRAP_STAGED="true"
 
