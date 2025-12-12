@@ -228,6 +228,47 @@ mcp_registry_register_reset_state() {
 	MCP_REGISTRY_REGISTER_ERROR_COMPLETIONS=""
 }
 
+mcp_registry_register_hooks_allowed() {
+	case "${MCPBASH_ALLOW_PROJECT_HOOKS:-false}" in
+	true | 1 | yes | on) return 0 ;;
+	esac
+	return 1
+}
+
+mcp_registry_register_warn_untrusted() {
+	if [ "${MCPBASH_REGISTER_HOOK_WARNED:-false}" = "true" ]; then
+		return 0
+	fi
+	MCPBASH_REGISTER_HOOK_WARNED="true"
+	if mcp_logging_is_enabled "warning"; then
+		mcp_logging_warning "mcp.registry" "Project hook execution enabled (MCPBASH_ALLOW_PROJECT_HOOKS=true); ensure server.d/register.sh is trusted."
+	fi
+	return 0
+}
+
+mcp_registry_register_check_permissions() {
+	local script_path="$1"
+	if [ ! -f "${script_path}" ]; then
+		return 1
+	fi
+	local perm_mask perm_bits
+	if perm_mask="$(perl -e 'printf "%o\n", (stat($ARGV[0]))[2] & 0777' "${script_path}" 2>/dev/null)"; then
+		perm_bits=$((8#${perm_mask}))
+		if [ $((perm_bits & 0020)) -ne 0 ] || [ $((perm_bits & 0002)) -ne 0 ]; then
+			return 1
+		fi
+	fi
+	local uid_gid cur_uid cur_gid
+	if uid_gid="$(perl -e 'printf "%d:%d\n", (stat($ARGV[0]))[4,5]' "${script_path}" 2>/dev/null)"; then
+		cur_uid="$(id -u 2>/dev/null || printf '0')"
+		cur_gid="$(id -g 2>/dev/null || printf '0')"
+		case "${uid_gid}" in
+		"${cur_uid}:${cur_gid}" | "${cur_uid}:"*) return 0 ;;
+		esac
+	fi
+	return 1
+}
+
 mcp_registry_register_set_status() {
 	local kind="$1"
 	local status="$2"
@@ -450,6 +491,28 @@ mcp_registry_register_finalize_kind() {
 mcp_registry_register_execute() {
 	local script_path="$1"
 	local signature="$2"
+
+	if ! mcp_registry_register_hooks_allowed; then
+		mcp_registry_register_set_status "tools" "skipped" ""
+		mcp_registry_register_set_status "resources" "skipped" ""
+		mcp_registry_register_set_status "resourceTemplates" "skipped" ""
+		mcp_registry_register_set_status "prompts" "skipped" ""
+		mcp_registry_register_set_status "completions" "skipped" ""
+		MCP_REGISTRY_REGISTER_COMPLETE=true
+		return 0
+	fi
+
+	if ! mcp_registry_register_check_permissions "${script_path}"; then
+		mcp_registry_register_set_status "tools" "error" "Manual registration script permissions/ownership invalid"
+		mcp_registry_register_set_status "resources" "error" "Manual registration script permissions/ownership invalid"
+		mcp_registry_register_set_status "resourceTemplates" "error" "Manual registration script permissions/ownership invalid"
+		mcp_registry_register_set_status "prompts" "error" "Manual registration script permissions/ownership invalid"
+		mcp_registry_register_set_status "completions" "error" "Manual registration script permissions/ownership invalid"
+		MCP_REGISTRY_REGISTER_COMPLETE=true
+		return 0
+	fi
+
+	mcp_registry_register_warn_untrusted
 
 	mcp_registry_register_reset_state
 	MCP_REGISTRY_REGISTER_SIGNATURE="${signature}"

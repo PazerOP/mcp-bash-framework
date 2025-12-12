@@ -25,5 +25,59 @@ mcp_tools_policy_init() {
 # function in server.d/policy.sh (sourced by mcp_tools_policy_init()).
 mcp_tools_policy_check() {
 	# $1: tool name; $2: tool metadata JSON string
+	local name="$1"
+	local metadata="$2"
+
+	local allow_default="${MCPBASH_TOOL_ALLOW_DEFAULT:-deny}"
+	local allow_raw="${MCPBASH_TOOL_ALLOWLIST:-}"
+
+	if [ -z "${allow_raw}" ]; then
+		case "${allow_default}" in
+		allow | all)
+			allow_raw="*"
+			;;
+		*)
+			_MCP_TOOLS_ERROR_CODE=-32602
+			_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy (set MCPBASH_TOOL_ALLOWLIST)"
+			return 1
+			;;
+		esac
+	fi
+
+	local allowed="false"
+	local entry
+	local IFS=' ,'
+	read -r -a _mcp_allowlist <<<"${allow_raw}"
+	for entry in "${_mcp_allowlist[@]}"; do
+		[ -n "${entry}" ] || continue
+		case "${entry}" in
+		"*" | "all")
+			allowed="true"
+			break
+			;;
+		"${name}")
+			allowed="true"
+			break
+			;;
+		esac
+	done
+
+	if [ "${allowed}" != "true" ]; then
+		_MCP_TOOLS_ERROR_CODE=-32602
+		_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' blocked by policy (not in MCPBASH_TOOL_ALLOWLIST)"
+		return 1
+	fi
+
+	local path_rel path_abs
+	path_rel="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.path // ""' 2>/dev/null || printf '')"
+	if [ -n "${path_rel}" ]; then
+		path_abs="${MCPBASH_TOOLS_DIR%/}/${path_rel}"
+		if ! mcp_tools_validate_path "${path_abs}"; then
+			_MCP_TOOLS_ERROR_CODE=-32602
+			_MCP_TOOLS_ERROR_MESSAGE="Tool '${name}' path rejected by policy"
+			return 1
+		fi
+	fi
+
 	return 0
 }

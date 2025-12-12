@@ -33,9 +33,10 @@ done
 
 run_step() {
 	local label="$1"
-	local cmd="$2"
+	shift
+	local cmd=("$@")
 	printf '==> %s\n' "${label}"
-	eval "${cmd}"
+	"${cmd[@]}"
 }
 
 run_step "Lint" "./test/lint.sh"

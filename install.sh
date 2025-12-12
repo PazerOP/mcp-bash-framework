@@ -81,10 +81,13 @@ Options:
   --help         Show this help
 
 Examples:
-  curl -fsSL .../install.sh | bash
-  curl -fsSL .../install.sh | bash -s -- --dir ~/my-mcp-bash
-  curl -fsSL .../install.sh | bash -s -- --yes  # CI-friendly
-  curl -fsSL .../install.sh | bash -s -- --version 0.4.0  # install tagged release (auto-prefixes v)
+  # Preferred: download + verify, then run locally
+  curl -fsSLO .../install.sh
+  curl -fsSLO .../SHA256SUMS
+  sha256sum -c SHA256SUMS && bash install.sh --verify <sha-from-SHA256SUMS> --version v0.4.0
+
+  # Fallback (less safe): curl -fsSL .../install.sh | bash -s -- --yes
+  # CI-friendly fallback: curl -fsSL .../install.sh | bash -s -- --yes --version v0.4.0  # auto-prefixes v
 
 Note: Installs to ~/.local/share/mcp-bash with a symlink in ~/.local/bin (XDG compliant)
 EOF

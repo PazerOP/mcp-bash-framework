@@ -156,8 +156,9 @@ mcp_io_debug_redact_payload() {
 		read -r -d '' jq_filter <<'JQ' || true
 def redact_meta:
   if type=="object" then
-    (if has("mcpbash/remoteToken") then .["mcpbash/remoteToken"]="**redacted**" else . end)
-    | (if has("remoteToken") then .remoteToken="**redacted**" else . end)
+    (reduce (keys_unsorted[] | strings) as $k (.;
+      (if ([ "mcpbash/remotetoken", "remotetoken", "authorization", "token", "apikey", "api_key", "secret", "password", "privatekey", "session", "bearer" ]
+           | index(($k|ascii_downcase))) then .[$k]="**redacted**" else . end)))
   else . end;
 def redact_params:
   if type=="object" then
@@ -177,7 +178,17 @@ JQ
 	fi
 
 	local redacted_sed
-	redacted_sed="$(printf '%s' "${payload}" | sed -E 's/"mcpbash\\/remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"/"mcpbash\\/remoteToken":"**redacted**"/g; s/"remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"/"remoteToken":"**redacted**"/g' 2>/dev/null)" || redacted_sed="${payload}"
+	redacted_sed="$(printf '%s' "${payload}" | sed -E '
+		s/\"mcpbash\\/remoteToken\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"mcpbash\\/remoteToken\":\"**redacted**\"/g;
+		s/\"remoteToken\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"remoteToken\":\"**redacted**\"/g;
+		s/\"authorization\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"authorization\":\"**redacted**\"/g;
+		s/\"token\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"token\":\"**redacted**\"/g;
+		s/\"apiKey\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"apiKey\":\"**redacted**\"/g;
+		s/\"secret\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"secret\":\"**redacted**\"/g;
+		s/\"password\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"password\":\"**redacted**\"/g;
+		s/\"privateKey\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"privateKey\":\"**redacted**\"/g;
+		s/\"session\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"session\":\"**redacted**\"/g;
+	' 2>/dev/null)" || redacted_sed="${payload}"
 	printf '%s' "${redacted_sed}"
 }
 

@@ -146,7 +146,7 @@ fi
 
 if [ -z "${MCP_BASH}" ]; then
 	printf 'Error: mcp-bash not found in PATH or ~/.local/bin\n' >&2
-	printf 'Install: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash\n' >&2
+	printf 'Install: download release + verify checksum (README), fallback: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -- --yes\n' >&2
 	exit 1
 fi
 
@@ -174,7 +174,7 @@ fi
 
 if [ -z "${MCP_BASH}" ]; then
 	printf 'Error: mcp-bash not found in PATH or ~/.local/bin\n' >&2
-	printf 'Install: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash\n' >&2
+	printf 'Install: download release + verify checksum (README), fallback: curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -- --yes\n' >&2
 	exit 1
 fi
 

@@ -78,16 +78,18 @@ When you run `mcp-bash` from inside a project (a directory containing `server.d/
 
 ### 1. Install the Framework
 
-Recommended one-line installer:
+Preferred (verify before you run anything):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash
+curl -fsSLO https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/SHA256SUMS
+sha256sum -c SHA256SUMS && bash install.sh --verify <sha256-from-SHA256SUMS> --version v0.6.0
 ```
 
-Want integrity checks? Download the release checksum from GitHub Releases and pass it to `--verify` (installer will download the matching archive and validate it):
+Fallback (less safe, still supports `--verify`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.6.0 --verify <sha256-from-SHA256SUMS>
+curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --yes --version v0.6.0
 ```
 
 Manual install (for security-conscious environments):
@@ -101,12 +103,12 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc (if not 
 Pin a release with the installer (auto-prefixes `v` for bare versions):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version 0.6.0
-# or with explicit tag
-curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -s -- --version v0.6.0
+bash install.sh --verify <sha256-from-SHA256SUMS> --version 0.6.0
 ```
 
 ### 1.5 Verify It Works (30 seconds)
+
+Security defaults: hooks are disabled unless `MCPBASH_ALLOW_PROJECT_HOOKS=true`, and tools require an explicit allowlist (`MCPBASH_TOOL_ALLOWLIST=*` to allow all in trusted projects).
 
 ```bash
 mcp-bash doctor

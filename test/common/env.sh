@@ -13,6 +13,14 @@ MCPBASH_TEST_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 export MCPBASH_HOME="${MCPBASH_TEST_ROOT}"
 export PATH="${MCPBASH_HOME}/bin:${PATH}"
 
+if [ -z "${MCPBASH_TOOL_ALLOWLIST:-}" ]; then
+	export MCPBASH_TOOL_ALLOWLIST="*"
+fi
+
+if [ -z "${MCPBASH_ALLOW_PROJECT_HOOKS:-}" ]; then
+	export MCPBASH_ALLOW_PROJECT_HOOKS="true"
+fi
+
 # Silence JSON tooling detection logs in tests unless explicitly opted in.
 if [ -z "${MCPBASH_LOG_JSON_TOOL:-}" ] && [ "${VERBOSE:-0}" != "1" ]; then
 	MCPBASH_LOG_JSON_TOOL="quiet"

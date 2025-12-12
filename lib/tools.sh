@@ -64,6 +64,52 @@ mcp_tools_scan_root() {
 	mcp_registry_resolve_scan_root "${MCPBASH_TOOLS_DIR}"
 }
 
+mcp_tools_normalize_path() {
+	local target="$1"
+	if command -v mcp_path_normalize >/dev/null 2>&1; then
+		mcp_path_normalize --physical "${target}"
+		return
+	fi
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "${target}" 2>/dev/null
+		return
+	fi
+	(
+		cd "$(dirname "${target}")" 2>/dev/null || exit 1
+		pwd -P 2>/dev/null | awk -v base="$(basename "${target}")" '{print $0"/"base}'
+	)
+}
+
+mcp_tools_validate_path() {
+	local candidate="$1"
+	local canonical root
+	canonical="$(mcp_tools_normalize_path "${candidate}" 2>/dev/null || true)"
+	root="$(mcp_tools_normalize_path "${MCPBASH_TOOLS_DIR}" 2>/dev/null || true)"
+	if [ -z "${canonical}" ] || [ -z "${root}" ]; then
+		return 1
+	fi
+	case "${canonical}" in
+	"${root}"/*) ;;
+	*) return 1 ;;
+	esac
+	local perm_mask
+	if perm_mask="$(perl -e 'printf "%o\n", (stat($ARGV[0]))[2] & 0777' "${canonical}" 2>/dev/null)"; then
+		local perm_bits=$((8#${perm_mask}))
+		if [ $((perm_bits & 0020)) -ne 0 ] || [ $((perm_bits & 0002)) -ne 0 ]; then
+			return 1
+		fi
+	fi
+	local uid_gid cur_uid cur_gid
+	if uid_gid="$(perl -e 'printf "%d:%d\n", (stat($ARGV[0]))[4,5]' "${canonical}" 2>/dev/null)"; then
+		cur_uid="$(id -u 2>/dev/null || printf '0')"
+		cur_gid="$(id -g 2>/dev/null || printf '0')"
+		case "${uid_gid}" in
+		"${cur_uid}:${cur_gid}" | "${cur_uid}:"*) return 0 ;;
+		esac
+	fi
+	return 1
+}
+
 mcp_tools_manual_begin() {
 	MCP_TOOLS_MANUAL_ACTIVE=true
 	MCP_TOOLS_MANUAL_BUFFER=""
@@ -1137,6 +1183,10 @@ mcp_tools_call() {
 
 	local absolute_path="${MCPBASH_TOOLS_DIR}/${tool_path}"
 	local tool_runner=("${absolute_path}")
+	if ! mcp_tools_validate_path "${absolute_path}"; then
+		mcp_tools_error -32602 "Tool path rejected by policy"
+		return 1
+	fi
 	# On Windows (Git Bash/MSYS), -x test is unreliable. Check for shebang or .sh extension as fallback.
 	if [ ! -x "${absolute_path}" ]; then
 		if [[ ! "${absolute_path}" =~ \.(sh|bash)$ ]] && ! head -n1 "${absolute_path}" 2>/dev/null | grep -q '^#!'; then

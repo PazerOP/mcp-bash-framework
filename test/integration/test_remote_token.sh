@@ -23,12 +23,12 @@ REQUESTS="${WORKSPACE}/requests.ndjson"
 cat <<'JSON' >"${REQUESTS}"
 {"jsonrpc":"2.0","id":"missing","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{}}}
 {"jsonrpc":"2.0","id":"bad","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"_meta":{"mcpbash/remoteToken":"wrong"}}}
-{"jsonrpc":"2.0","id":"ok","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"_meta":{"mcpbash/remoteToken":"secret-token-0123456789abcdef012345"}}}
+{"jsonrpc":"2.0","id":"ok","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"_meta":{"mcpbash/remoteToken":"dummy-test-token-0123456789abcdef"}}}
 JSON
 
 RESPONSES="${WORKSPACE}/responses.ndjson"
 
-MCPBASH_REMOTE_TOKEN="secret-token-0123456789abcdef012345" test_run_mcp "${WORKSPACE}" "${REQUESTS}" "${RESPONSES}"
+MCPBASH_REMOTE_TOKEN="dummy-test-token-0123456789abcdef" test_run_mcp "${WORKSPACE}" "${REQUESTS}" "${RESPONSES}"
 
 assert_json_lines "${RESPONSES}"
 
