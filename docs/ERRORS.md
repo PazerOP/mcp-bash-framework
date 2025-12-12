@@ -61,12 +61,15 @@ Use the SDK helpers to return the appropriate error type:
 
 ```bash
 # Tool Execution Error (LLM can self-correct)
-# Return exit 0 but with error in output
+# Emit an error payload and exit non-zero (the framework sets result.isError=true
+# when the tool exits non-zero).
 mcp_emit_json '{"error": "Date must be in the future", "received": "2020-01-01"}'
-# The framework wraps this with isError: true on non-zero exit
+exit 1
 
-# OR use mcp_fail for structured errors that terminate the tool
-mcp_fail -32602 "count must be between 1 and 100" '{"received": -5}'
+# OR use the SDK helper to emit a structured error and exit non-zero.
+# (This still becomes a Tool Execution Error result with isError=true; it is not
+# a JSON-RPC protocol error.)
+mcp_fail_invalid_args "Date must be in the future" '{"received": "2020-01-01"}'
 ```
 
 For validation that happens early in a tool (before doing real work), prefer returning `isError: true` so the LLM learns from the feedback.
