@@ -596,6 +596,14 @@ mcp_registry_register_execute() {
 mcp_registry_register_apply() {
 	local kind="$1"
 	local script_path="${MCPBASH_SERVER_DIR}/register.sh"
+	# Expose last outcome for callers that need to distinguish "applied" vs
+	# "skipped" while still treating skipped as a non-error state.
+	# shellcheck disable=SC2034
+	MCP_REGISTRY_REGISTER_LAST_KIND="${kind}"
+	# shellcheck disable=SC2034
+	MCP_REGISTRY_REGISTER_LAST_STATUS=""
+	# shellcheck disable=SC2034
+	MCP_REGISTRY_REGISTER_LAST_APPLIED=false
 	# On Windows (Git Bash/MSYS), -x test is unreliable. Check for shebang as fallback.
 	if [ ! -x "${script_path}" ]; then
 		if ! head -n1 "${script_path}" 2>/dev/null | grep -q '^#!'; then
@@ -628,13 +636,19 @@ mcp_registry_register_apply() {
 	prompts) status="${MCP_REGISTRY_REGISTER_STATUS_PROMPTS}" ;;
 	completions) status="${MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS}" ;;
 	esac
+	# shellcheck disable=SC2034  # used across modules by callers of mcp_registry_register_apply
+	MCP_REGISTRY_REGISTER_LAST_STATUS="${status}"
 
 	case "${status}" in
 	ok)
+		# shellcheck disable=SC2034  # used across modules by callers of mcp_registry_register_apply
+		MCP_REGISTRY_REGISTER_LAST_APPLIED=true
 		return 0
 		;;
 	skipped)
-		return 1
+		# "skipped" is a normal state (e.g., hooks disabled or no registrations for
+		# this kind). Callers can check MCP_REGISTRY_REGISTER_LAST_APPLIED.
+		return 0
 		;;
 	error)
 		return 2

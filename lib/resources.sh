@@ -349,20 +349,21 @@ mcp_resources_refresh_registry() {
 			mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh start exists=${register_exists} ttl=${MCP_RESOURCES_TTL:-5}"
 		fi
 	fi
-	if mcp_registry_register_apply "resources"; then
+	local manual_status=0
+	mcp_registry_register_apply "resources"
+	manual_status=$?
+	if [ "${manual_status}" -eq 2 ]; then
+		local err
+		err="$(mcp_registry_register_error_for_kind "resources")"
+		if [ -z "${err}" ]; then
+			err="Manual registration script returned empty output or non-zero"
+		fi
+		mcp_logging_error "${MCP_RESOURCES_LOGGER}" "${err}"
+		return 1
+	fi
+	if [ "${manual_status}" -eq 0 ] && [ "${MCP_REGISTRY_REGISTER_LAST_APPLIED:-false}" = "true" ]; then
 		mcp_logging_debug "${MCP_RESOURCES_LOGGER}" "Refresh satisfied by manual script"
 		return 0
-	else
-		local manual_status=$?
-		if [ "${manual_status}" -eq 2 ]; then
-			local err
-			err="$(mcp_registry_register_error_for_kind "resources")"
-			if [ -z "${err}" ]; then
-				err="Manual registration script returned empty output or non-zero"
-			fi
-			mcp_logging_error "${MCP_RESOURCES_LOGGER}" "${err}"
-			return 1
-		fi
 	fi
 	local now
 	now="$(date +%s)"
@@ -1097,19 +1098,17 @@ mcp_resources_templates_refresh_registry() {
 		mcp_logging_warning "${MCP_RESOURCES_TEMPLATES_LOGGER}" "Cannot check for name collisions: resource registry unavailable"
 	fi
 
-	if mcp_registry_register_apply "resourceTemplates"; then
-		:
-	else
-		local manual_status=$?
-		if [ "${manual_status}" -eq 2 ]; then
-			local err
-			err="$(mcp_registry_register_error_for_kind "resourceTemplates")"
-			if [ -z "${err}" ]; then
-				err="Manual registration script returned empty output or non-zero"
-			fi
-			mcp_logging_error "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${err}"
-			return 1
+	local manual_status=0
+	mcp_registry_register_apply "resourceTemplates"
+	manual_status=$?
+	if [ "${manual_status}" -eq 2 ]; then
+		local err
+		err="$(mcp_registry_register_error_for_kind "resourceTemplates")"
+		if [ -z "${err}" ]; then
+			err="Manual registration script returned empty output or non-zero"
 		fi
+		mcp_logging_error "${MCP_RESOURCES_TEMPLATES_LOGGER}" "${err}"
+		return 1
 	fi
 
 	local now ttl

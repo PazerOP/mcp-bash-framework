@@ -402,7 +402,12 @@ mcp_tools_apply_manual_registration() {
 		fi
 		return "${manual_status}"
 	fi
-	return 0
+	# mcp_registry_register_apply returns 0 for both ok and skipped.
+	# Treat skipped as "not applied" so we fall back to cache/scan.
+	if [ "${MCP_REGISTRY_REGISTER_LAST_APPLIED:-false}" = "true" ]; then
+		return 0
+	fi
+	return 1
 }
 
 mcp_tools_load_cache_if_empty() {

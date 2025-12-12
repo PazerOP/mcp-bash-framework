@@ -215,19 +215,20 @@ mcp_prompts_refresh_registry() {
 	local scan_root
 	scan_root="$(mcp_prompts_scan_root)"
 	mcp_prompts_init
-	if mcp_registry_register_apply "prompts"; then
-		return 0
-	else
-		local manual_status=$?
-		if [ "${manual_status}" -eq 2 ]; then
-			local err
-			err="$(mcp_registry_register_error_for_kind "prompts")"
-			if [ -z "${err}" ]; then
-				err="Manual registration script returned empty output or non-zero"
-			fi
-			mcp_logging_error "${MCP_PROMPTS_LOGGER}" "${err}"
-			return 1
+	local manual_status=0
+	mcp_registry_register_apply "prompts"
+	manual_status=$?
+	if [ "${manual_status}" -eq 2 ]; then
+		local err
+		err="$(mcp_registry_register_error_for_kind "prompts")"
+		if [ -z "${err}" ]; then
+			err="Manual registration script returned empty output or non-zero"
 		fi
+		mcp_logging_error "${MCP_PROMPTS_LOGGER}" "${err}"
+		return 1
+	fi
+	if [ "${manual_status}" -eq 0 ] && [ "${MCP_REGISTRY_REGISTER_LAST_APPLIED:-false}" = "true" ]; then
+		return 0
 	fi
 	local now
 	now="$(date +%s)"
