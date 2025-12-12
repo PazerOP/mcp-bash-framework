@@ -23,6 +23,39 @@ run_server() {
 	)
 }
 
+base64_url_decode() {
+	local input="$1"
+	local converted="${input//-/+}"
+	converted="${converted//_/\/}"
+	local pad=$(((4 - (${#converted} % 4)) % 4))
+	case "${pad}" in
+	1) converted="${converted}=" ;;
+	2) converted="${converted}==" ;;
+	3) converted="${converted}===" ;;
+	esac
+
+	local decoded
+	if decoded="$(printf '%s' "${converted}" | base64 --decode 2>/dev/null)"; then
+		printf '%s' "${decoded}"
+		return 0
+	fi
+	if decoded="$(printf '%s' "${converted}" | base64 -d 2>/dev/null)"; then
+		printf '%s' "${decoded}"
+		return 0
+	fi
+	if decoded="$(printf '%s' "${converted}" | base64 -D 2>/dev/null)"; then
+		printf '%s' "${decoded}"
+		return 0
+	fi
+	if command -v openssl >/dev/null 2>&1; then
+		if decoded="$(printf '%s' "${converted}" | openssl base64 -d -A 2>/dev/null)"; then
+			printf '%s' "${decoded}"
+			return 0
+		fi
+	fi
+	return 1
+}
+
 # --- Auto-discovery pagination and structured output ---
 AUTO_ROOT="${TEST_TMPDIR}/auto"
 test_stage_workspace "${AUTO_ROOT}"
@@ -82,6 +115,10 @@ if [ "$tools_count" -lt 1 ]; then
 fi
 if [ -z "$next_cursor" ]; then
 	test_fail "expected nextCursor for pagination (indicates more tools exist)"
+fi
+decoded_cursor="$(base64_url_decode "${next_cursor}")" || test_fail "failed to base64url-decode nextCursor"
+if ! printf '%s' "${decoded_cursor}" | jq -e '.timestamp | type == "string" and (. | length) > 0' >/dev/null; then
+	test_fail "expected cursor payload to include non-empty timestamp"
 fi
 
 call_resp="$(grep '"id":"auto-call"' "${AUTO_ROOT}/responses.ndjson" | head -n1)"

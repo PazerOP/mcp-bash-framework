@@ -89,10 +89,9 @@ mcp_paginate_attach_next_cursor() {
 	local hash="$6"
 
 	if [ $((offset + limit)) -lt "${total}" ]; then
-		local next_offset cursor_payload encoded
+		local next_offset encoded
 		next_offset=$((offset + limit))
-		cursor_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n --arg ver "1" --arg col "${collection}" --argjson off "${next_offset}" --arg hash "${hash}" '{ver: $ver|tonumber, collection: $col, offset: $off, hash: $hash}')" || return 1
-		encoded="$(printf '%s' "${cursor_payload}" | base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')"
+		encoded="$(mcp_paginate_encode "${collection}" "${next_offset}" "${hash}")" || return 1
 		printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg next "${encoded}" '.nextCursor = $next'
 		return 0
 	fi
