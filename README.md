@@ -20,8 +20,7 @@ Edit README.md.in and run: bash scripts/render-readme.sh
 - [MCP Spec Coverage](#mcp-spec-coverage)
 - [Why Bash?](#why-bash)
 - [Quick Start](#quick-start)
-- [Client Recipes](#client-recipes)
-- [Client Compatibility](#client-compatibility)
+- [Configure Your MCP Client](#configure-your-mcp-client)
 - [Project Structure](#project-structure)
 - [Configuration](#configuration)
 - [Learn by Example](#learn-by-example)
@@ -56,10 +55,6 @@ flowchart TD
   Client --> Transport --> Framework --> Project
 ```
 
-## Why this exists
-
-Most MCP servers assume you’re willing to spin up heavyweight runtimes and frameworks just to wrap a few shell commands. That’s a lot of machinery for very little gain. mcp-bash takes the opposite approach: your shell is already your automation layer, and the framework is a thin, predictable bridge to MCP clients. If you’re comfortable running Bash in production, you shouldn’t need anything else to expose tools to AI systems.
-
 ## Design Principles
 
 - Tools shouldn’t need another runtime to talk to AI.
@@ -86,6 +81,8 @@ mcp-bash targets the **2025-11-25** MCP specification with negotiated downgrades
 Transport is stdio-only by design. See [Remote Connectivity](docs/REMOTE.md) for HTTP/SSE proxy options, including the shared-secret guard (`MCPBASH_REMOTE_TOKEN`) and readiness probe (`mcp-bash --health`).
 
 → [Full compliance matrix](SPEC-COMPLIANCE.md)
+
+For a complete feature-by-feature breakdown across all MCP versions, see the [Feature Support Matrix](SPEC-COMPLIANCE.md#feature-support-matrix) in `SPEC-COMPLIANCE.md`.
 
 ## Why Bash?
 
@@ -220,7 +217,15 @@ mcp-bash scaffold test
 
 The harness wraps `mcp-bash run-tool`, validates your project before running, and refuses to overwrite existing `test/run.sh` or `test/README.md`.
 
-### 4. Configure Your MCP Client
+## Configure Your MCP Client
+
+Every client works the same way: point it at the framework and tell it where your project lives:
+
+1. Set `MCPBASH_PROJECT_ROOT=/path/to/your/project`.
+2. Point it at the `mcp-bash` binary (installed to `~/.local/bin/mcp-bash` by the installer).
+   - If you generated a wrapper via `mcp-bash config --wrapper` or `--wrapper-env`, you can point clients at `<project-root>/<server-name>.sh`; the wrapper already wires `MCPBASH_PROJECT_ROOT` for you.
+
+### Generate Config (CLI)
 
 ```bash
 mcp-bash config --show
@@ -239,13 +244,7 @@ Picking a wrapper:
 - Use `--wrapper-env` when you need your login shell to set PATH/version managers/vars before starting the server (common on macOS Claude Desktop).
 - Distributing a server? Ship the env wrapper by default for GUI launches (macOS/Windows clients), and include a non-login wrapper or absolute runtime path for CI/WSL/Linux users who want fast, side-effect-free startups.
 
-## Client Recipes
-
-Every client works the same way: point it at the framework and tell it where your project lives:
-
-1. Set `MCPBASH_PROJECT_ROOT=/path/to/your/project`.
-2. Point it at the `mcp-bash` binary (installed to `~/.local/bin/mcp-bash` by the installer).
-   - If you generated a wrapper via `mcp-bash config --wrapper` or `--wrapper-env`, you can point clients at `<project-root>/<server-name>.sh`; the wrapper already wires `MCPBASH_PROJECT_ROOT` for you.
+### Per-Client Snippets
 
 - **Claude Desktop**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows) and add:
   ```jsonc
@@ -302,7 +301,7 @@ Every client works the same way: point it at the framework and tell it where you
   ```
 - **Windows note**: Git Bash (CI-tested) or WSL both work. Git Bash ships with Git for Windows; WSL behaves like Linux. See [Windows Support](docs/WINDOWS.md) for details.
 
-## Client Compatibility
+### Compatibility Notes
 
 | Client | Status | Known issues / notes |
 |--------|--------|----------------------|
@@ -597,22 +596,7 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for full guidance and workarounds.
 	  fi
 	  printf 'See embedded report for details'
 	  ```
-	- See the dedicated example at `examples/06-embedded-resources/`.
-
-### Protocol Version Compatibility
-This server targets MCP protocol version `2025-11-25` (the current stable specification) and supports negotiated downgrades during `initialize`.
-
-| Version | Status |
-|---------|--------|
-| `2025-11-25` | ✅ Fully supported (default) |
-| `2025-06-18` | ✅ Supported (downgrade) |
-| `2025-03-26` | ✅ Supported (downgrade) |
-| `2024-11-05` | ✅ Supported (downgrade) |
-| `2024-10-07` | ❌ **Not supported** |
-
-Unsupported versions receive an `initialize` error payload: `{"code":-32602,"message":"Unsupported protocol version"}`.
-
-For a complete feature-by-feature breakdown across all MCP versions, see the [Feature Support Matrix](SPEC-COMPLIANCE.md#feature-support-matrix) in `SPEC-COMPLIANCE.md`.
+- See the dedicated example at `examples/06-embedded-resources/`.
 
 ## FAQ
 
