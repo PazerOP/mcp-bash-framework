@@ -99,7 +99,7 @@ mcp_core_bootstrap_state() {
 
 mcp_core_read_loop() {
 	local line
-	while IFS= read -r line; do
+	while IFS= read -r line || [ -n "${line}" ]; do
 		mcp_core_handle_line "${line}"
 	done
 }

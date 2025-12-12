@@ -114,14 +114,14 @@ run_test() {
 	if [ "${VERBOSE}" = "1" ]; then
 		(
 			set -o pipefail
-			"${SCRIPT_DIR}/${test_script}" 2>&1 | while IFS= read -r line || [ -n "${line}" ]; do
+			bash "${SCRIPT_DIR}/${test_script}" 2>&1 | while IFS= read -r line || [ -n "${line}" ]; do
 				printf '[%s] %s\n' "${test_script}" "${line}"
 			done
 			exit "${PIPESTATUS[0]}"
 		) | tee "${log_file}"
 		status="${PIPESTATUS[0]}"
 	else
-		if "${SCRIPT_DIR}/${test_script}" >"${log_file}" 2>&1; then
+		if bash "${SCRIPT_DIR}/${test_script}" >"${log_file}" 2>&1; then
 			status=0
 		else
 			status=$?
