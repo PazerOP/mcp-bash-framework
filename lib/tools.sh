@@ -1472,34 +1472,28 @@ mcp_tools_call() {
 				esac
 			done < <(env)
 
+			# Compute stream/token presence once, for both notifications/message log
+			# and the diag file (cheap and critical for diagnosing progress issues).
+			local stream_present="false"
+			local token_present="false"
+			[ -n "${MCP_PROGRESS_STREAM:-}" ] && stream_present="true"
+			[ -n "${MCP_PROGRESS_TOKEN:-}" ] && token_present="true"
+			local stream_q
+			printf -v stream_q '%q' "${MCP_PROGRESS_STREAM:-}"
+
 			if mcp_logging_is_enabled "debug"; then
-				local stream_present="false"
-				local token_present="false"
-				[ -n "${MCP_PROGRESS_STREAM:-}" ] && stream_present="true"
-				[ -n "${MCP_PROGRESS_TOKEN:-}" ] && token_present="true"
 				mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: inherited stream_present=${stream_present} token_present=${token_present} passthrough_stream=${saw_progress_stream} passthrough_token=${saw_progress_token} env_crlf_stripped=${saw_crlf} stream_line_had_cr=${saw_progress_stream_cr} token_line_had_cr=${saw_progress_token_cr}"
 				if mcp_logging_verbose_enabled; then
 					# Show escaped values so hidden CR/LF or whitespace is visible.
-					local stream_q token_q
-					printf -v stream_q '%q' "${MCP_PROGRESS_STREAM:-}"
+					local token_q
 					printf -v token_q '%q' "${MCP_PROGRESS_TOKEN:-}"
 					mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: stream=${stream_q} token=${token_q}"
 				fi
 			fi
 
-			# CI/debug aid: write a concise progress wiring summary to a diag file so
-			# the parent can emit it to server stderr (captured by failure bundles).
-			# Writing directly to >&2 here goes to the tool's stderr capture, not
-			# the server stderr that test harnesses inspect.
-			if [ "${MCPBASH_CI_VERBOSE:-false}" = "true" ]; then
-				local stream_present="false"
-				local token_present="false"
-				[ -n "${MCP_PROGRESS_STREAM:-}" ] && stream_present="true"
-				[ -n "${MCP_PROGRESS_TOKEN:-}" ] && token_present="true"
-				local stream_q
-				printf -v stream_q '%q' "${MCP_PROGRESS_STREAM:-}"
-				printf '%s\n' "mcp-bash: tools/call progress wiring: inherited_stream=${stream_present} inherited_token=${token_present} passthrough_stream=${saw_progress_stream} passthrough_token=${saw_progress_token} env_crlf_stripped=${saw_crlf} stream_line_had_cr=${saw_progress_stream_cr} token_line_had_cr=${saw_progress_token_cr} stream=${stream_q}" >>"${diag_file}"
-			fi
+			# Always write progress wiring summary to diag file; the parent emits
+			# it to server stderr (captured in failure bundles).
+			printf '%s\n' "mcp-bash: tools/call progress wiring: inherited_stream=${stream_present} inherited_token=${token_present} passthrough_stream=${saw_progress_stream} passthrough_token=${saw_progress_token} env_crlf_stripped=${saw_crlf} stream_line_had_cr=${saw_progress_stream_cr} token_line_had_cr=${saw_progress_token_cr} stream=${stream_q}" >>"${diag_file}"
 
 			env_exec+=(
 				"MCP_SDK=${MCP_SDK}"
@@ -1647,8 +1641,9 @@ mcp_tools_call() {
 	if [ -s "${diag_file}" ]; then
 		cat "${diag_file}" >&2
 	fi
-	# Additional post-tool diagnostic: check if progress stream file exists.
-	if [ "${MCPBASH_CI_VERBOSE:-false}" = "true" ] && [ -n "${MCP_PROGRESS_STREAM:-}" ]; then
+	# Post-tool diagnostic: check if progress stream file exists. Always emit so
+	# failure bundles capture this regardless of log levels.
+	if [ -n "${MCP_PROGRESS_STREAM:-}" ]; then
 		local stream_exists="false"
 		local stream_size="0"
 		if [ -f "${MCP_PROGRESS_STREAM}" ]; then
