@@ -89,10 +89,21 @@ JSON
 		# Phase 3: gate on high-signal, low-false-positive patterns.
 		if grep -q -- 'mktemp: failed to create file via template' "${stderr_file}"; then
 			printf '%s\n' "Example ${example_id}: detected mktemp failure in server stderr (${stderr_file})." >&2
+			printf '%s\n' '--- server stderr (excerpt) ---' >&2
+			tail -n 200 "${stderr_file}" >&2 || true
+			printf '%s\n' '--- end server stderr ---' >&2
 			return 1
 		fi
 		if grep -q -- 'mcp-bash: shutdown timeout' "${stderr_file}"; then
+			local timeout_line=""
+			timeout_line="$(grep -m1 -- 'mcp-bash: shutdown timeout' "${stderr_file}" 2>/dev/null || true)"
 			printf '%s\n' "Example ${example_id}: detected shutdown watchdog timeout in server stderr (${stderr_file})." >&2
+			if [ -n "${timeout_line}" ]; then
+				printf '%s\n' "  ${timeout_line}" >&2
+			fi
+			printf '%s\n' '--- server stderr (excerpt) ---' >&2
+			tail -n 200 "${stderr_file}" >&2 || true
+			printf '%s\n' '--- end server stderr ---' >&2
 			return 1
 		fi
 	fi
