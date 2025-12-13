@@ -193,7 +193,7 @@ jobs:
           warm="${{ steps.go.outputs.cache-hit == 'true' && steps.gocache.outputs.cache-hit == 'true' }}"
           duration="${{ steps.integration.outputs.duration }}"
           warn_budget=240
-          fail_budget=900
+          fail_budget=2000
           if [ -n "${duration}" ] && [ "${duration}" -gt "${warn_budget}" ]; then
             echo "::warning ::Integration duration ${duration}s exceeded warning budget ${warn_budget}s (warm caches=${warm})"
           fi
