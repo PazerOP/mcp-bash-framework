@@ -180,6 +180,43 @@ mcp_https_log_block() {
 	fi
 }
 
+mcp_https_extract_port_from_url() {
+	# Extract port from an https:// URL. Defaults to 443 when absent/invalid.
+	# Must strip userinfo (user:pass@) to avoid SSRF bypasses.
+	local url="$1"
+	local authority="${url#*://}"
+	authority="${authority%%/*}"
+	authority="${authority%%\?*}"
+	authority="${authority%%\#*}"
+	authority="${authority##*@}"
+	local port="443"
+
+	case "${authority}" in
+	\[*\]*)
+		# [ipv6]:port or [ipv6]
+		case "${authority}" in
+		*"]:"*)
+			port="${authority##*]:}"
+			;;
+		esac
+		;;
+	*)
+		# host:port or host
+		if [[ "${authority}" == *:* ]]; then
+			port="${authority##*:}"
+		fi
+		;;
+	esac
+
+	case "${port}" in
+	'' | *[!0-9]*) port="443" ;;
+	esac
+	if [ "${port}" -lt 1 ] || [ "${port}" -gt 65535 ]; then
+		port="443"
+	fi
+	printf '%s' "${port}"
+}
+
 mcp_https_main() {
 	mcp_https_load_policy
 	local uri="${1:-}"
@@ -190,6 +227,8 @@ mcp_https_main() {
 
 	local host
 	host="$(mcp_policy_extract_host_from_url "${uri}")"
+	local port
+	port="$(mcp_https_extract_port_from_url "${uri}")"
 	if [ -z "${host}" ]; then
 		mcp_https_log_block "<empty>"
 		return 4
@@ -218,6 +257,7 @@ mcp_https_main() {
 		mcp_https_log_block "${host}"
 		return 4
 	fi
+	local -a resolved_ip_list=()
 	if command -v mcp_policy_resolve_ips >/dev/null 2>&1; then
 		local resolved_ips=""
 		if resolved_ips="$(mcp_policy_resolve_ips "${host}")"; then
@@ -229,6 +269,7 @@ mcp_https_main() {
 					return 4
 					;;
 				esac
+				resolved_ip_list+=("${ip}")
 			done <<EOF
 ${resolved_ips}
 EOF
@@ -254,22 +295,49 @@ EOF
 
 	local tmp_file
 	tmp_file="$(mktemp "${TMPDIR:-/tmp}/mcp-https.XXXXXX")"
-	cleanup_tmp() {
-		rm -f "${tmp_file}"
-	}
-	trap cleanup_tmp EXIT
+	# NOTE: EXIT traps run after function locals go out of scope. Capture the
+	# temp path via a global so set -u doesn't trip on an unbound local.
+	MCPBASH_HTTPS_TMP_FILE="${tmp_file}"
+	trap 'rm -f -- "${MCPBASH_HTTPS_TMP_FILE:-}"' EXIT
 
 	if command -v curl >/dev/null 2>&1; then
-		if ! curl -fsS --max-time "${timeout_secs}" --connect-timeout "${timeout_secs}" --max-filesize "${max_bytes}" --proto '=https' --proto-redir '=https' --max-redirs 0 -o "${tmp_file}" "${uri}"; then
-			case "$?" in
-			63)
-				printf 'Payload exceeds %s bytes\n' "${max_bytes}" >&2
-				return 6
-				;; # CURLE_FILESIZE_EXCEEDED
-			*)
+		# DNS rebinding defense: if we resolved IPs, pin the connection to the
+		# vetted IP(s) via --resolve so curl does not re-resolve during fetch.
+		# If multiple IPs exist, try them in order (all were checked as public).
+		local curl_rc=0
+		local tried_any="false"
+		if [ "${#resolved_ip_list[@]}" -gt 0 ]; then
+			local ip
+			for ip in "${resolved_ip_list[@]}"; do
+				tried_any="true"
+				if curl -fsS --max-time "${timeout_secs}" --connect-timeout "${timeout_secs}" --max-filesize "${max_bytes}" --proto '=https' --proto-redir '=https' --max-redirs 0 --resolve "${host}:${port}:${ip}" -o "${tmp_file}" "${uri}"; then
+					curl_rc=0
+					break
+				fi
+				curl_rc=$?
+				case "${curl_rc}" in
+				63)
+					printf 'Payload exceeds %s bytes\n' "${max_bytes}" >&2
+					return 6
+					;; # CURLE_FILESIZE_EXCEEDED
+				esac
+			done
+			if [ "${curl_rc}" -ne 0 ]; then
 				return 5
-				;;
-			esac
+			fi
+		fi
+		if [ "${tried_any}" != "true" ]; then
+			if ! curl -fsS --max-time "${timeout_secs}" --connect-timeout "${timeout_secs}" --max-filesize "${max_bytes}" --proto '=https' --proto-redir '=https' --max-redirs 0 -o "${tmp_file}" "${uri}"; then
+				case "$?" in
+				63)
+					printf 'Payload exceeds %s bytes\n' "${max_bytes}" >&2
+					return 6
+					;; # CURLE_FILESIZE_EXCEEDED
+				*)
+					return 5
+					;;
+				esac
+			fi
 		fi
 	elif command -v wget >/dev/null 2>&1; then
 		local limit_plus_one=$((max_bytes + 1))
