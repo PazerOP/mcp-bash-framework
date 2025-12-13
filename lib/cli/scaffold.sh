@@ -25,7 +25,7 @@ mcp_scaffold_register_completion() {
 		cat >"${register_file}" <<'EOF'
 #!/usr/bin/env bash
 # Manual registration script; invoked when executable (manual overrides).
-# Preferred pattern is to emit a single JSON registry object (see examples/09-manual-registration/server.d/register.sh).
+# Preferred pattern is declarative: server.d/register.json (see examples/09-registry-overrides/server.d/register.json).
 # Helper functions remain available for compatibility.
 
 set -euo pipefail

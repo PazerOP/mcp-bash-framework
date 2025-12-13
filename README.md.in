@@ -390,13 +390,15 @@ If the SDK can’t be resolved, the script exits with a clear error.
 
 ## Completions
 
-Completions are registered via `server.d/register.sh` (they are not auto-discovered). A minimal registration snippet:
+Completions are manually registered (they are not auto-discovered). Prefer declarative registration via `server.d/register.json`:
 
-```bash
-# server.d/register.sh
-mcp_completion_manual_begin
-mcp_completion_register_manual '{"name":"example.completion","path":"completions/example.sh","timeoutSecs":5}'
-mcp_completion_manual_finalize
+```json
+{
+  "version": 1,
+  "completions": [
+    {"name":"example.completion","path":"completions/example.sh","timeoutSecs":5}
+  ]
+}
 ```
 
 Paths are resolved relative to `MCPBASH_PROJECT_ROOT`, and registry refreshes pick them up automatically.
@@ -434,7 +436,7 @@ The [`examples/`](examples/) directory shows common patterns end-to-end:
 | [**06-embedded-resources**](examples/06-embedded-resources/) | Embedding file content directly in tool responses. |
 | [**07-prompts-basics**](examples/07-prompts-basics/) | Discovering and rendering prompt templates. |
 | [**08-elicitation**](examples/08-elicitation/) | Client-driven elicitation prompts that gate tool execution. |
-| [**09-manual-registration**](examples/09-manual-registration/) | Manual registry overrides, live progress streaming, and a custom resource provider. |
+| [**09-registry-overrides**](examples/09-registry-overrides/) | Declarative registry overrides, live progress streaming, and a custom resource provider. |
 | [**10-completions**](examples/10-completions/) | Completion registration, query filtering, and pagination/hasMore. |
 | [**11-resource-templates**](examples/11-resource-templates/) | Resource template discovery, manual overrides, and client-side expansion. |
 | [**Advanced: ffmpeg-studio**](examples/advanced/ffmpeg-studio/) | Real-world application: video processing pipeline with media inspection (optional, heavy deps). |

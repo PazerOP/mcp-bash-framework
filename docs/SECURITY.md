@@ -9,11 +9,12 @@
 mcp-bash keeps the attack surface small: every tool is a subprocess with a controlled environment and no shared state. Security comes from reducing what the framework does, not layering more on top.
 
 ## Threat model
-- **Attack surface**: tool/resource/prompt executables, manual registration hooks (`server.d/register.sh`), environment passed to tools, and filesystem access through resource providers.
+- **Attack surface**: tool/resource/prompt executables, manual registration hooks (`server.d/register.sh`), declarative registration (`server.d/register.json`), environment passed to tools, and filesystem access through resource providers.
 - **Trust boundaries**: operators are trusted; tool authors may be semi-trusted; external callers (clients) are untrusted.
 
 ## Runtime guardrails
 - Project hooks are **opt-in**: `server.d/register.sh` executes only when `MCPBASH_ALLOW_PROJECT_HOOKS=true` and the file is owned by the current user with no group/world write bits. Treat hooks like code you would ship; never enable on untrusted repos.
+- Prefer declarative registration when possible: `server.d/register.json` registers tools/resources/prompts/resource templates/completions **without executing shell code** during list/refresh flows. It is still security-sensitive configuration (it changes exposed surface area) and is refused if ownership/perms are insecure.
 - Default tool env is minimal (`MCPBASH_TOOL_ENV_MODE=minimal` keeps PATH/HOME/TMPDIR/LANG plus `MCP_*`/`MCPBASH_*`). Use `allowlist` via `MCPBASH_TOOL_ENV_ALLOWLIST` or `inherit` only when the tool needs it.
 - Inherit mode is gated: set `MCPBASH_TOOL_ENV_INHERIT_ALLOW=true` to allow `MCPBASH_TOOL_ENV_MODE=inherit`; otherwise tool calls fail closed to prevent accidental env leaks.
 - Tools are **deny-by-default** unless explicitly allowlisted via `MCPBASH_TOOL_ALLOWLIST` (set to `*` only in trusted projects). Tool paths must live under `MCPBASH_TOOLS_DIR` and cannot be group/world writable.

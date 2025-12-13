@@ -62,7 +62,7 @@ cat <<'JSON' >"${WORKSPACE}/preinit.ndjson"
 JSON
 run_requests "${WORKSPACE}/preinit.ndjson" "${WORKSPACE}/preinit.resp"
 resp_file="${WORKSPACE}/preinit.resp"
-assert_error_code "${resp_file}" "pre" "-32002" "Server not initialized"
+assert_error_code "${resp_file}" "pre" "-32000" "Server not initialized"
 
 # 2) Double initialize should error on second call.
 cat <<'JSON' >"${WORKSPACE}/double-init.ndjson"

@@ -54,6 +54,7 @@ Authoritative list of supported environment variables. Defaults shown are the sh
 | `MCPBASH_GIT_MAX_KB` | `51200` (cap ≤1048576) | Git repository size guard (KB). |
 | `MCPBASH_CORRUPTION_WINDOW` | `60` | Stdout corruption tracking window (seconds). |
 | `MCPBASH_CORRUPTION_THRESHOLD` | `3` | Corruption events allowed within the window before exit. |
+| `MCPBASH_MAX_MANUAL_REGISTRY_BYTES` | `1048576` | Max bytes accepted from manual registration inputs: `server.d/register.json` file size and `server.d/register.sh` captured stdout/stderr output. |
 | `MCPBASH_ALLOW_PROJECT_HOOKS` | `false` | Must be `true` to execute project `server.d/register.sh` hooks. Refused if file is group/world-writable or ownership mismatches. |
 
 Example allowlist usage to keep tool env minimal while letting HOME/PATH through:

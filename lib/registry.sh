@@ -5,6 +5,9 @@ set -euo pipefail
 
 MCPBASH_REGISTRY_FASTPATH_FILE=""
 MCPBASH_REGISTRY_MAX_LIMIT_DEFAULT=104857600
+MCP_REGISTRY_DECLARATIVE_SIGNATURE=""
+MCP_REGISTRY_DECLARATIVE_LAST_RUN=0
+MCP_REGISTRY_DECLARATIVE_COMPLETE=false
 MCP_REGISTRY_REGISTER_SIGNATURE=""
 MCP_REGISTRY_REGISTER_LAST_RUN=0
 MCP_REGISTRY_REGISTER_COMPLETE=false
@@ -428,6 +431,240 @@ mcp_registry_register_abort_all() {
 	mcp_completion_manual_abort 2>/dev/null || true
 }
 
+mcp_registry_declarative_path() {
+	printf '%s' "${MCPBASH_SERVER_DIR}/register.json"
+}
+
+mcp_registry_declarative_reset_state() {
+	MCP_REGISTRY_DECLARATIVE_COMPLETE=false
+}
+
+mcp_registry_declarative_set_error_all() {
+	local message="$1"
+	mcp_registry_register_set_status "tools" "error" "${message}"
+	mcp_registry_register_set_status "resources" "error" "${message}"
+	mcp_registry_register_set_status "resourceTemplates" "error" "${message}"
+	mcp_registry_register_set_status "prompts" "error" "${message}"
+	mcp_registry_register_set_status "completions" "error" "${message}"
+	MCP_REGISTRY_DECLARATIVE_COMPLETE=true
+}
+
+mcp_registry_declarative_check_bom() {
+	local path="$1"
+	# jq/gojq typically reject BOM-prefixed JSON; provide a clearer error.
+	local prefix=""
+	prefix="$(dd if="${path}" bs=3 count=1 2>/dev/null || printf '')"
+	if [ "${prefix}" = $'\xEF\xBB\xBF' ]; then
+		return 1
+	fi
+	return 0
+}
+
+mcp_registry_declarative_validate_and_normalize() {
+	local raw_json="$1"
+	local bin="${MCPBASH_JSON_TOOL_BIN}"
+	local normalized
+	if ! normalized="$(printf '%s' "${raw_json}" | "${bin}" -c '
+		def infer_provider:
+			(.uri // "") as $u
+			| if ($u|contains("://")) then ($u|split("://")[0]) else "" end
+			| if . == "" then "file"
+			  elif . == "git+https" then "git"
+			  else . end;
+		. as $root
+		| if type != "object" then error("register.json must be a JSON object") else . end
+		| if (.version | type) != "number" then error("register.json version must be a number") else . end
+		| if (.version != 1) then error("register.json version must be 1") else . end
+		| ((keys - ["version","tools","resources","resourceTemplates","prompts","completions","_meta"]) as $extra
+			| if ($extra|length) > 0 then error("register.json unknown keys: " + ($extra|join(","))) else . end)
+		| if (has("_meta") and (._meta != null) and ((._meta|type) != "object")) then error("register.json _meta must be an object") else . end
+		| if (has("tools") and (.tools != null) and ((.tools|type) != "array")) then error("register.json tools must be an array or null") else . end
+		| if (has("resources") and (.resources != null) and ((.resources|type) != "array")) then error("register.json resources must be an array or null") else . end
+		| if (has("resourceTemplates") and (.resourceTemplates != null) and ((.resourceTemplates|type) != "array")) then error("register.json resourceTemplates must be an array or null") else . end
+		| if (has("prompts") and (.prompts != null) and ((.prompts|type) != "array")) then error("register.json prompts must be an array or null") else . end
+		| if (has("completions") and (.completions != null) and ((.completions|type) != "array")) then error("register.json completions must be an array or null") else . end
+		| {version: 1}
+		  + (if has("_meta") and ._meta != null then {_meta: ._meta} else {} end)
+		  + (if has("tools") and .tools != null then {tools: .tools} else {} end)
+		  + (if has("resources") and .resources != null then {resources: (.resources | map(if (.provider // "") == "" then . + {provider: infer_provider} else . end))} else {} end)
+		  + (if has("resourceTemplates") and .resourceTemplates != null then {resourceTemplates: .resourceTemplates} else {} end)
+		  + (if has("prompts") and .prompts != null then {prompts: .prompts} else {} end)
+		  + (if has("completions") and .completions != null then {completions: .completions} else {} end)
+	' 2>/dev/null)"; then
+		return 1
+	fi
+	printf '%s' "${normalized}"
+}
+
+mcp_registry_declarative_execute() {
+	local json_path="$1"
+	local signature="$2"
+
+	if [ "${MCPBASH_JSON_TOOL:-none}" = "none" ] || [ -z "${MCPBASH_JSON_TOOL_BIN:-}" ]; then
+		mcp_registry_declarative_set_error_all "Declarative register.json requires jq/gojq (JSON tooling unavailable)"
+		return 0
+	fi
+
+	if ! mcp_registry_register_check_permissions "${json_path}"; then
+		mcp_registry_declarative_set_error_all "Declarative register.json permissions/ownership invalid"
+		return 0
+	fi
+
+	local size
+	size="$(mcp_registry_register_filesize "${json_path}")"
+	local manual_limit="${MCPBASH_MAX_MANUAL_REGISTRY_BYTES:-1048576}"
+	case "${manual_limit}" in
+	'' | *[!0-9]*) manual_limit=1048576 ;;
+	0) manual_limit=1048576 ;;
+	esac
+	if [ "${size:-0}" -gt "${manual_limit}" ]; then
+		mcp_registry_declarative_set_error_all "Declarative register.json exceeded ${manual_limit} bytes"
+		return 0
+	fi
+
+	if ! mcp_registry_declarative_check_bom "${json_path}"; then
+		mcp_registry_declarative_set_error_all "Declarative register.json has a UTF-8 BOM; save as UTF-8 without BOM"
+		return 0
+	fi
+
+	local raw_json=""
+	if ! raw_json="$(cat "${json_path}" 2>/dev/null)"; then
+		mcp_registry_declarative_set_error_all "Unable to read declarative register.json"
+		return 0
+	fi
+
+	local normalized=""
+	if ! normalized="$(mcp_registry_declarative_validate_and_normalize "${raw_json}")"; then
+		# mcp_registry_declarative_validate_and_normalize is quiet; re-run to capture error details.
+		local details=""
+		details="$(printf '%s' "${raw_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.' 2>&1 || true)"
+		if mcp_logging_verbose_enabled; then
+			mcp_registry_declarative_set_error_all "Declarative register.json parsing/validation failed: ${details}"
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json parsing/validation failed (enable MCPBASH_LOG_VERBOSE=true for details)"
+		fi
+		return 0
+	fi
+
+	mcp_registry_register_reset_state
+	MCP_REGISTRY_DECLARATIVE_SIGNATURE="${signature}"
+	MCP_REGISTRY_DECLARATIVE_LAST_RUN="$(date +%s)"
+
+	# Extract present kinds as minimal objects. Missing/null keys are absent and should fall through to discovery.
+	local tools_json resources_json templates_json prompts_json completions_json
+	tools_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'if has("tools") then {tools: .tools} else empty end' 2>/dev/null || printf '')"
+	resources_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'if has("resources") then {resources: .resources} else empty end' 2>/dev/null || printf '')"
+	templates_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'if has("resourceTemplates") then {resourceTemplates: .resourceTemplates} else empty end' 2>/dev/null || printf '')"
+	prompts_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'if has("prompts") then {prompts: .prompts} else empty end' 2>/dev/null || printf '')"
+	completions_json="$(printf '%s' "${normalized}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'if has("completions") then {completions: .completions} else empty end' 2>/dev/null || printf '')"
+
+	# Validate all present kinds first (no writes). Do it in one subshell so
+	# resourceTemplates can see resources when both are present.
+	local failed_kind=""
+	if ! failed_kind="$(
+		(
+			# Prevent writes during validation and avoid accidental recursive refresh.
+			export MCPBASH_REGISTRY_REFRESH_NO_WRITE=true
+			export MCP_REGISTRY_REGISTER_COMPLETE=false
+			mcp_tools_init
+			mcp_resources_init
+			mcp_resources_templates_init
+			mcp_prompts_init
+			if [ -n "${tools_json}" ]; then
+				mcp_tools_apply_manual_json "${tools_json}" || {
+					printf '%s' 'tools'
+					exit 1
+				}
+			fi
+			if [ -n "${resources_json}" ]; then
+				mcp_resources_apply_manual_json "${resources_json}" || {
+					printf '%s' 'resources'
+					exit 1
+				}
+			fi
+			if [ -n "${templates_json}" ]; then
+				mcp_resources_templates_apply_manual_json "${templates_json}" || {
+					printf '%s' 'resourceTemplates'
+					exit 1
+				}
+			fi
+			if [ -n "${prompts_json}" ]; then
+				mcp_prompts_apply_manual_json "${prompts_json}" || {
+					printf '%s' 'prompts'
+					exit 1
+				}
+			fi
+			if [ -n "${completions_json}" ]; then
+				mcp_completion_apply_manual_json "${completions_json}" || {
+					printf '%s' 'completions'
+					exit 1
+				}
+			fi
+		)
+	)"; then
+		mcp_registry_declarative_set_error_all "Declarative register.json validation failed for ${failed_kind:-unknown}"
+		return 0
+	fi
+
+	# Apply present kinds for real (writes enabled). Absent kinds remain skipped
+	# so callers fall through to auto-discovery.
+	mcp_tools_init
+	mcp_resources_init
+	mcp_resources_templates_init
+	mcp_prompts_init
+
+	mcp_registry_register_set_status "tools" "skipped" ""
+	mcp_registry_register_set_status "resources" "skipped" ""
+	mcp_registry_register_set_status "resourceTemplates" "skipped" ""
+	mcp_registry_register_set_status "prompts" "skipped" ""
+	mcp_registry_register_set_status "completions" "skipped" ""
+
+	if [ -n "${tools_json}" ]; then
+		if mcp_tools_apply_manual_json "${tools_json}"; then
+			mcp_registry_register_set_status "tools" "ok" ""
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json apply failed for tools"
+			return 0
+		fi
+	fi
+	if [ -n "${resources_json}" ]; then
+		if mcp_resources_apply_manual_json "${resources_json}"; then
+			mcp_registry_register_set_status "resources" "ok" ""
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json apply failed for resources"
+			return 0
+		fi
+	fi
+	if [ -n "${templates_json}" ]; then
+		if mcp_resources_templates_apply_manual_json "${templates_json}"; then
+			mcp_registry_register_set_status "resourceTemplates" "ok" ""
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json apply failed for resourceTemplates"
+			return 0
+		fi
+	fi
+	if [ -n "${prompts_json}" ]; then
+		if mcp_prompts_apply_manual_json "${prompts_json}"; then
+			mcp_registry_register_set_status "prompts" "ok" ""
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json apply failed for prompts"
+			return 0
+		fi
+	fi
+	if [ -n "${completions_json}" ]; then
+		if mcp_completion_apply_manual_json "${completions_json}"; then
+			# shellcheck disable=SC2034  # consumed by completion refresh path in lib/completion.sh
+			MCP_COMPLETION_MANUAL_LOADED=true
+			mcp_registry_register_set_status "completions" "ok" ""
+		else
+			mcp_registry_declarative_set_error_all "Declarative register.json apply failed for completions"
+			return 0
+		fi
+	fi
+
+	MCP_REGISTRY_DECLARATIVE_COMPLETE=true
+}
+
 mcp_registry_register_finalize_kind() {
 	local kind="$1"
 	local script_output="$2"
@@ -692,6 +929,7 @@ mcp_registry_register_execute() {
 	if [ "${script_size:-0}" -gt "${manual_limit}" ]; then
 		mcp_registry_register_set_status "tools" "error" "Manual registration output exceeded ${manual_limit} bytes"
 		mcp_registry_register_set_status "resources" "error" "Manual registration output exceeded ${manual_limit} bytes"
+		mcp_registry_register_set_status "resourceTemplates" "error" "Manual registration output exceeded ${manual_limit} bytes"
 		mcp_registry_register_set_status "prompts" "error" "Manual registration output exceeded ${manual_limit} bytes"
 		mcp_registry_register_set_status "completions" "error" "Manual registration output exceeded ${manual_limit} bytes"
 		mcp_registry_register_abort_all
@@ -706,6 +944,7 @@ mcp_registry_register_execute() {
 		fi
 		mcp_registry_register_set_status "tools" "error" "${message}"
 		mcp_registry_register_set_status "resources" "error" "${message}"
+		mcp_registry_register_set_status "resourceTemplates" "error" "${message}"
 		mcp_registry_register_set_status "prompts" "error" "${message}"
 		mcp_registry_register_set_status "completions" "error" "${message}"
 		if [ -n "${script_output}" ]; then
@@ -730,6 +969,8 @@ mcp_registry_register_execute() {
 
 mcp_registry_register_apply() {
 	local kind="$1"
+	local json_path
+	json_path="$(mcp_registry_declarative_path)"
 	local script_path="${MCPBASH_SERVER_DIR}/register.sh"
 	# Expose last outcome for callers that need to distinguish "applied" vs
 	# "skipped" while still treating skipped as a non-error state.
@@ -739,6 +980,47 @@ mcp_registry_register_apply() {
 	MCP_REGISTRY_REGISTER_LAST_STATUS=""
 	# shellcheck disable=SC2034
 	MCP_REGISTRY_REGISTER_LAST_APPLIED=false
+
+	# Declarative registration takes precedence over register.sh and is always
+	# attempted if present. If it fails validation, we fail loudly and do not
+	# fall back to executing register.sh.
+	if [ -f "${json_path}" ]; then
+		local signature
+		signature="$(mcp_registry_register_signature "${json_path}")"
+		local now ttl
+		now="$(date +%s)"
+		ttl="$(mcp_registry_register_ttl)"
+		if [ "${MCP_REGISTRY_DECLARATIVE_COMPLETE}" = true ]; then
+			if [ "${signature}" != "${MCP_REGISTRY_DECLARATIVE_SIGNATURE}" ] || [ $((now - MCP_REGISTRY_DECLARATIVE_LAST_RUN)) -ge "${ttl}" ]; then
+				mcp_registry_declarative_reset_state
+			fi
+		fi
+		if [ "${MCP_REGISTRY_DECLARATIVE_COMPLETE}" != true ]; then
+			mcp_registry_declarative_execute "${json_path}" "${signature}"
+		fi
+		local status=""
+		case "${kind}" in
+		tools) status="${MCP_REGISTRY_REGISTER_STATUS_TOOLS}" ;;
+		resources) status="${MCP_REGISTRY_REGISTER_STATUS_RESOURCES}" ;;
+		resourceTemplates) status="${MCP_REGISTRY_REGISTER_STATUS_RESOURCE_TEMPLATES}" ;;
+		prompts) status="${MCP_REGISTRY_REGISTER_STATUS_PROMPTS}" ;;
+		completions) status="${MCP_REGISTRY_REGISTER_STATUS_COMPLETIONS}" ;;
+		esac
+		MCP_REGISTRY_REGISTER_LAST_STATUS="${status}"
+		case "${status}" in
+		ok)
+			MCP_REGISTRY_REGISTER_LAST_APPLIED=true
+			return 0
+			;;
+		skipped)
+			return 0
+			;;
+		error)
+			return 2
+			;;
+		esac
+		return 1
+	fi
 	# On Windows (Git Bash/MSYS), -x test is unreliable. Check for shebang as fallback.
 	if [ ! -x "${script_path}" ]; then
 		if ! head -n1 "${script_path}" 2>/dev/null | grep -q '^#!'; then

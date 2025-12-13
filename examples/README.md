@@ -24,4 +24,5 @@ Highlights:
 - `10-completions` — manual completion registration, query filtering, pagination/hasMore.
 - `08-elicitation` — confirm/choice/multi-choice flows when clients advertise elicitation.
 - `11-resource-templates` — auto/manual template discovery, overrides, and client-side expansion.
+- `advanced/register-sh-hooks` — advanced project hooks via `server.d/register.sh` (dynamic registration; opt-in).
 - Full ladder lives in the main README table.

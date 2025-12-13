@@ -236,7 +236,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Embedded resources: `examples/06-embedded-resources`.
   - Prompts basics: `examples/07-prompts-basics`.
   - Elicitation: `examples/08-elicitation`.
-  - Manual registration + live progress: `examples/09-manual-registration`.
+  - Registry overrides + live progress: `examples/09-registry-overrides`.
   - Advanced ffmpeg studio: `examples/advanced/ffmpeg-studio`.
 
 ## COMMANDS & TESTING

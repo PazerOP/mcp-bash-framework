@@ -1010,7 +1010,9 @@ mcp_core_emit_not_initialized() {
 	if [ -z "${id_json}" ]; then
 		id_json="null"
 	fi
-	rpc_send_line "$(mcp_core_build_error_response "${id_json}" -32002 "Server not initialized" "")"
+	# MCP reserves -32002 for resources/read "Resource not found" (spec 2025-11-25).
+	# Use a distinct server error for pre-init gating.
+	rpc_send_line "$(mcp_core_build_error_response "${id_json}" -32000 "Server not initialized" "")"
 }
 
 mcp_core_emit_shutting_down() {
@@ -1028,7 +1030,7 @@ mcp_core_emit_shutting_down() {
 # -32700 parse error, -32600 invalid request, -32601 method not found,
 # -32602 invalid params, -32603 internal error.
 # We also use the server-reserved range (-32000..-32099) for MCP-specific states:
-# -32001 cancelled, -32002 not initialized, -32003 shutting down,
+# -32000 not initialized, -32001 cancelled, -32003 shutting down,
 # -32005 exit before shutdown. Timeouts use -32603 (internal error) by policy.
 mcp_core_build_error_response() {
 	local id_json="$1"

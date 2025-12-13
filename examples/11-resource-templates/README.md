@@ -24,7 +24,7 @@
 
 **Success criteria**
 - `resources/templates/list` returns three templates sorted by name.
-- Manual registration overrides `project-files` (description/annotations are taken from `server.d/register.sh`).
+- Manual registration overrides `project-files` (description/annotations are taken from `server.d/register.json`).
 - Reading `file://./resources/example.txt` succeeds (clients expand `project-files` to a concrete URI).
 
 **Troubleshooting**

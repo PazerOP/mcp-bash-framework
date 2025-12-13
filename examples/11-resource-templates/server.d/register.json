@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "resourceTemplates": [
+    {
+      "name": "project-files",
+      "uriTemplate": "file:///{path}",
+      "description": "Manual override with annotations applied",
+      "annotations": {"audience": ["assistant"]}
+    },
+    {
+      "name": "logs-by-date",
+      "title": "Logs by Date",
+      "uriTemplate": "file:///var/log/{service}/{date}.log",
+      "description": "Access log files by service and date"
+    }
+  ]
+}

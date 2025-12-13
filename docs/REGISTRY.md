@@ -173,13 +173,46 @@ Key behaviors:
 - Changes to templates trigger the existing `notifications/resources/list_changed` path (`MCP_RESOURCES_CHANGED` flag is shared with resources).
 - `resources/templates/list` supports the same `limit` extension and `total` field as other list endpoints; cursor decoding uses the templates registry hash so stale cursors are rejected after changes.
 
+## Declarative registration (`server.d/register.json`)
+
+Projects can register tools/resources/prompts/resource templates/completions via a **data-only** file at `server.d/register.json`. This avoids executing project shell code during list/refresh flows.
+
+- **Precedence**: if `server.d/register.json` exists, it is used instead of `server.d/register.sh`. If `register.json` is invalid, the server fails loudly and does **not** fall back to executing `register.sh`.
+- **Version**: requires `"version": 1`.
+- **Strictness**:
+  - standard JSON only (no comments/JSON5)
+  - UTF-8 required; **no BOM**
+  - unknown top-level keys are rejected (except optional `_meta`)
+  - for each kind, a present key must be an array (or `null`)
+- **Per-kind semantics**:
+  - key **absent** or `null`: fall through to auto-discovery for that kind
+  - key present with `[]`: explicitly disables that kind (no scan)
+- **Size limit**: file size is capped by `MCPBASH_MAX_MANUAL_REGISTRY_BYTES` (default 1 MiB).
+
+Top-level schema:
+
+```json
+{
+  "version": 1,
+  "tools": [],
+  "resources": [],
+  "resourceTemplates": [],
+  "prompts": [],
+  "completions": []
+}
+```
+
+## Hook registration (`server.d/register.sh`)
+
 Manual registration in `server.d/register.sh` mirrors the tools/resources pattern (only runs when `MCPBASH_ALLOW_PROJECT_HOOKS=true` and the script is owned by the current user with safe permissions):
 ```bash
 mcp_resources_templates_manual_begin
 mcp_resources_templates_register_manual '{"name":"logs-by-date","uriTemplate":"file:///var/log/{service}/{date}.log"}'
 mcp_resources_templates_manual_finalize
 ```
-Manual entries pass through the same validators as auto-discovery and are merged on top of discovered templates (manual wins). Script output can also provide a `resourceTemplates` array for bulk registration. See [`docs/RESOURCE-TEMPLATES.md`](RESOURCE-TEMPLATES.md) for end-to-end guidance and examples.
+Manual entries pass through the same validators as auto-discovery and are merged on top of discovered templates (manual wins). Script output can also provide a `resourceTemplates` array for bulk registration.
+
+See `examples/advanced/register-sh-hooks/` for a concrete hook-based setup (dynamic registration; opt-in; avoid side effects).
 
 ## `.registry/prompts.json`
 

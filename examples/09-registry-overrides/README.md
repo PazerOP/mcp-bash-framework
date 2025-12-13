@@ -1,7 +1,7 @@
-# 09-manual-registration
+# 09-registry-overrides
 
 **What you’ll learn**
-- Replacing auto-discovery with curated registry entries via `server.d/register.sh`
+- Replacing auto-discovery with curated registry entries via `server.d/register.json`
 - Custom provider example (`echo://`) and a progress demo tool
 - Optional live progress streaming (`MCPBASH_ENABLE_LIVE_PROGRESS=true`)
 
@@ -11,7 +11,7 @@
 
 **Run**
 ```bash
-./examples/run 09-manual-registration
+./examples/run 09-registry-overrides
 ```
 
 **Transcript (abridged)**
@@ -24,12 +24,13 @@
 ```
 
 **Success criteria**
-- Registry is sourced from `server.d/register.sh`; changes under tools/resources/prompts alone do not auto-add.
+- Registry overrides are sourced from `server.d/register.json`.
 - `manual.progress` emits progress (and streams live if env var set).
 - `echo.hello` returns the echoed payload via custom provider; `manual.prompt` renders with optional `topic`.
 
 **Troubleshooting**
-- Ensure scripts are executable (`chmod +x examples/09-manual-registration/server.d/register.sh examples/09-manual-registration/tools/*.sh`).
+- `server.d/register.json` is strict JSON: no comments/JSON5, UTF-8, no BOM.
+- Ensure tool scripts are executable (`chmod +x examples/09-registry-overrides/tools/*.sh`).
 - Live progress requires `MCPBASH_ENABLE_LIVE_PROGRESS=true`; otherwise notifications flush at completion.
 - If you see minimal-mode warnings, install jq/gojq; minimal mode disables tools/resources/prompts.
 - Avoid CRLF in requests; send LF-only NDJSON.

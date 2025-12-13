@@ -59,7 +59,7 @@ expect_code() {
 
 expect_code "parse" "-32700"
 expect_code "missing" "-32600"
-expect_code "preinit" "-32002"
+expect_code "preinit" "-32000"
 expect_code "unknown" "-32601"
 expect_code "batch" "-32600"
 

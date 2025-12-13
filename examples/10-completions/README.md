@@ -1,7 +1,7 @@
 # 10-completions
 
 **What you'll learn**
-- How to register a completion with `server.d/register.sh`
+- How to register a completion with `server.d/register.json`
 - How completion scripts read `.query` (or `.prefix`) and paginate results
 - How `hasMore`/`nextCursor` behave when the server derives cursors for you
 

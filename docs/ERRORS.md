@@ -101,14 +101,15 @@ Example `resources/read` error payload:
 | `-32602` | Invalid params (unsupported protocol version, invalid cursor/log level, missing/invalid remote token) | `handlers/lifecycle.sh`, `handlers/completion.sh`, `handlers/logging.sh`, `lib/auth.sh`, registry cursors |
 | `-32603` | Internal errors (empty handler response, registry size/parse failures, tool output/stderr over limits, provider failures); also used for tool timeouts | `lib/core.sh`, `lib/tools.sh`, `lib/resources.sh`, `lib/prompts.sh` |
 | `-32001` | Tool cancelled (SIGTERM/INT from client) | `lib/tools.sh` |
-| `-32002` | Server not initialized (`initialize` not completed) | `lib/core.sh` |
+| `-32000` | Server not initialized (`initialize` not completed) | `lib/core.sh` |
+| `-32002` | Resource not found (`resources/read`) | `lib/resources.sh` |
 | `-32003` | Server shutting down (rejecting new work) | `lib/core.sh` |
 | `-32005` | `exit` called before `shutdown` was requested | `handlers/lifecycle.sh` |
 
 Size guardrails: `mcp_core_guard_response_size` rejects oversized responses with `-32603` (tool/resource reads use `MCPBASH_MAX_TOOL_OUTPUT_SIZE`, default 10MB; registry/list payloads use `MCPBASH_REGISTRY_MAX_BYTES`, default 100MB) and does not return partial content.
 
 ## Resource provider exit codes
-- `file.sh`: `2` outside allowed roots → `-32603`; `3` missing file → `-32602`.
+- `file.sh`: `2` outside allowed roots → `-32603`; `3` missing file → `-32002`.
 - `git.sh`: `4` invalid URI or missing git → `-32602`; `5` clone/fetch failure → `-32603`.
 - `https.sh`: `4` invalid URI or missing curl → `-32602`; `5` network/timeout → `-32603`; `6` payload exceeds `MCPBASH_HTTPS_MAX_BYTES` → `-32603`.
 - Any other provider exit code maps to `-32603` with stderr text when available.

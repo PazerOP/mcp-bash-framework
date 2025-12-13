@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified completion script argument parsing: `MCP_COMPLETION_ARGS_JSON` is `params.arguments` (use `.query` / `.prefix`).
 
 ### Added
+- Declarative project registration via `server.d/register.json` (data-only alternative to `server.d/register.sh`) with strict validation, safe-permissions checks, and per-kind override semantics.
 - `mcp-bash run-tool` now supports per-invocation allowlisting via `--allow-self`, `--allow <tool>`, and `--allow-all`.
 - Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
 - Installer `--archive` flag to install from a local tar.gz (or URL) after verifying it externally (or via `--verify`).
@@ -56,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git provider now only accepts `git+https://` URIs (plaintext `git://` removed).
 
 ### Fixed
+- Manual registration hook size-limit errors now set status for `resourceTemplates` consistently.
+- JSON-RPC handlers no longer emit error `code: 0` when underlying registry failures occur (falls back to `-32603`).
 - Removed duplicate YAML meta from the progress-and-cancellation example (JSON is canonical).
 - Windows CI failures caused by `gojq` `E2BIG` exec errors are avoided by the jq-first detection order and exec sanity check.
 - Windows Git Bash example flakiness: runtime now guarantees `MCPBASH_STATE_DIR`/`MCPBASH_LOCK_ROOT` exist (with a short-path fallback), and example tests capture server stderr and fail fast on shutdown watchdog timeouts or `mktemp` template failures.
