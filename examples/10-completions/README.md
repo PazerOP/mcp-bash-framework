@@ -2,7 +2,7 @@
 
 **What you'll learn**
 - How to register a completion with `server.d/register.sh`
-- How completion scripts read `arguments.query` (or `prefix`) and paginate results
+- How completion scripts read `.query` (or `.prefix`) and paginate results
 - How `hasMore`/`nextCursor` behave when the server derives cursors for you
 
 **Prereqs**

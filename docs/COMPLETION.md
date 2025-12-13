@@ -31,6 +31,12 @@ Environment variables:
 - `MCP_COMPLETION_OFFSET` – pagination offset (int).
 - `MCP_COMPLETION_ARGS_HASH` – opaque hash for cursor binding.
 
+Recommended parsing:
+```bash
+# Prefer .query; fall back to .prefix; treat missing as empty string.
+query="$(printf '%s' "${MCP_COMPLETION_ARGS_JSON:-{}}" | jq -r '(.query // .prefix // "")')"
+```
+
 Stdout (any of):
 - JSON array of suggestions:
   ```json
@@ -60,5 +66,5 @@ Stdout (any of):
 ## Example Flow
 See `examples/10-completions`:
 - Registers `demo.completion` via `server.d/register.sh`.
-- Script reads `arguments.query` (or `prefix`) from `MCP_COMPLETION_ARGS_JSON`, filters suggestions, and paginates with `hasMore`.
+- Script reads `.query` (or `.prefix`) from `MCP_COMPLETION_ARGS_JSON` (which is `params.arguments`), filters suggestions, and paginates with `hasMore`.
 - `completion/complete` returns suggestions, `hasMore`, and `nextCursor` until results are exhausted.

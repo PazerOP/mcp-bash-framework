@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README MCP spec coverage table now marks Resources as fully supported (templates/binary included).
 - Fixed `docs/ERRORS.md` examples to reflect that `result.isError=true` is derived from a non-zero tool exit.
 - Added `docs/INSPECTOR.md` with MCP Inspector recipes and strict-client schema/shape pitfalls.
+- Clarified completion script argument parsing: `MCP_COMPLETION_ARGS_JSON` is `params.arguments` (use `.query` / `.prefix`).
 
 ### Added
 - `mcp-bash run-tool` now supports per-invocation allowlisting via `--allow-self`, `--allow <tool>`, and `--allow-all`.
