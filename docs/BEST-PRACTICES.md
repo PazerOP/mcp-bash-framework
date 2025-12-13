@@ -695,7 +695,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 
 ## 8. Performance & limits
 - Consult [docs/LIMITS.md](LIMITS.md) before tuning concurrency, payload sizes, or progress frequency.
-- **Batch and pagination tuning** – When returning large lists, paginate aggressively via `lib/paginate.sh` helpers and include `hasMore` to prevent client overload.
+- **Batch and pagination tuning** – When returning large lists, paginate aggressively via `lib/paginate.sh` helpers and return `nextCursor` when more items remain to prevent client overload.
 - **Timeout strategies** – Prefer short defaults with retries over very long-running tools. If clients require streaming, add progress signals every ~5 seconds to keep the channel alive.
 - **Benchmarking** – Capture `time bin/mcp-bash < sample.json` metrics before/after optimisation. When adjusting concurrency, monitor CPU steal and memory pressure to avoid thrashing.
 - **Stress testing** – Re-run integration suites concurrently (e.g., `GNU parallel` around `test/integration/test_capabilities.sh`) to validate lock coordination in `lib/lock.sh`.
@@ -713,7 +713,7 @@ sequenceDiagram
   Client->>Server: setLevel / subscribe
   Server-->>Client: notifications (tools/resources/prompts)
   Client->>Server: tool invocation
-  Server-->>Client: result + hasMore cursor
+  Server-->>Client: result + nextCursor
 ```
 
 - **Full vs minimal mode** – Document which commands require full JSON tooling. For example, completing resource list pagination depends on `jq` or `gojq` for canonicalisation; clients should handle `minimal` capability flags gracefully.
