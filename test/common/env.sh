@@ -114,6 +114,12 @@ test_capture_failure_bundle() {
 	if [ -z "${log_root}" ]; then
 		return 0
 	fi
+	# On Windows runners, MCPBASH_LOG_DIR may be a native path (e.g. D:\a\_temp\...).
+	# Normalize to a MSYS path so mkdir/cp work reliably.
+	if command -v cygpath >/dev/null 2>&1; then
+		log_root="$(cygpath -u "${log_root}" 2>/dev/null || printf '%s' "${log_root}")"
+	fi
+	log_root="${log_root//\\//}"
 
 	local ts
 	ts="$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)"
@@ -131,6 +137,10 @@ test_capture_failure_bundle() {
 
 	# Copy common request/response artifacts from the workspace.
 	if [ -n "${workspace}" ] && [ -d "${workspace}" ]; then
+		if command -v cygpath >/dev/null 2>&1; then
+			workspace="$(cygpath -u "${workspace}" 2>/dev/null || printf '%s' "${workspace}")"
+		fi
+		workspace="${workspace//\\//}"
 		for f in \
 			"${workspace}"/requests*.ndjson \
 			"${workspace}"/responses*.ndjson \
@@ -143,6 +153,10 @@ test_capture_failure_bundle() {
 
 	# Copy high-signal state/stream artifacts from the server state dir.
 	if [ -n "${state_dir}" ] && [ -d "${state_dir}" ]; then
+		if command -v cygpath >/dev/null 2>&1; then
+			state_dir="$(cygpath -u "${state_dir}" 2>/dev/null || printf '%s' "${state_dir}")"
+		fi
+		state_dir="${state_dir//\\//}"
 		for f in \
 			"${state_dir}"/progress.*.ndjson \
 			"${state_dir}"/logs.*.ndjson \
