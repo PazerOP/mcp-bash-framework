@@ -339,31 +339,11 @@ EOF
 				esac
 			fi
 		fi
-	elif command -v wget >/dev/null 2>&1; then
-		local limit_plus_one=$((max_bytes + 1))
-		local wget_status=0
-		local head_status=0
-		if ! wget -q --timeout="${timeout_secs}" --max-redirect=0 --https-only -O - "${uri}" | head -c "${limit_plus_one}" >"${tmp_file}"; then
-			wget_status=${PIPESTATUS[0]:-0}
-			head_status=${PIPESTATUS[1]:-0}
-			if [ "${head_status}" -eq 141 ]; then
-				head_status=0
-			fi
-		else
-			wget_status=${PIPESTATUS[0]:-0}
-			head_status=${PIPESTATUS[1]:-0}
-		fi
-		local local_size
-		local_size="$(wc -c <"${tmp_file}" | tr -d ' ')"
-		if [ "${local_size}" -gt "${max_bytes}" ]; then
-			printf 'Payload exceeds %s bytes\n' "${max_bytes}" >&2
-			return 6
-		fi
-		if [ "${wget_status}" -ne 0 ] || [ "${head_status}" -ne 0 ]; then
-			return 5
-		fi
 	else
-		printf '%s\n' "Neither curl nor wget available for HTTPS provider" >&2
+		# Security note: we intentionally require curl because it supports DNS
+		# pinning via --resolve to mitigate DNS rebinding between pre-check and
+		# the actual fetch. wget cannot be pinned equivalently.
+		printf '%s\n' "curl is required for HTTPS provider" >&2
 		return 4
 	fi
 
