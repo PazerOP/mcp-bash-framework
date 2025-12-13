@@ -1203,7 +1203,9 @@ mcp_core_flush_stream() {
 	fi
 	# Continue emitting from the last offset so progress/log lines survive worker
 	# restarts without replaying already-sent messages.
-	tail -c +$((last_offset + 1)) "${stream}" 2>/dev/null \
+	# Git Bash/coreutils `tail -c +N` has been observed to be flaky in CI; use dd
+	# for a more portable byte-offset reader.
+	dd if="${stream}" bs=1 skip="${last_offset}" 2>/dev/null \
 		| while IFS= read -r line || [ -n "${line}" ]; do
 			[ -z "${line}" ] && continue
 			if [ "${kind}" = "log" ]; then
