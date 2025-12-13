@@ -143,6 +143,65 @@ mcp_io_debug_enabled() {
 	[ "${MCPBASH_DEBUG_PAYLOADS:-}" = "true" ] && [ -n "${MCPBASH_STATE_DIR:-}" ]
 }
 
+mcp_io_debug_redact_jq_filter() {
+	# jq/gojq filter that recursively redacts common secret fields anywhere in a
+	# JSON payload (not just params._meta). This is best-effort defense-in-depth:
+	# payload debug logging should still remain disabled in production.
+	cat <<'JQ'
+def is_sensitive_key($k):
+  ($k | tostring | ascii_downcase) as $lk
+  | (
+      # exact matches
+      ([ "mcpbash/remotetoken", "remotetoken",
+         "authorization", "cookie", "set-cookie",
+         "token", "access_token", "refresh_token", "id_token",
+         "apikey", "api_key", "client_secret",
+         "secret", "password", "passphrase",
+         "privatekey", "private_key",
+         "session", "bearer"
+       ] | index($lk))
+      # keyword-ish matches (conservative)
+      or ($lk | test("(^|_)(token|secret|password|passphrase|key)($|_)"))
+    );
+
+def redact_string:
+  if type != "string" then . else
+    if ((ascii_downcase | startswith("bearer "))) then
+      "Bearer **redacted**"
+    elif test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$") then
+      "**redacted**"
+    else .
+    end
+  end;
+
+def walk(f):
+  . as $in
+  | if type == "object" then
+      reduce ($in | keys_unsorted[]) as $k
+        ({}; . + { ($k): ($in[$k] | walk(f)) })
+      | f
+    elif type == "array" then
+      map(walk(f)) | f
+    else
+      f
+    end;
+
+walk(
+  if type == "object" then
+    reduce (keys_unsorted[]) as $k (.;
+      if is_sensitive_key($k) then
+        .[$k] = "**redacted**"
+      else
+        .[$k] = (.[ $k ] | redact_string)
+      end
+    )
+  else
+    redact_string
+  end
+)
+JQ
+}
+
 mcp_io_debug_redact_payload() {
 	local payload="$1"
 	if [ -z "${payload}" ]; then
@@ -153,22 +212,7 @@ mcp_io_debug_redact_payload() {
 	if [ "${MCPBASH_JSON_TOOL:-none}" != "none" ] && [ -n "${MCPBASH_JSON_TOOL_BIN:-}" ] && command -v "${MCPBASH_JSON_TOOL_BIN}" >/dev/null 2>&1; then
 		local redacted=""
 		local jq_filter
-		read -r -d '' jq_filter <<'JQ' || true
-def redact_meta:
-  if type=="object" then
-    (reduce (keys_unsorted[] | strings) as $k (.;
-      (if ([ "mcpbash/remotetoken", "remotetoken", "authorization", "token", "apikey", "api_key", "secret", "password", "privatekey", "session", "bearer" ]
-           | index(($k|ascii_downcase))) then .[$k]="**redacted**" else . end)))
-  else . end;
-def redact_params:
-  if type=="object" then
-    ._meta = (._meta // {} | redact_meta)
-  else . end;
-if type=="object" then
-  (if has("params") then .params = (.params | redact_params) else . end)
-else .
-end
-JQ
+		jq_filter="$(mcp_io_debug_redact_jq_filter)"
 		if redacted="$("${MCPBASH_JSON_TOOL_BIN}" -c "${jq_filter}" <<<"${payload}" 2>/dev/null)"; then
 			if [ -n "${redacted}" ]; then
 				printf '%s' "${redacted}"
@@ -179,15 +223,25 @@ JQ
 
 	local redacted_sed
 	redacted_sed="$(printf '%s' "${payload}" | sed -E '
-		s/\"mcpbash\\/remoteToken\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"mcpbash\\/remoteToken\":\"**redacted**\"/g;
-		s/\"remoteToken\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"remoteToken\":\"**redacted**\"/g;
-		s/\"authorization\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"authorization\":\"**redacted**\"/g;
-		s/\"token\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"token\":\"**redacted**\"/g;
-		s/\"apiKey\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"apiKey\":\"**redacted**\"/g;
-		s/\"secret\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"secret\":\"**redacted**\"/g;
-		s/\"password\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"password\":\"**redacted**\"/g;
-		s/\"privateKey\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"privateKey\":\"**redacted**\"/g;
-		s/\"session\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"session\":\"**redacted**\"/g;
+		s|"mcpbash/remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"|"mcpbash/remoteToken":"**redacted**"|g;
+		s|"remoteToken"[[:space:]]*:[[:space:]]*"[^"]*"|"remoteToken":"**redacted**"|g;
+		s|"authorization"[[:space:]]*:[[:space:]]*"[^"]*"|"authorization":"**redacted**"|g;
+		s|"Authorization"[[:space:]]*:[[:space:]]*"[^"]*"|"Authorization":"**redacted**"|g;
+		s|"cookie"[[:space:]]*:[[:space:]]*"[^"]*"|"cookie":"**redacted**"|g;
+		s|"Cookie"[[:space:]]*:[[:space:]]*"[^"]*"|"Cookie":"**redacted**"|g;
+		s|"token"[[:space:]]*:[[:space:]]*"[^"]*"|"token":"**redacted**"|g;
+		s|"access_token"[[:space:]]*:[[:space:]]*"[^"]*"|"access_token":"**redacted**"|g;
+		s|"refresh_token"[[:space:]]*:[[:space:]]*"[^"]*"|"refresh_token":"**redacted**"|g;
+		s|"id_token"[[:space:]]*:[[:space:]]*"[^"]*"|"id_token":"**redacted**"|g;
+		s|"apiKey"[[:space:]]*:[[:space:]]*"[^"]*"|"apiKey":"**redacted**"|g;
+		s|"api_key"[[:space:]]*:[[:space:]]*"[^"]*"|"api_key":"**redacted**"|g;
+		s|"client_secret"[[:space:]]*:[[:space:]]*"[^"]*"|"client_secret":"**redacted**"|g;
+		s|"secret"[[:space:]]*:[[:space:]]*"[^"]*"|"secret":"**redacted**"|g;
+		s|"password"[[:space:]]*:[[:space:]]*"[^"]*"|"password":"**redacted**"|g;
+		s|"passphrase"[[:space:]]*:[[:space:]]*"[^"]*"|"passphrase":"**redacted**"|g;
+		s|"privateKey"[[:space:]]*:[[:space:]]*"[^"]*"|"privateKey":"**redacted**"|g;
+		s|"private_key"[[:space:]]*:[[:space:]]*"[^"]*"|"private_key":"**redacted**"|g;
+		s|"session"[[:space:]]*:[[:space:]]*"[^"]*"|"session":"**redacted**"|g;
 	' 2>/dev/null)" || redacted_sed="${payload}"
 	printf '%s' "${redacted_sed}"
 }
