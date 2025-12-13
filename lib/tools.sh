@@ -1441,6 +1441,9 @@ mcp_tools_call() {
 			local env_line env_key env_value
 			while IFS= read -r env_line || [ -n "${env_line}" ]; do
 				[ -z "${env_line}" ] && continue
+				# Git Bash/MSYS may emit CRLF from `env`; strip trailing CR to avoid
+				# propagating "\r" into paths like MCP_PROGRESS_STREAM.
+				env_line="${env_line%$'\r'}"
 				env_key="${env_line%%=*}"
 				env_value="${env_line#*=}"
 				case "${env_key}" in
