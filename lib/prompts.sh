@@ -476,8 +476,34 @@ mcp_prompts_list() {
 	# ListPromptsResult is paginated; expose total via result._meta["mcpbash/total"] for
 	# strict-client compatibility (instead of a top-level field).
 	result_json="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
+		def args_to_list($args):
+			# MCP prompts/list expects arguments as an array of {name, description?, required?}.
+			# Internally (and in prompt.meta.json), mcp-bash treats "arguments" as a JSON schema
+			# object with {properties, required}. Convert schema -> list for spec compatibility.
+			if ($args | type) == "array" then
+				$args
+			elif ($args | type) == "object" then
+				($args.required // []) as $req
+				| ($args.properties // {}) as $props
+				| ($props
+					| to_entries
+					| map(
+						.key as $k
+						| {
+							name: $k,
+							description: (.value.description // ""),
+							required: (($req | index($k)) != null)
+						}
+					)
+				)
+			else
+				[]
+			end;
 		{
-			prompts: .items[$offset:$offset+$limit],
+			prompts: (
+				.items[$offset:$offset+$limit]
+				| map(.arguments = (args_to_list(.arguments // {})))
+			),
 			_meta: {"mcpbash/total": $total}
 		}
 	')"
@@ -603,7 +629,8 @@ mcp_prompts_emit_render_result() {
 			messages: [
 				{
 					role: $role,
-					content: [{type: "text", text: $text}]
+					# MCP PromptMessage.content is a single content object (not an array).
+					content: {type: "text", text: $text}
 				}
 			]
 		}

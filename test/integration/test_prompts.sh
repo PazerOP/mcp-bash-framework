@@ -72,7 +72,7 @@ if ! jq -e '
 		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "auto-get") |
 	(trimstr(.result.text) == "Hello World!") and
-	(trimstr(.result.messages[0].content[0].text) == "Hello World!") and
+	(trimstr(.result.messages[0].content.text) == "Hello World!") and
 	(.result.arguments == {name: "World"})
 ' "${AUTO_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ auto-get response invalid\n' >&2
@@ -152,7 +152,7 @@ if ! jq -e '
 		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "manual-get") |
 	(trimstr(.result.text) == "Goodbye Ada, see you soon.") and
-	(trimstr(.result.messages[0].content[0].text) == "Goodbye Ada, see you soon.")
+	(trimstr(.result.messages[0].content.text) == "Goodbye Ada, see you soon.")
 ' "${MANUAL_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ manual-get response invalid\n' >&2
 	exit 1

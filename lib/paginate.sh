@@ -96,5 +96,8 @@ mcp_paginate_attach_next_cursor() {
 		return 0
 	fi
 
-	printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.nextCursor = null'
+	# When there is no next page, omit nextCursor entirely.
+	# Some clients (including MCP Inspector CLI) validate nextCursor as an optional string
+	# and reject explicit null values.
+	printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c 'del(.nextCursor)'
 }

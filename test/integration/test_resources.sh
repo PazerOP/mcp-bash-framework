@@ -168,8 +168,12 @@ jq -s '
 	(map(select(.id == "templates-list"))[0].result) as $list |
 
 	if ($list.resourceTemplates | length) != 0 then err("expected empty resourceTemplates") else null end,
-	if ($list | has("nextCursor") | not) then err("nextCursor missing") else null end,
-	if ($list.nextCursor | type) as $t | ($t != "string" and $t != "null") then err("nextCursor must be string or null") else null end
+	# nextCursor is optional; when present it must be a string.
+	if ($list | has("nextCursor")) then
+		if ($list.nextCursor | type) != "string" then err("nextCursor must be string when present") else null end
+	else
+		null
+	end
 ' <"${TEMPLATE_ROOT}/responses.ndjson" >/dev/null
 
 # --- Binary resources emit blob instead of text ---
