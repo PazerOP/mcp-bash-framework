@@ -10,7 +10,7 @@ Authoritative list of supported environment variables. Defaults shown are the sh
 | `MCPBASH_TOOLS_DIR` / `MCPBASH_RESOURCES_DIR` / `MCPBASH_PROMPTS_DIR` / `MCPBASH_SERVER_DIR` | Derived from `MCPBASH_PROJECT_ROOT` | Override content and server hook locations. |
 | `MCPBASH_REGISTRY_DIR` | `$MCPBASH_PROJECT_ROOT/.registry` | Registry cache location. |
 | `MCPBASH_REGISTRY_MAX_BYTES` | `104857600` | Registry size guard (bytes). |
-| `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Limit registry refresh to a subpath. |
+| `MCPBASH_REGISTRY_REFRESH_PATH` | (unset) | Limit registry refresh to a subpath (must be a literal subpath of the default scan dir; no glob semantics). |
 | `MCPBASH_MAX_CONCURRENT_REQUESTS` | `16` | Worker slot cap. |
 | `MCPBASH_MAX_TOOL_OUTPUT_SIZE` | `10485760` | Tool stdout limit (bytes). |
 | `MCPBASH_MAX_TOOL_STDERR_SIZE` | `$MCPBASH_MAX_TOOL_OUTPUT_SIZE` | Tool stderr limit (bytes). |
@@ -23,28 +23,45 @@ Authoritative list of supported environment variables. Defaults shown are the sh
 | `MCPBASH_LOG_LEVEL` | `info` | RFC-5424 level; `debug` shows discovery traces. |
 | `MCPBASH_LOG_VERBOSE` | (unset) | `true` logs full paths/manual registration output (security risk). |
 | `MCPBASH_CI_MODE` | `false` | CI defaults: safe tmp/log dirs, keep logs, timestamps, failure summary/env snapshot, GH annotations when tracing provides file/line. |
-| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/logs during execution. |
+| `MCPBASH_ENABLE_LIVE_PROGRESS` | `false` | Stream progress/logs during tool execution (starts a background flusher); when `false`, progress/logs are emitted at completion. |
 | `MCPBASH_PROGRESS_FLUSH_INTERVAL` | `0.5` | Flush cadence (seconds) when live progress is enabled. |
-| `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Resource subscription polling interval; `0` to disable. |
+| `MCPBASH_RESOURCES_POLL_INTERVAL_SECS` | `2` | Resource subscription polling interval (poller starts after first `resources/subscribe`); `0` to disable polling. |
 | `MCPBASH_ENV_PAYLOAD_THRESHOLD` | `65536` | Spill args/metadata to temp files above this many bytes. |
 | `MCPBASH_TOOL_ENV_MODE` | `minimal` | Tool env isolation: `minimal`, `inherit`, or `allowlist`. |
 | `MCPBASH_TOOL_ENV_ALLOWLIST` | (unset) | Extra env names when `MCPBASH_TOOL_ENV_MODE=allowlist`. |
+| `MCPBASH_TOOL_ENV_INHERIT_ALLOW` | `false` | Must be `true` to allow `MCPBASH_TOOL_ENV_MODE=inherit`. |
+| `MCPBASH_TOOL_ALLOWLIST` | (required) | Space/comma-separated tool names allowed to run (`*` to allow all). Empty by default (deny). |
+| `MCPBASH_TOOL_ALLOW_DEFAULT` | `deny` | Set to `allow` to keep legacy allow-all behavior without an explicit allowlist. |
 | `MCPBASH_FORCE_MINIMAL` | (unset) | Force minimal capability tier even when JSON tooling is present. |
-| `MCPBASH_COMPAT_BATCHES` | (unset) | Enable legacy batch request support. |
+| `MCPBASH_JSON_TOOL` | (auto-detect jq → gojq) | Explicit JSON tool selection: `jq`, `gojq`, or `none`. Default order is jq-first (Windows E2BIG mitigation). |
+| `MCPBASH_JSON_TOOL_BIN` | (derived from tool) | Explicit path to JSON tool; infers `MCPBASH_JSON_TOOL` from basename if unset and treats unknown names as jq-compatible (behavior may differ if flags differ). |
+| `MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT` | `false` | Allow `MCPBASH_JSON_TOOL{,_BIN}` overrides when running as root. |
+| `MCPBASH_COMPAT_BATCHES` | (unset) | Enable legacy batch request support (auto-enabled when protocol is `2025-03-26`; use only for out-of-spec clients on newer protocols). |
 | `MCPBASH_DEBUG_PAYLOADS` | (unset) | Write full message payloads to `${TMPDIR}/mcpbash.state.*`. |
 | `MCPBASH_PRESERVE_STATE` | (unset) | Preserve state dir after exit (useful with `MCPBASH_DEBUG_PAYLOADS`). |
-| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments. |
+| `MCPBASH_REMOTE_TOKEN` | (unset) | Shared secret for proxied deployments (minimum 32 characters). |
 | `MCPBASH_REMOTE_TOKEN_KEY` | `mcpbash/remoteToken` | JSON path for token lookup. |
 | `MCPBASH_REMOTE_TOKEN_FALLBACK_KEY` | `remoteToken` | Alternate JSON path for token lookup. |
-| `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. |
+| `MCPBASH_REMOTE_TOKEN_MAX_FAILURES_PER_MIN` | `10` | Max failed remote-token attempts per minute before throttling responses. |
+| `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS` | (unset) | HTTPS provider host allow/deny lists; private/loopback always blocked. **Allow list is required** unless `MCPBASH_HTTPS_ALLOW_ALL=true`. HTTPS fetches use curl and pin resolved IPs via `--resolve` (DNS rebinding mitigation). |
+| `MCPBASH_HTTPS_ALLOW_ALL` | `false` | Explicitly allow all public HTTPS hosts (unsafe; prefer `MCPBASH_HTTPS_ALLOW_HOSTS`). |
 | `MCPBASH_HTTPS_TIMEOUT` | `15` (cap ≤60s) | HTTPS provider timeout. |
 | `MCPBASH_HTTPS_MAX_BYTES` | `10485760` (cap ≤20MB) | HTTPS payload size guard. |
-| `MCPBASH_ENABLE_GIT_PROVIDER` | `false` | Enable Git resource provider. |
-| `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. |
+| `MCPBASH_ENABLE_GIT_PROVIDER` | `false` | Enable Git resource provider (`git+https://` URIs). |
+| `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` | (unset) | Allow/deny lists; private/loopback always blocked. Allow list (or `MCPBASH_GIT_ALLOW_ALL=true`) is required when the git provider is enabled. |
+| `MCPBASH_GIT_ALLOW_ALL` | `false` | Explicitly allow all git hosts (unsafe; prefer `MCPBASH_GIT_ALLOW_HOSTS`). |
 | `MCPBASH_GIT_TIMEOUT` | `30` (cap ≤60s) | Git provider timeout (seconds). |
 | `MCPBASH_GIT_MAX_KB` | `51200` (cap ≤1048576) | Git repository size guard (KB). |
 | `MCPBASH_CORRUPTION_WINDOW` | `60` | Stdout corruption tracking window (seconds). |
 | `MCPBASH_CORRUPTION_THRESHOLD` | `3` | Corruption events allowed within the window before exit. |
+| `MCPBASH_MAX_MANUAL_REGISTRY_BYTES` | `1048576` | Max bytes accepted from manual registration inputs: `server.d/register.json` file size and `server.d/register.sh` captured stdout/stderr output. |
+| `MCPBASH_ALLOW_PROJECT_HOOKS` | `false` | Must be `true` to execute project `server.d/register.sh` hooks. Refused if file is group/world-writable or ownership mismatches. |
+
+Example allowlist usage to keep tool env minimal while letting HOME/PATH through:
+
+```bash
+MCPBASH_TOOL_ENV_MODE=allowlist MCPBASH_TOOL_ENV_ALLOWLIST=HOME,PATH mcp-bash ...
+```
 
 ## Internal Runtime State (do not override)
 

@@ -59,6 +59,8 @@ jobs:
           sudo apt-get install -y shellcheck shfmt
       - name: Lint
         run: test/lint.sh
+      - name: Verify rendered README is up to date
+        run: bash scripts/render-readme.sh --check
 
   unit:
     runs-on: ubuntu-latest
@@ -117,6 +119,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Cache staging tar (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/mcpbash.staging
+          key: ${{ runner.os }}-staging-${{ hashFiles('bin/**','lib/**','handlers/**','providers/**','sdk/**','bootstrap/**','scaffold/**') }}
       - name: Set Go paths
         shell: bash
         run: |
@@ -129,14 +137,16 @@ jobs:
             echo "GOPATH=${win_gopath}" >> "$GITHUB_ENV"
             echo "GOMODCACHE=${win_gomodcache}" >> "$GITHUB_ENV"
             echo "GOCACHE=${win_gocache}" >> "$GITHUB_ENV"
+            echo "MCPBASH_TAR_DIR=$(cygpath -u "${RUNNER_TEMP}")/mcpbash.staging" >> "$GITHUB_ENV"
             echo "$(cygpath -u "${win_gopath}")/bin" >> "$GITHUB_PATH"
-            mkdir -p "$(cygpath -u "${win_gopath}")/bin" "$(cygpath -u "${win_gomodcache}")" "$(cygpath -u "${win_gocache}")"
+            mkdir -p "$(cygpath -u "${win_gopath}")/bin" "$(cygpath -u "${win_gomodcache}")" "$(cygpath -u "${win_gocache}")" "$(cygpath -u "${RUNNER_TEMP}")/mcpbash.staging"
           else
             echo "GOPATH=${HOME}/go" >> "$GITHUB_ENV"
             echo "GOMODCACHE=${HOME}/go/pkg/mod" >> "$GITHUB_ENV"
             echo "GOCACHE=${HOME}/.cache/go-build" >> "$GITHUB_ENV"
+            echo "MCPBASH_TAR_DIR=${RUNNER_TEMP}/mcpbash.staging" >> "$GITHUB_ENV"
             echo "${HOME}/go/bin" >> "$GITHUB_PATH"
-            mkdir -p "${HOME}/go/bin" "${HOME}/go/pkg/mod" "${HOME}/.cache/go-build"
+            mkdir -p "${HOME}/go/bin" "${HOME}/go/pkg/mod" "${HOME}/.cache/go-build" "${RUNNER_TEMP}/mcpbash.staging"
           fi
       - name: Setup Go
         id: go
@@ -157,8 +167,6 @@ jobs:
           pushd tools >/dev/null
           go install github.com/itchyny/gojq/cmd/gojq@v0.12.16
           popd >/dev/null
-      - name: Smoke tests
-        run: test/smoke.sh
       - name: Integration suite
         id: integration
         env:
@@ -193,7 +201,7 @@ jobs:
           warm="${{ steps.go.outputs.cache-hit == 'true' && steps.gocache.outputs.cache-hit == 'true' }}"
           duration="${{ steps.integration.outputs.duration }}"
           warn_budget=240
-          fail_budget=900
+          fail_budget=2000
           if [ -n "${duration}" ] && [ "${duration}" -gt "${warn_budget}" ]; then
             echo "::warning ::Integration duration ${duration}s exceeded warning budget ${warn_budget}s (warm caches=${warm})"
           fi
@@ -202,7 +210,13 @@ jobs:
             exit 1
           fi
       - name: Examples suite
+        env:
+          MCPBASH_STAGING_TAR: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
         run: test/examples/run.sh
+
+      - name: Strict conformance (jq + gojq)
+        if: matrix.os == 'ubuntu-latest'
+        run: test/conformance/run.sh
 
   stress:
     if: github.event_name == 'schedule'

@@ -30,6 +30,29 @@
 : "${MCPBASH_LOG_DIR:=}"
 : "${MCPBASH_LOG_TIMESTAMP:=false}"
 
+mcp_runtime_posix_path() {
+	local path="$1"
+	if command -v cygpath >/dev/null 2>&1; then
+		cygpath -m "${path}"
+		return
+	fi
+	case "${path}" in
+	[A-Za-z]:[\\/]*)
+		local drive rest
+		drive="${path%%:*}"
+		rest="${path#?:}"
+		rest="${rest//\\//}"
+		printf '/%s%s' "$(printf '%s' "${drive}" | tr '[:upper:]' '[:lower:]')" "${rest}"
+		;;
+	*\\*)
+		printf '%s' "${path//\\//}"
+		;;
+	*)
+		printf '%s' "${path}"
+		;;
+	esac
+}
+
 mcp_runtime_json_escape() {
 	local value="${1:-}"
 	value="${value//\\/\\\\}"
@@ -177,6 +200,21 @@ mcp_runtime_stage_bootstrap_project() {
 	cp -a "${bootstrap_dir}/." "${tmp_root}/" 2>/dev/null || true
 	mkdir -p "${tmp_root}/tools" "${tmp_root}/resources" "${tmp_root}/prompts" "${tmp_root}/server.d"
 
+	# Ensure bootstrap tool is registered even if auto-scan fails on Windows paths.
+	cat >"${tmp_root}/server.d/register.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+mcp_register_tool '{
+  "name": "getting_started",
+  "description": "Show setup steps when MCPBASH_PROJECT_ROOT is unset.",
+  "path": "getting-started/tool.sh",
+  "inputSchema": {"type":"object","properties":{}},
+  "timeoutSecs": 5
+}'
+EOF
+	chmod +x "${tmp_root}/server.d/register.sh" 2>/dev/null || true
+
 	# Copy VERSION file so smart defaults can detect framework version.
 	if [ -f "${MCPBASH_HOME}/VERSION" ]; then
 		cp "${MCPBASH_HOME}/VERSION" "${tmp_root}/VERSION" 2>/dev/null || true
@@ -189,6 +227,13 @@ mcp_runtime_stage_bootstrap_project() {
 	MCPBASH_REGISTRY_DIR="${tmp_root}/.registry"
 	export MCPBASH_REGISTRY_DIR
 	mkdir -p "${MCPBASH_REGISTRY_DIR}" >/dev/null 2>&1 || true
+
+	# Bootstrap is a single-tool, framework-shipped helper project. Allow it to
+	# run without requiring callers to set a global allowlist.
+	if [ -z "${MCPBASH_TOOL_ALLOWLIST:-}" ]; then
+		MCPBASH_TOOL_ALLOWLIST="getting_started"
+		export MCPBASH_TOOL_ALLOWLIST
+	fi
 
 	MCPBASH_BOOTSTRAP_TMP_DIR="${tmp_root}"
 	MCPBASH_BOOTSTRAP_STAGED="true"
@@ -206,11 +251,11 @@ mcp_runtime_init_paths() {
 	if [ "${MCPBASH_CI_MODE:-false}" = "true" ]; then
 		if [ -z "${MCPBASH_TMP_ROOT:-}" ]; then
 			if [ -n "${RUNNER_TEMP:-}" ]; then
-				MCPBASH_TMP_ROOT="${RUNNER_TEMP%/}"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${RUNNER_TEMP%/}")"
 			elif [ -n "${GITHUB_WORKSPACE:-}" ]; then
-				MCPBASH_TMP_ROOT="${GITHUB_WORKSPACE%/}/.mcpbash-tmp"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${GITHUB_WORKSPACE%/}")/.mcpbash-tmp"
 			else
-				MCPBASH_TMP_ROOT="${TMPDIR%/:-/tmp}"
+				MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${TMPDIR%/:-/tmp}")"
 			fi
 		fi
 		if [ -z "${MCPBASH_KEEP_LOGS:-}" ]; then
@@ -242,7 +287,7 @@ mcp_runtime_init_paths() {
 	# 3. For server mode with bootstrap allowed, stage bootstrap project
 	# 4. Otherwise, emit a clear error
 	if [ -n "${MCPBASH_TMP_ROOT:-}" ]; then
-		MCPBASH_TMP_ROOT="${MCPBASH_TMP_ROOT%/}"
+		MCPBASH_TMP_ROOT="$(mcp_runtime_posix_path "${MCPBASH_TMP_ROOT%/}")"
 	fi
 	if [ -n "${MCPBASH_PROJECT_ROOT:-}" ]; then
 		if [ ! -d "${MCPBASH_PROJECT_ROOT}" ]; then
@@ -282,19 +327,56 @@ mcp_runtime_init_paths() {
 		if [ -z "${MCPBASH_STATE_SEED}" ]; then
 			MCPBASH_STATE_SEED="${RANDOM}" # STATE_SEED initialized once per boot.
 		fi
+		local pid_component=""
+		if [ -n "${BASHPID-}" ]; then
+			pid_component="${BASHPID}"
+		else
+			pid_component="$$"
+		fi
 		if [ -z "${MCPBASH_STATE_DIR}" ]; then
-			local pid_component
-			if [ -n "${BASHPID-}" ]; then
-				pid_component="${BASHPID}"
-			else
-				pid_component="$$"
-			fi
 			MCPBASH_STATE_DIR="${MCPBASH_TMP_ROOT}/mcpbash.state.${PPID}.${pid_component}.${MCPBASH_STATE_SEED}"
 		fi
 		# Default lock root is instance-scoped to avoid cross-process interference (e.g., lingering servers on Windows).
 		if [ -z "${MCPBASH_LOCK_ROOT}" ]; then
 			MCPBASH_LOCK_ROOT="${MCPBASH_STATE_DIR}/locks"
 		fi
+	fi
+
+	# Ensure state/lock roots exist. These are required for handler output capture,
+	# watchdog cancellation, and lock operations. If creation fails (often due to
+	# Windows path length issues), retry once with a shorter temp base.
+	local created="false"
+	local attempted=""
+	local base
+	for base in "${MCPBASH_TMP_ROOT}" "${RUNNER_TEMP:-}" "${TMPDIR:-}" "/tmp"; do
+		[ -z "${base}" ] && continue
+		base="$(mcp_runtime_posix_path "${base%/}")"
+		if [ -n "${attempted}" ] && [ "${attempted}" = "${base}" ]; then
+			continue
+		fi
+		attempted="${base}"
+
+		if [ "${base}" != "${MCPBASH_TMP_ROOT}" ]; then
+			MCPBASH_TMP_ROOT="${base}"
+			if [ "${mode}" = "cli" ]; then
+				MCPBASH_STATE_DIR="${MCPBASH_TMP_ROOT}/mcpbash.state.$$"
+				MCPBASH_LOCK_ROOT="${MCPBASH_TMP_ROOT}/mcpbash.locks"
+			else
+				MCPBASH_STATE_DIR="${MCPBASH_TMP_ROOT}/mcpbash.state.${PPID}.${pid_component}.${MCPBASH_STATE_SEED}"
+				MCPBASH_LOCK_ROOT="${MCPBASH_STATE_DIR}/locks"
+			fi
+		fi
+
+		if (umask 077 && mkdir -p "${MCPBASH_STATE_DIR}" && mkdir -p "${MCPBASH_LOCK_ROOT}") >/dev/null 2>&1; then
+			created="true"
+			break
+		fi
+	done
+
+	if [ "${created}" != "true" ]; then
+		printf '%s\n' "mcp-bash: unable to create state directory: ${MCPBASH_STATE_DIR}" >&2
+		printf '%s\n' "mcp-bash: set MCPBASH_TMP_ROOT to a short, writable directory (Windows path length limits may apply)." >&2
+		exit 1
 	fi
 
 	# Log directory (CI mode only): default to a dedicated path when unset.
@@ -309,42 +391,11 @@ mcp_runtime_init_paths() {
 		MCPBASH_LOG_DIR="${MCPBASH_TMP_ROOT}/mcpbash.logs.${PPID}.${log_pid_component}.${log_seed}"
 	fi
 	if [ -n "${MCPBASH_LOG_DIR}" ]; then
+		MCPBASH_LOG_DIR="$(mcp_runtime_posix_path "${MCPBASH_LOG_DIR}")"
+	fi
+	if [ -n "${MCPBASH_LOG_DIR}" ]; then
 		(umask 077 && mkdir -p "${MCPBASH_LOG_DIR}") >/dev/null 2>&1 || true
 	fi
-	if [ "${MCPBASH_CI_MODE:-false}" = "true" ] && [ -n "${MCPBASH_LOG_DIR:-}" ]; then
-		local env_snapshot="${MCPBASH_LOG_DIR}/env-snapshot.json"
-		if [ ! -f "${env_snapshot}" ]; then
-			local path_entries path_count path_first path_last os_name cwd
-			path_entries="${PATH:-}"
-			path_count=0
-			path_first=""
-			path_last=""
-			os_name="$(uname -s 2>/dev/null || printf '')"
-			cwd="$(pwd 2>/dev/null || printf '')"
-			if [ -n "${path_entries}" ]; then
-				IFS=':' read -r -a path_array <<<"${path_entries}"
-				path_count="${#path_array[@]}"
-				if [ "${path_count}" -gt 0 ]; then
-					path_first="${path_array[0]}"
-					path_last="${path_array[$((path_count - 1))]}"
-				fi
-			fi
-			{
-				printf '{'
-				printf '"bashVersion":"%s",' "$(mcp_runtime_json_escape "${BASH_VERSION:-}")"
-				printf '"os":"%s",' "$(mcp_runtime_json_escape "${os_name}")"
-				printf '"cwd":"%s",' "$(mcp_runtime_json_escape "${cwd}")"
-				printf '"pathCount":%s,' "${path_count}"
-				printf '"pathFirst":"%s",' "$(mcp_runtime_json_escape "${path_first}")"
-				printf '"pathLast":"%s"' "$(mcp_runtime_json_escape "${path_last}")"
-				printf '}\n'
-			} >"${env_snapshot}" 2>/dev/null || true
-		fi
-	fi
-
-	# Create state directory (needed for fastpath caching in registry refresh)
-	(umask 077 && mkdir -p "${MCPBASH_STATE_DIR}") >/dev/null 2>&1 || true
-	(umask 077 && mkdir -p "${MCPBASH_LOCK_ROOT}") >/dev/null 2>&1 || true
 
 	# Content directories: explicit override → project default
 	# Registry: hidden .registry in project for cache files
@@ -468,35 +519,167 @@ mcp_runtime_cleanup_bootstrap() {
 	mcp_runtime_safe_rmrf "${MCPBASH_BOOTSTRAP_TMP_DIR}"
 }
 
+mcp_runtime_write_env_snapshot() {
+	if [ "${MCPBASH_CI_MODE:-false}" != "true" ]; then
+		return 0
+	fi
+	if [ -z "${MCPBASH_LOG_DIR:-}" ]; then
+		return 0
+	fi
+
+	local log_dir
+	log_dir="$(mcp_runtime_posix_path "${MCPBASH_LOG_DIR}")"
+	local env_snapshot="${log_dir}/env-snapshot.json"
+	(umask 077 && mkdir -p "${log_dir}") >/dev/null 2>&1 || true
+	if [ -f "${env_snapshot}" ]; then
+		return 0
+	fi
+
+	local path_entries path_array path_count path_first path_last os_name cwd path_bytes env_bytes json_tool json_tool_bin
+	path_entries="${PATH:-}"
+	path_count=0
+	path_first=""
+	path_last=""
+	path_bytes="$(printf '%s' "${path_entries}" | wc -c | tr -d ' ')"
+	env_bytes="$(env | wc -c | tr -d ' ')"
+	os_name="$(uname -s 2>/dev/null || printf '')"
+	cwd="$(pwd 2>/dev/null || printf '')"
+	json_tool="${MCPBASH_JSON_TOOL:-none}"
+	json_tool_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+
+	if [ -z "${path_bytes}" ]; then
+		path_bytes=0
+	fi
+	if [ -z "${env_bytes}" ]; then
+		env_bytes=0
+	fi
+
+	if [ -n "${path_entries}" ]; then
+		IFS=':' read -r -a path_array <<<"${path_entries}"
+		path_count="${#path_array[@]}"
+		if [ "${path_count}" -gt 0 ]; then
+			path_first="${path_array[0]}"
+			path_last="${path_array[$((path_count - 1))]}"
+		fi
+	fi
+
+	{
+		printf '{'
+		printf '"bashVersion":"%s",' "$(mcp_runtime_json_escape "${BASH_VERSION:-}")"
+		printf '"os":"%s",' "$(mcp_runtime_json_escape "${os_name}")"
+		printf '"cwd":"%s",' "$(mcp_runtime_json_escape "${cwd}")"
+		printf '"pathCount":%s,' "${path_count}"
+		printf '"pathFirst":"%s",' "$(mcp_runtime_json_escape "${path_first}")"
+		printf '"pathLast":"%s",' "$(mcp_runtime_json_escape "${path_last}")"
+		printf '"pathBytes":%s,' "${path_bytes}"
+		printf '"envBytes":%s,' "${env_bytes}"
+		printf '"jsonTool":"%s",' "$(mcp_runtime_json_escape "${json_tool}")"
+		printf '"jsonToolBin":"%s"' "$(mcp_runtime_json_escape "${json_tool_bin}")"
+		printf '}\n'
+	} >"${env_snapshot}" 2>/dev/null || true
+
+	return 0
+}
+
 mcp_runtime_detect_json_tool() {
-	# JSON tool detection: detection order is gojq → jq.
+	# JSON tool detection: prefer jq to avoid Windows E2BIG issues; aligns with json-handling.mdc.
 	if mcp_runtime_force_minimal_mode_requested; then
 		MCPBASH_MODE="minimal"
 		MCPBASH_JSON_TOOL="none"
 		MCPBASH_JSON_TOOL_BIN=""
 		printf '%s\n' 'Minimal mode forced via MCPBASH_FORCE_MINIMAL=true; JSON tooling disabled.' >&2
+		mcp_runtime_write_env_snapshot
+		return 0
+	fi
+
+	if [ "${MCPBASH_JSON_TOOL:-}" = "none" ]; then
+		MCPBASH_MODE="minimal"
+		MCPBASH_JSON_TOOL="none"
+		MCPBASH_JSON_TOOL_BIN=""
+		if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+			printf '%s\n' 'JSON tooling override: MCPBASH_JSON_TOOL=none; entering minimal mode.' >&2
+		fi
+		mcp_runtime_write_env_snapshot
 		return 0
 	fi
 
 	local candidate=""
-
-	candidate="$(command -v gojq 2>/dev/null || true)"
-	if [ -n "${candidate}" ]; then
-		MCPBASH_JSON_TOOL="gojq"
-		MCPBASH_JSON_TOOL_BIN="${candidate}"
-		MCPBASH_MODE="full"
-		if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
-			if mcp_logging_verbose_enabled; then
-				printf '%s\n' "JSON tooling: gojq at ${candidate}; full protocol surface enabled." >&2
-			else
-				printf '%s\n' "JSON tooling: gojq; full protocol surface enabled." >&2
-			fi
+	local override_tool="${MCPBASH_JSON_TOOL:-}"
+	local override_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	local running_as_root="false"
+	if command -v id >/dev/null 2>&1; then
+		if [ "$(id -u 2>/dev/null || printf '1')" -eq 0 ]; then
+			running_as_root="true"
 		fi
-		return 0
 	fi
 
-	candidate="$(command -v jq 2>/dev/null || true)"
-	if [ -n "${candidate}" ]; then
+	if [ "${running_as_root}" = "true" ] && { [ -n "${override_tool}" ] || [ -n "${override_bin}" ]; }; then
+		if [ "${MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT:-false}" != "true" ]; then
+			if mcp_runtime_log_allowed; then
+				printf '%s\n' "Ignoring MCPBASH_JSON_TOOL{,_BIN} overrides while running as root; set MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT=true to allow." >&2
+			fi
+			override_tool=""
+			override_bin=""
+		fi
+	fi
+
+	if [ -n "${override_tool}" ] || [ -n "${override_bin}" ]; then
+		if [ -n "${override_bin}" ]; then
+			case "${override_bin}" in
+			/* | [A-Za-z]:[\\/]*) ;;
+			*)
+				if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+					printf '%s\n' "Rejecting MCPBASH_JSON_TOOL_BIN override (must be absolute): ${override_bin}" >&2
+				fi
+				override_bin=""
+				override_tool=""
+				;;
+			esac
+		fi
+		if [ -z "${override_bin}" ]; then
+			override_bin="$(type -P -- "${override_tool}" 2>/dev/null || true)"
+		fi
+		if [ -z "${override_tool}" ] && [ -n "${override_bin}" ]; then
+			case "$(basename -- "${override_bin}")" in
+			jq | jq.exe)
+				override_tool="jq"
+				;;
+			gojq | gojq.exe)
+				override_tool="gojq"
+				;;
+			*)
+				override_tool="jq"
+				if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+					printf '%s\n' "MCPBASH_JSON_TOOL_BIN=${override_bin}; treating as jq-compatible (basename not jq/gojq)." >&2
+				fi
+				;;
+			esac
+		fi
+		if [ -n "${override_bin}" ] && "${override_bin}" --version >/dev/null 2>&1; then
+			MCPBASH_JSON_TOOL="${override_tool}"
+			MCPBASH_JSON_TOOL_BIN="${override_bin}"
+			MCPBASH_MODE="full"
+			if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
+				if mcp_logging_verbose_enabled; then
+					printf '%s\n' "JSON tooling override: ${override_tool} at ${override_bin}; full protocol surface enabled." >&2
+				else
+					printf '%s\n' "JSON tooling override: ${override_tool}; full protocol surface enabled." >&2
+				fi
+			fi
+			mcp_runtime_write_env_snapshot
+			return 0
+		fi
+		if mcp_runtime_log_allowed && mcp_logging_verbose_enabled; then
+			if [ -z "${override_bin}" ]; then
+				printf '%s\n' "MCPBASH_JSON_TOOL=${override_tool:-unset} override not found on PATH; falling back to auto-detect." >&2
+			else
+				printf '%s\n' "MCPBASH_JSON_TOOL=${override_tool:-unset} override failed exec check; falling back to auto-detect." >&2
+			fi
+		fi
+	fi
+
+	candidate="$(type -P -- jq 2>/dev/null || true)"
+	if [ -n "${candidate}" ] && "${candidate}" --version >/dev/null 2>&1; then
 		MCPBASH_JSON_TOOL="jq"
 		MCPBASH_JSON_TOOL_BIN="${candidate}"
 		MCPBASH_MODE="full"
@@ -507,6 +690,23 @@ mcp_runtime_detect_json_tool() {
 				printf '%s\n' "JSON tooling: jq; full protocol surface enabled." >&2
 			fi
 		fi
+		mcp_runtime_write_env_snapshot
+		return 0
+	fi
+
+	candidate="$(type -P -- gojq 2>/dev/null || true)"
+	if [ -n "${candidate}" ] && "${candidate}" --version >/dev/null 2>&1; then
+		MCPBASH_JSON_TOOL="gojq"
+		MCPBASH_JSON_TOOL_BIN="${candidate}"
+		MCPBASH_MODE="full"
+		if mcp_runtime_log_allowed && { [ "${MCPBASH_LOG_JSON_TOOL}" = "log" ] || mcp_logging_verbose_enabled; }; then
+			if mcp_logging_verbose_enabled; then
+				printf '%s\n' "JSON tooling: gojq at ${candidate}; full protocol surface enabled." >&2
+			else
+				printf '%s\n' "JSON tooling: gojq; full protocol surface enabled." >&2
+			fi
+		fi
+		mcp_runtime_write_env_snapshot
 		return 0
 	fi
 
@@ -516,8 +716,9 @@ mcp_runtime_detect_json_tool() {
 	MCPBASH_JSON_TOOL_BIN=""
 	MCPBASH_MODE="minimal"
 	if mcp_runtime_log_allowed; then
-		printf '%s\n' 'No gojq/jq found; entering minimal mode with reduced capabilities.' >&2
+		printf '%s\n' 'No jq/gojq found; entering minimal mode with reduced capabilities.' >&2
 	fi
+	mcp_runtime_write_env_snapshot
 	return 0
 }
 
@@ -561,12 +762,22 @@ mcp_runtime_force_minimal_mode_requested() {
 }
 
 mcp_runtime_batches_enabled() {
-	# Legacy batch compatibility toggle.
+	# Incoming batch arrays are allowed when required by protocol (2025-03-26)
+	# or when explicitly toggled for legacy clients.
+	local protocol="${MCPBASH_NEGOTIATED_PROTOCOL_VERSION:-${MCPBASH_PROTOCOL_VERSION}}"
+	case "${protocol}" in
+	2025-03-26)
+		return 0
+		;;
+	esac
 	[ "${MCPBASH_COMPAT_BATCHES:-false}" = "true" ]
 }
 
 mcp_runtime_log_batch_mode() {
-	if mcp_runtime_batches_enabled; then
+	local protocol="${MCPBASH_NEGOTIATED_PROTOCOL_VERSION:-${MCPBASH_PROTOCOL_VERSION}}"
+	if [ "${protocol}" = "2025-03-26" ]; then
+		printf '%s\n' 'Batch arrays accepted per protocol 2025-03-26; set MCPBASH_COMPAT_BATCHES=true to enable legacy clients on newer protocols.' >&2
+	elif [ "${MCPBASH_COMPAT_BATCHES:-false}" = "true" ]; then
 		printf '%s\n' 'Legacy batch compatibility enabled (MCPBASH_COMPAT_BATCHES=true); requests framed as arrays will be processed as independent items.' >&2
 	fi
 }

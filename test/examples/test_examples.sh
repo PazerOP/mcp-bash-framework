@@ -76,11 +76,39 @@ JSON
 {"jsonrpc":"2.0","id":"exit","method":"exit"}
 JSON
 
-	# Use per-workspace tmp root to avoid cross-example contention.
-	export MCPBASH_TMP_ROOT="${workdir}"
+	# Keep temp roots short on Windows/Git Bash to avoid path length issues.
+	# Prefer runner temp when available; otherwise fall back to TMPDIR.
+	local tmp_base="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+	tmp_base="${tmp_base%/}"
+	export MCPBASH_TMP_ROOT="${tmp_base}"
 	unset MCPBASH_LOCK_ROOT
 
 	test_run_mcp "${workdir}" "${workdir}/requests.ndjson" "${workdir}/responses.ndjson"
+	local stderr_file="${workdir}/responses.ndjson.stderr"
+	if [ -f "${stderr_file}" ]; then
+		# Phase 3: gate on high-signal, low-false-positive patterns.
+		if grep -q -- 'mktemp: failed to create file via template' "${stderr_file}"; then
+			printf '%s\n' "Example ${example_id}: detected mktemp failure in server stderr (${stderr_file})." >&2
+			printf '%s\n' '--- server stderr (excerpt) ---' >&2
+			tail -n 200 "${stderr_file}" >&2 || true
+			printf '%s\n' '--- end server stderr ---' >&2
+			return 1
+		fi
+		# Match the actual watchdog log line, not Bash job-control "Terminated ( ... printf ... )"
+		# lines that may include the string as part of the terminated subshell command.
+		if grep -Eq -- '^mcp-bash: shutdown timeout \\([0-9]+s\\) elapsed; terminating\\.$' "${stderr_file}"; then
+			local timeout_line=""
+			timeout_line="$(grep -m1 -E -- '^mcp-bash: shutdown timeout \\([0-9]+s\\) elapsed; terminating\\.$' "${stderr_file}" 2>/dev/null || true)"
+			printf '%s\n' "Example ${example_id}: detected shutdown watchdog timeout in server stderr (${stderr_file})." >&2
+			if [ -n "${timeout_line}" ]; then
+				printf '%s\n' "  ${timeout_line}" >&2
+			fi
+			printf '%s\n' '--- server stderr (excerpt) ---' >&2
+			tail -n 200 "${stderr_file}" >&2 || true
+			printf '%s\n' '--- end server stderr ---' >&2
+			return 1
+		fi
+	fi
 	assert_json_lines "${workdir}/responses.ndjson"
 
 	jq -e -s '

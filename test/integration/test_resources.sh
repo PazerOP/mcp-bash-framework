@@ -168,8 +168,12 @@ jq -s '
 	(map(select(.id == "templates-list"))[0].result) as $list |
 
 	if ($list.resourceTemplates | length) != 0 then err("expected empty resourceTemplates") else null end,
-	if ($list | has("nextCursor") | not) then err("nextCursor missing") else null end,
-	if ($list.nextCursor | type) as $t | ($t != "string" and $t != "null") then err("nextCursor must be string or null") else null end
+	# nextCursor is optional; when present it must be a string.
+	if ($list | has("nextCursor")) then
+		if ($list.nextCursor | type) != "string" then err("nextCursor must be string when present") else null end
+	else
+		null
+	end
 ' <"${TEMPLATE_ROOT}/responses.ndjson" >/dev/null
 
 # --- Binary resources emit blob instead of text ---
@@ -236,10 +240,16 @@ windows_subscription_test() {
 {"jsonrpc":"2.0","id":"ping","method":"ping"}
 EOF
 
-	local sub_ok
-	sub_ok="$(jq -r 'select(.id=="sub") | .result // empty' "${resp_file}" || true)"
-	if [ -z "${sub_ok}" ]; then
+	local sub_id
+	sub_id="$(jq -r 'select(.id=="sub") | .result.subscriptionId // empty' "${resp_file}" || true)"
+	if [ -z "${sub_id}" ]; then
 		printf 'Subscription response missing on Windows file-based path\n' >&2
+		exit 1
+	fi
+	local sub_keys
+	sub_keys="$(jq -c 'select(.id=="sub") | .result | keys' "${resp_file}" 2>/dev/null || true)"
+	if [ "${sub_keys}" != '["subscriptionId"]' ]; then
+		printf 'Subscription response shape invalid on Windows file-based path\n' >&2
 		exit 1
 	fi
 
@@ -313,6 +323,7 @@ run_subscription_test() {
 	echo '{"jsonrpc":"2.0","id":"sub","method":"resources/subscribe","params":{"name":"file.live"}}' >&3
 
 	local sub_ok=false
+	local sub_line=""
 	local sub_timeout=10
 
 	# Wait for subscribe response
@@ -321,12 +332,27 @@ run_subscription_test() {
 		id="$(echo "$line" | jq -r '.id // empty')"
 		if [ "$id" = "sub" ]; then
 			sub_ok=true
+			sub_line="${line}"
 			break
 		fi
 	done
 
 	if [ "$sub_ok" != true ]; then
 		echo "Failed to subscribe" >&2
+		kill "$server_pid" 2>/dev/null || true
+		exit 1
+	fi
+	local sub_id
+	sub_id="$(printf '%s' "${sub_line}" | jq -r '.result.subscriptionId // empty' 2>/dev/null || true)"
+	if [ -z "${sub_id}" ]; then
+		echo "Subscribe result missing subscriptionId" >&2
+		kill "$server_pid" 2>/dev/null || true
+		exit 1
+	fi
+	local sub_keys
+	sub_keys="$(printf '%s' "${sub_line}" | jq -c '.result | keys' 2>/dev/null || true)"
+	if [ "${sub_keys}" != '["subscriptionId"]' ]; then
+		echo "Subscribe result shape invalid (expected only subscriptionId)" >&2
 		kill "$server_pid" 2>/dev/null || true
 		exit 1
 	fi
@@ -339,6 +365,7 @@ run_subscription_test() {
 
 	local ping_seen=false
 	local update_seen=false
+	local update_uri=""
 
 	while read -t 5 -r line <&4; do
 		local id method
@@ -348,7 +375,8 @@ run_subscription_test() {
 		if [ "$id" = "ping" ]; then
 			ping_seen=true
 		elif [ "$method" = "notifications/resources/updated" ]; then
-			if [ "$(echo "$line" | jq -r '.params.resource.contents[0].text // empty')" = "updated" ]; then
+			update_uri="$(echo "$line" | jq -r '.params.uri // empty' 2>/dev/null || true)"
+			if [ -n "${update_uri}" ]; then
 				update_seen=true
 			fi
 		fi
@@ -360,6 +388,27 @@ run_subscription_test() {
 
 	if [ "$update_seen" != true ]; then
 		echo "Update not seen" >&2
+		kill "$server_pid" 2>/dev/null || true
+		exit 1
+	fi
+	# Verify updated content via resources/read (notification is spec-shaped: uri only).
+	echo "{\"jsonrpc\":\"2.0\",\"id\":\"read\",\"method\":\"resources/read\",\"params\":{\"uri\":\"${update_uri}\"}}" >&3
+	local read_ok=false
+	while read -t 10 -r line <&4; do
+		local id
+		id="$(echo "$line" | jq -r '.id // empty')"
+		if [ "$id" = "read" ]; then
+			read_ok=true
+			break
+		fi
+	done
+	if [ "${read_ok}" != true ]; then
+		echo "Read response not seen" >&2
+		kill "$server_pid" 2>/dev/null || true
+		exit 1
+	fi
+	if [ "$(echo "$line" | jq -r '.result.contents[0].text // empty')" != "updated" ]; then
+		echo "Updated content not observed after notification" >&2
 		kill "$server_pid" 2>/dev/null || true
 		exit 1
 	fi

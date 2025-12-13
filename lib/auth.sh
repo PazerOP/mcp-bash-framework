@@ -7,6 +7,47 @@ set -euo pipefail
 : "${MCPBASH_REMOTE_TOKEN_KEY:=}"
 : "${MCPBASH_REMOTE_TOKEN_FALLBACK_KEY:=}"
 : "${MCPBASH_REMOTE_TOKEN_ENABLED:=false}"
+: "${MCPBASH_REMOTE_TOKEN_DEBUG_WARNED:=false}"
+
+mcp_auth_rate_limit_failures() {
+	if [ -z "${MCPBASH_STATE_DIR:-}" ]; then
+		return 0
+	fi
+	if [ "${MCPBASH_REMOTE_TOKEN_ENABLED:-false}" != "true" ]; then
+		return 0
+	fi
+	local max_fail="${MCPBASH_REMOTE_TOKEN_MAX_FAILURES_PER_MIN:-10}"
+	case "${max_fail}" in
+	'' | *[!0-9]*) max_fail=10 ;;
+	0) return 0 ;;
+	esac
+	local file="${MCPBASH_STATE_DIR}/auth.remote_token.fail.log"
+	local lock_name="auth.remote_token.fail"
+	local now
+	local preserved=""
+	local count=0
+	local line
+
+	mcp_lock_acquire "${lock_name}"
+	now="$(date +%s)"
+	if [ -f "${file}" ]; then
+		while IFS= read -r line; do
+			[ -z "${line}" ] && continue
+			if [ $((now - line)) -lt 60 ]; then
+				preserved="${preserved}${line}"$'\n'
+				count=$((count + 1))
+			fi
+		done <"${file}"
+	fi
+	if [ "${count}" -ge "${max_fail}" ]; then
+		printf '%s' "${preserved}" >"${file}"
+		mcp_lock_release "${lock_name}"
+		return 1
+	fi
+	printf '%s%s\n' "${preserved}" "${now}" >"${file}"
+	mcp_lock_release "${lock_name}"
+	return 0
+}
 
 mcp_auth_init() {
 	local token="${MCPBASH_REMOTE_TOKEN:-}"
@@ -27,13 +68,21 @@ mcp_auth_init() {
 		key="mcpbash/remoteToken"
 	fi
 
+	if [ "${#token}" -lt 32 ]; then
+		printf '%s\n' "mcp-bash: MCPBASH_REMOTE_TOKEN must be at least 32 characters; refusing weak shared secret." >&2
+		return 1
+	fi
+
 	MCPBASH_REMOTE_TOKEN_EXPECTED="${token}"
 	MCPBASH_REMOTE_TOKEN_KEY="${key}"
 	MCPBASH_REMOTE_TOKEN_FALLBACK_KEY="${fallback}"
 	MCPBASH_REMOTE_TOKEN_ENABLED=true
 
-	if [ "${#token}" -lt 32 ] && mcp_runtime_log_allowed; then
-		printf '%s\n' "mcp-bash: MCPBASH_REMOTE_TOKEN appears short (<256 bits); use 'openssl rand -base64 32' for stronger entropy." >&2
+	if [ "${MCPBASH_DEBUG_PAYLOADS:-false}" = "true" ] && [ "${MCPBASH_REMOTE_TOKEN_DEBUG_WARNED}" != "true" ]; then
+		MCPBASH_REMOTE_TOKEN_DEBUG_WARNED="true"
+		if mcp_runtime_log_allowed; then
+			printf '%s\n' "mcp-bash: payload debug logging is enabled; remote tokens will be redacted in debug logs but disable debug in production." >&2
+		fi
 	fi
 
 	return 0
@@ -112,10 +161,14 @@ mcp_auth_guard_request() {
 	presented="$(mcp_auth_extract_remote_token "${json_line}")"
 
 	if [ -z "${presented}" ] || ! mcp_auth_constant_time_equals "${MCPBASH_REMOTE_TOKEN_EXPECTED}" "${presented}"; then
-		if mcp_logging_is_enabled "warning"; then
-			mcp_logging_warning "mcp.auth" "Remote token rejected method=${method}"
+		if mcp_auth_rate_limit_failures; then
+			if mcp_logging_is_enabled "warning"; then
+				mcp_logging_warning "mcp.auth" "Remote token rejected method=${method}"
+			fi
+			mcp_auth_emit_error "${id_json:-null}" "Remote token missing or invalid"
+			return 1
 		fi
-		mcp_auth_emit_error "${id_json:-null}" "Remote token missing or invalid"
+		mcp_auth_emit_error "${id_json:-null}" "Remote token missing or invalid (throttled)"
 		return 1
 	fi
 

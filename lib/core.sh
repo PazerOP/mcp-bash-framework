@@ -41,7 +41,7 @@ mcp_core_run() {
 	mcp_core_require_handlers
 	mcp_core_bootstrap_state
 	mcp_core_read_loop
-	mcp_core_wait_for_workers
+	mcp_core_finish_after_read_loop
 }
 
 mcp_core_require_handlers() {
@@ -83,6 +83,7 @@ mcp_core_bootstrap_state() {
 	MCPBASH_CLIENT_SUPPORTS_ELICITATION=0
 	# shellcheck disable=SC2034  # Used by RPC helpers in lib/rpc.sh
 	MCPBASH_NEXT_OUTGOING_ID=1
+	printf '%s' "1" >"${MCPBASH_STATE_DIR}/next.outgoing.id" 2>/dev/null || true
 	rm -f "${MCPBASH_STATE_DIR}"/elicit.*.id 2>/dev/null || true
 	rm -f "${MCPBASH_STATE_DIR}"/pending.*.path 2>/dev/null || true
 
@@ -91,16 +92,61 @@ mcp_core_bootstrap_state() {
 	MCP_LOG_STREAM="${MCPBASH_STATE_DIR}/logs.ndjson"
 	: >"${MCP_PROGRESS_STREAM}"
 	: >"${MCP_LOG_STREAM}"
-	mcp_core_start_progress_flusher
-	mcp_core_start_resource_poll
 	mcp_runtime_log_startup_summary
+}
+
+mcp_core_has_resource_subscriptions() {
+	[ -n "${MCPBASH_STATE_DIR:-}" ] || return 1
+	local path
+	for path in "${MCPBASH_STATE_DIR}"/resource_subscription.*; do
+		if [ -f "${path}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+mcp_core_maybe_start_background_workers() {
+	# Start the progress flusher only when needed:
+	# - live progress enabled (streams while tools run), OR
+	# - elicitation supported (needed even when stdin is idle).
+	if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ]; then
+		mcp_core_start_progress_flusher
+	elif declare -F mcp_elicitation_is_supported >/dev/null 2>&1; then
+		if mcp_elicitation_is_supported; then
+			mcp_core_start_progress_flusher
+		fi
+	fi
+
+	# Start resource subscription polling only when there are subscriptions.
+	if mcp_core_has_resource_subscriptions; then
+		mcp_core_start_resource_poll
+	fi
 }
 
 mcp_core_read_loop() {
 	local line
-	while IFS= read -r line; do
+	while IFS= read -r line || [ -n "${line}" ]; do
 		mcp_core_handle_line "${line}"
 	done
+}
+
+mcp_core_finish_after_read_loop() {
+	local shutdown_pending="${MCPBASH_SHUTDOWN_PENDING:-false}"
+	local exit_requested="${MCPBASH_EXIT_REQUESTED:-false}"
+
+	if [ "${shutdown_pending}" = true ]; then
+		mcp_core_cancel_shutdown_watchdog
+		MCPBASH_SHUTDOWN_TIMER_STARTED=false
+	fi
+
+	if [ "${exit_requested}" = true ] || [ "${shutdown_pending}" = true ]; then
+		mcp_core_wait_for_workers
+		mcp_runtime_cleanup
+		exit 0
+	fi
+
+	mcp_core_wait_for_workers
 }
 
 mcp_core_wait_for_workers() {
@@ -186,7 +232,7 @@ mcp_core_wait_for_one_worker() {
 	while :; do
 		pids="$(mcp_core_list_worker_pids)"
 		if [ -z "${pids}" ]; then
-			sleep 0.01
+			sleep 0.05
 			return 0
 		fi
 		for pid in ${pids}; do
@@ -198,7 +244,7 @@ mcp_core_wait_for_one_worker() {
 				return 0
 			fi
 		done
-		sleep 0.01
+		sleep 0.05
 	done
 }
 
@@ -232,6 +278,7 @@ mcp_core_start_shutdown_watchdog() {
 	local timeout="${MCPBASH_SHUTDOWN_TIMEOUT:-5}"
 	case "${timeout}" in
 	'' | *[!0-9]*) timeout=5 ;;
+	0) timeout=5 ;;
 	esac
 	if [ -n "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" ]; then
 		if kill -0 "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null; then
@@ -268,13 +315,25 @@ mcp_core_cancel_shutdown_watchdog() {
 	if [ -z "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" ]; then
 		return 0
 	fi
+	local pid="${MCPBASH_SHUTDOWN_WATCHDOG_PID}"
 	# Signal cancellation via file (reliable on Windows where kill may not interrupt sleep)
 	if [ -n "${MCPBASH_SHUTDOWN_WATCHDOG_CANCEL:-}" ]; then
 		touch "${MCPBASH_SHUTDOWN_WATCHDOG_CANCEL}" 2>/dev/null || true
 	fi
 	# Also try to kill directly (works on Unix, may fail on Windows)
-	if kill "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null; then
-		wait "${MCPBASH_SHUTDOWN_WATCHDOG_PID}" 2>/dev/null || true
+	kill "${pid}" 2>/dev/null || true
+	# Wait for the watchdog to exit. On Windows, `wait` may not work for subshells in
+	# non-interactive mode, so we poll with kill -0. The watchdog checks the cancel file
+	# every second, so we wait up to 3 seconds for it to notice and exit.
+	local attempts=0
+	while [ "${attempts}" -lt 30 ] && kill -0 "${pid}" 2>/dev/null; do
+		sleep 0.1 2>/dev/null || sleep 1
+		attempts=$((attempts + 1))
+	done
+	# Avoid a potentially blocking wait on Git Bash (wait can hang for background subshells).
+	# Only attempt to reap if the watchdog has already exited.
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
 	fi
 	MCPBASH_SHUTDOWN_WATCHDOG_PID=""
 	MCPBASH_SHUTDOWN_WATCHDOG_CANCEL=""
@@ -431,7 +490,15 @@ mcp_core_handle_line() {
 
 	if mcp_json_is_array "${normalized_line}"; then
 		if ! mcp_runtime_batches_enabled; then
-			mcp_core_emit_parse_error "Invalid Request" -32600 "Batch arrays are disabled"
+			local protocol="${MCPBASH_NEGOTIATED_PROTOCOL_VERSION:-${MCPBASH_PROTOCOL_VERSION}}"
+			case "${protocol}" in
+			2025-06-18 | 2025-11-25)
+				mcp_core_emit_parse_error "Invalid Request" -32600 "Batch arrays are not allowed for protocol ${protocol}"
+				;;
+			*)
+				mcp_core_emit_parse_error "Invalid Request" -32600 "Batch arrays are disabled"
+				;;
+			esac
 			return
 		fi
 		if ! mcp_core_process_legacy_batch "${normalized_line}"; then
@@ -447,6 +514,7 @@ mcp_core_handle_line() {
 		if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
 			mcp_elicitation_process_requests
 		fi
+		mcp_core_maybe_start_background_workers
 		return
 	fi
 
@@ -461,6 +529,7 @@ mcp_core_handle_line() {
 	if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
 		mcp_elicitation_process_requests
 	fi
+	mcp_core_maybe_start_background_workers
 
 	if [ "${MCPBASH_EXIT_REQUESTED}" = true ]; then
 		mcp_core_wait_for_workers
@@ -770,6 +839,18 @@ mcp_core_worker_entry() {
 		mcp_core_worker_emit "${key}" "${response}"
 	fi
 
+	# Progress/log delivery:
+	# - When live progress is disabled, emit all buffered progress/log lines here.
+	# - When live progress is enabled, a background flusher streams lines while the
+	#   worker runs, but Git Bash/CI scheduling can cause the worker to exit and
+	#   delete its stream files before the flusher observes the final writes.
+	#   Do a final best-effort flush before cleanup so at least one progress event
+	#   is emitted when tools report progress (avoids flaky CI on Windows).
+	if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ] && [ -n "${key}" ]; then
+		mcp_core_flush_stream "${key}" "progress" || true
+		mcp_core_flush_stream "${key}" "log" || true
+	fi
+
 	if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" != "true" ] && [ -n "${progress_stream}" ]; then
 		mcp_core_emit_progress_stream "${key}" "${progress_stream}"
 	fi
@@ -958,7 +1039,9 @@ mcp_core_emit_not_initialized() {
 	if [ -z "${id_json}" ]; then
 		id_json="null"
 	fi
-	rpc_send_line "$(mcp_core_build_error_response "${id_json}" -32002 "Server not initialized" "")"
+	# MCP reserves -32002 for resources/read "Resource not found" (spec 2025-11-25).
+	# Use a distinct server error for pre-init gating.
+	rpc_send_line "$(mcp_core_build_error_response "${id_json}" -32000 "Server not initialized" "")"
 }
 
 mcp_core_emit_shutting_down() {
@@ -976,18 +1059,28 @@ mcp_core_emit_shutting_down() {
 # -32700 parse error, -32600 invalid request, -32601 method not found,
 # -32602 invalid params, -32603 internal error.
 # We also use the server-reserved range (-32000..-32099) for MCP-specific states:
-# -32001 cancelled, -32002 not initialized, -32003 shutting down,
+# -32000 not initialized, -32001 cancelled, -32003 shutting down,
 # -32005 exit before shutdown. Timeouts use -32603 (internal error) by policy.
 mcp_core_build_error_response() {
 	local id_json="$1"
 	local code="$2"
 	local message="$3"
 	local data="$4"
-	local id_value
+	local id_kv
 	local data_json
 	local message_json
 
-	id_value="${id_json:-null}"
+	# MCP requires request IDs MUST NOT be null. For error responses where the
+	# request ID is unknown/unreadable (e.g. parse errors), omit `id` entirely
+	# rather than emitting `"id": null`.
+	case "${id_json:-}" in
+	null | '')
+		id_kv=''
+		;;
+	*)
+		id_kv=',"id":'"${id_json}"
+		;;
+	esac
 	message_json="$(mcp_json_quote_text "${message}")"
 
 	if [ -n "${data}" ]; then
@@ -999,9 +1092,9 @@ mcp_core_build_error_response() {
 			data_json="$(mcp_json_quote_text "${data}")"
 			;;
 		esac
-		printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s,"data":%s}}' "${id_value}" "${code}" "${message_json}" "${data_json}"
+		printf '{"jsonrpc":"2.0"%s,"error":{"code":%s,"message":%s,"data":%s}}' "${id_kv}" "${code}" "${message_json}" "${data_json}"
 	else
-		printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id_value}" "${code}" "${message_json}"
+		printf '{"jsonrpc":"2.0"%s,"error":{"code":%s,"message":%s}}' "${id_kv}" "${code}" "${message_json}"
 	fi
 }
 
@@ -1073,6 +1166,13 @@ mcp_core_emit_registry_notifications() {
 	if [ "${MCPBASH_INITIALIZED}" != true ]; then
 		return 0
 	fi
+	# During shutdown, avoid polling registries or emitting list_changed notifications.
+	# Registry refresh can run project hooks and touch the filesystem; doing so after
+	# a shutdown request can delay processing of the subsequent `exit` and trigger
+	# the shutdown watchdog in slow/loaded CI environments.
+	if [ "${MCPBASH_SHUTDOWN_PENDING:-false}" = true ]; then
+		return 0
+	fi
 
 	local allow_list_changed="true"
 	case "${MCPBASH_NEGOTIATED_PROTOCOL_VERSION:-${MCPBASH_PROTOCOL_VERSION}}" in
@@ -1134,7 +1234,9 @@ mcp_core_flush_stream() {
 	fi
 	# Continue emitting from the last offset so progress/log lines survive worker
 	# restarts without replaying already-sent messages.
-	tail -c +$((last_offset + 1)) "${stream}" 2>/dev/null \
+	# Git Bash/coreutils `tail -c +N` has been observed to be flaky in CI; use dd
+	# for a more portable byte-offset reader.
+	dd if="${stream}" bs=1 skip="${last_offset}" 2>/dev/null \
 		| while IFS= read -r line || [ -n "${line}" ]; do
 			[ -z "${line}" ] && continue
 			if [ "${kind}" = "log" ]; then
@@ -1174,11 +1276,12 @@ mcp_core_start_progress_flusher() {
 			if [ "${MCPBASH_ENABLE_LIVE_PROGRESS:-false}" = "true" ]; then
 				mcp_core_flush_worker_streams_once || true
 			fi
+			# Polling tick drives live progress/log emission and pending elicitation
+			# prompts without blocking request handlers. Elicitation uses a
+			# lock-backed shared counter to avoid ID reuse across processes.
 			if declare -F mcp_elicitation_process_requests >/dev/null 2>&1; then
 				mcp_elicitation_process_requests || true
 			fi
-			# Polling tick drives live progress/log emission and pending
-			# elicitation prompts without blocking request handlers.
 			# Windows Git Bash may reject fractional sleep intervals; fall back to
 			# a 1s tick instead of exiting the flusher.
 			sleep "${MCPBASH_PROGRESS_FLUSH_INTERVAL:-0.5}" 2>/dev/null || sleep 1
@@ -1191,8 +1294,16 @@ mcp_core_stop_progress_flusher() {
 	if [ -z "${MCPBASH_PROGRESS_FLUSHER_PID:-}" ]; then
 		return 0
 	fi
-	if kill "${MCPBASH_PROGRESS_FLUSHER_PID}" 2>/dev/null; then
-		wait "${MCPBASH_PROGRESS_FLUSHER_PID}" 2>/dev/null || true
+	local pid="${MCPBASH_PROGRESS_FLUSHER_PID}"
+	kill "${pid}" 2>/dev/null || true
+	# Git Bash can hang on `wait` even after signaling; poll and only reap if exited.
+	local attempts=0
+	while [ "${attempts}" -lt 30 ] && kill -0 "${pid}" 2>/dev/null; do
+		sleep 0.1 2>/dev/null || sleep 1
+		attempts=$((attempts + 1))
+	done
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
 	fi
 	MCPBASH_PROGRESS_FLUSHER_PID=""
 }
@@ -1227,8 +1338,16 @@ mcp_core_stop_resource_poll() {
 	if [ -z "${MCPBASH_RESOURCE_POLL_PID:-}" ]; then
 		return 0
 	fi
-	if kill "${MCPBASH_RESOURCE_POLL_PID}" 2>/dev/null; then
-		wait "${MCPBASH_RESOURCE_POLL_PID}" 2>/dev/null || true
+	local pid="${MCPBASH_RESOURCE_POLL_PID}"
+	kill "${pid}" 2>/dev/null || true
+	# Git Bash can hang on `wait` even after signaling; poll and only reap if exited.
+	local attempts=0
+	while [ "${attempts}" -lt 30 ] && kill -0 "${pid}" 2>/dev/null; do
+		sleep 0.1 2>/dev/null || sleep 1
+		attempts=$((attempts + 1))
+	done
+	if ! kill -0 "${pid}" 2>/dev/null; then
+		wait "${pid}" 2>/dev/null || true
 	fi
 	MCPBASH_RESOURCE_POLL_PID=""
 }

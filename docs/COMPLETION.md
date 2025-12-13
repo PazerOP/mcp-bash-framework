@@ -1,14 +1,17 @@
 # Completion Support
 
-`completion/complete` is available in full mode (disabled in minimal mode). Completions are manually registered via `server.d/register.sh`; there is no auto-discovery. Providers can be `builtin`, `manual` (scripts), `prompt`, or `resource`.
+`completion/complete` is available in full mode (disabled in minimal mode). Completions are manually registered (there is no auto-discovery). Prefer declarative registration via `server.d/register.json`; hook-based registration via `server.d/register.sh` is still supported but executes shell code and is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true` plus safe ownership/permissions).
 
 ## Registering Completions
 
-```bash
-# server.d/register.sh
-mcp_completion_manual_begin
-mcp_completion_register_manual '{"name":"example.completion","path":"completions/suggest.sh","timeoutSecs":5}'
-mcp_completion_manual_finalize
+```json
+// server.d/register.json
+{
+  "version": 1,
+  "completions": [
+    {"name": "example.completion", "path": "completions/suggest.sh", "timeoutSecs": 5}
+  ]
+}
 ```
 
 - `name` must be unique. Clients call `completion/complete` with this name.
@@ -30,6 +33,12 @@ Environment variables:
 - `MCP_COMPLETION_LIMIT` – max suggestions requested (int; capped at 100).
 - `MCP_COMPLETION_OFFSET` – pagination offset (int).
 - `MCP_COMPLETION_ARGS_HASH` – opaque hash for cursor binding.
+
+Recommended parsing:
+```bash
+# Prefer .query; fall back to .prefix; treat missing as empty string.
+query="$(printf '%s' "${MCP_COMPLETION_ARGS_JSON:-{}}" | jq -r '(.query // .prefix // "")')"
+```
 
 Stdout (any of):
 - JSON array of suggestions:
@@ -59,6 +68,8 @@ Stdout (any of):
 
 ## Example Flow
 See `examples/10-completions`:
-- Registers `demo.completion` via `server.d/register.sh`.
-- Script reads `arguments.query` (or `prefix`) from `MCP_COMPLETION_ARGS_JSON`, filters suggestions, and paginates with `hasMore`.
+- Registers `demo.completion` via `server.d/register.json`.
+- Script reads `.query` (or `.prefix`) from `MCP_COMPLETION_ARGS_JSON` (which is `params.arguments`), filters suggestions, and paginates with `hasMore`.
 - `completion/complete` returns suggestions, `hasMore`, and `nextCursor` until results are exhausted.
+
+If you need **dynamic/imperative** completion registration (for example, generate names from the filesystem or gate entries on env vars), see `examples/advanced/register-sh-hooks/` which uses `server.d/register.sh` (opt-in).

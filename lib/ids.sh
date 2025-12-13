@@ -38,9 +38,11 @@ mcp_ids_encode() {
 
 mcp_ids_base64url() {
 	if command -v base64 >/dev/null 2>&1; then
-		printf '%s' "${1}" | base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='
+		# MSYS/Git Bash `base64` may emit CRLF; strip both to keep keys filename-safe.
+		printf '%s' "${1}" | base64 | tr -d '\r\n' | tr '+/' '-_' | tr -d '='
 	else
-		printf '%s' "${1}" | openssl base64 2>/dev/null | tr -d '\n' | tr '+/' '-_' | tr -d '='
+		# openssl may wrap lines; strip CRLF for portability.
+		printf '%s' "${1}" | openssl base64 2>/dev/null | tr -d '\r\n' | tr '+/' '-_' | tr -d '='
 	fi
 }
 

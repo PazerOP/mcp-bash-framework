@@ -1,8 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-cat <<'JSON'
 {
+  "version": 1,
   "tools": [
     {
       "name": "manual.progress",
@@ -24,7 +21,7 @@ cat <<'JSON'
   "prompts": [
     {
       "name": "manual.prompt",
-      "description": "Explain how manual registration overrides discovery",
+      "description": "Explain how registry overrides work",
       "path": "manual.prompt.txt",
       "arguments": {
         "type": "object",
@@ -37,4 +34,3 @@ cat <<'JSON'
     }
   ]
 }
-JSON

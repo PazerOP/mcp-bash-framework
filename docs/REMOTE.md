@@ -4,7 +4,7 @@ mcp-bash implements only the stdio transport. HTTP, SSE, OAuth, and remote acces
 
 ## TL;DR (for operators)
 
-- Require a shared secret by setting `MCPBASH_REMOTE_TOKEN` (default `_meta["mcpbash/remoteToken"]`; configurable key, legacy fallback optional).
+- Require a shared secret (≥32 chars) by setting `MCPBASH_REMOTE_TOKEN` (default `_meta["mcpbash/remoteToken"]`; configurable key, legacy fallback optional).
 - Have your gateway map `Authorization: Bearer <token>` → `_meta["mcpbash/remoteToken"]`, and forward `Mcp-Session-Id` / `MCP-Protocol-Version`.
 - Use `mcp-bash --health [--project-root DIR]` in liveness/readiness probes (no registry writes or notifications, exits 0/1/2).
 - Keep TLS, rate limiting, and token rotation on the gateway; never log token values.
@@ -17,6 +17,8 @@ mcp-bash implements only the stdio transport. HTTP, SSE, OAuth, and remote acces
 | Lightweight standalone proxy | [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) |
 | Kubernetes deployments | [Microsoft MCP Gateway](https://github.com/microsoft/mcp-gateway) |
 | APISIX API gateway users | [mcp-bridge plugin](https://dev.to/apisix/from-stdio-to-http-sse-host-your-mcp-server-with-apisix-api-gateway-26i2) |
+
+These gateways are **optional** and external to mcp-bash. You do not need Python/Node to run mcp-bash itself; choose a gateway that fits your environment (Docker/Kubernetes/Go/Python, etc.) only when you need HTTP/SSE exposure.
 
 ---
 
@@ -32,7 +34,7 @@ mcp-bash implements only the stdio transport. HTTP, SSE, OAuth, and remote acces
 
 - When `MCPBASH_REMOTE_TOKEN` is set, every request must include the token in `_meta["mcpbash/remoteToken"]` (or your configured key). Missing/invalid tokens return `-32602` with `Remote token missing or invalid`.
 - Generate at least 256 bits of entropy (`openssl rand -base64 32` → ~44 chars). Rotate on a schedule (e.g., every 90 days); rotation requires clients to reconnect so the proxy can send the new token.
-- Keep the token base64-safe. Do not log or echo it; the server never reflects the value.
+- Keep the token base64-safe. Do not log or echo it; payload debug logs redact the token but should be disabled in production.
 - Per-request enforcement only; there is no session binding or downgrade to unauthenticated traffic.
 
 ### Header → _meta mapping
@@ -125,6 +127,7 @@ plugins:
 
 - Terminate TLS at the gateway and keep the MCP port off the public internet.
 - Rate limit and audit auth failures at the gateway; never log token contents.
+- mcp-bash also rate-limits bad remote tokens (`MCPBASH_REMOTE_TOKEN_MAX_FAILURES_PER_MIN`, defaults to 10) to blunt brute-force attempts.
 - Rotate `MCPBASH_REMOTE_TOKEN` regularly and restart the proxy to pick up the new value.
 - Forward session headers intact (`Mcp-Session-Id`, `MCP-Protocol-Version`, cancellation/progress headers) to preserve client affinity.
 

@@ -32,6 +32,10 @@ mcp_handle_prompts() {
 		cursor="$(mcp_json_extract_cursor "${json_payload}")"
 		if ! list_json="$(mcp_prompts_list "${limit}" "${cursor}")"; then
 			local code="${_MCP_PROMPTS_ERR_CODE:--32603}"
+			# Some lib paths initialise error code to 0; never emit code 0 over JSON-RPC.
+			case "${code}" in
+			'' | 0) code=-32603 ;;
+			esac
 			local message
 			message=$(mcp_prompts_quote "${_MCP_PROMPTS_ERR_MESSAGE:-Unable to list prompts}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
@@ -64,7 +68,8 @@ mcp_handle_prompts() {
 		if ! metadata="$(mcp_prompts_metadata_for_name "${name}")"; then
 			local message
 			message=$(mcp_prompts_quote "Prompt not found")
-			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":%s}}' "${id}" "${message}"
+			# Unknown prompt name is an invalid-params condition, not a missing method.
+			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
 			return 0
 		fi
 		if ! mcp_prompts_render "${metadata}" "${args_json}"; then

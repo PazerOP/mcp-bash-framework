@@ -17,13 +17,13 @@
 **Transcript**
 ```
 > logging/setLevel {"level":"debug"}
-> tools/call example.logger
-< notifications/message ... "example.logger" ...
+> tools/call example-logger
+< notifications/message ... "example-logger" ...
 < {"result":{"content":[{"type":"text","text":"Check your logging notifications"}]}}
 ```
 
 **Success criteria**
-- `tools/list` shows `example.logger`
+- `tools/list` shows `example-logger`
 - Setting level to `debug` yields `notifications/message` entries from the tool
 
 **Troubleshooting**

@@ -16,7 +16,7 @@
 
 **Transcript**
 ```
-> tools/call example.slow {"_meta":{"progressToken":"token-1"}}
+> tools/call example-slow {"_meta":{"progressToken":"token-1"}}
 < notifications/progress ... "Working (10%)"
 < notifications/progress ... "Working (50%)"
 > notifications/cancelled {"requestId":"1"}

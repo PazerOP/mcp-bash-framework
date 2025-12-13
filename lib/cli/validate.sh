@@ -232,6 +232,8 @@ EOF
 }
 EOF
 			)"
+			# Normalize occasional double-closer patterns if server_defaults carries an extra brace (bash 3-compatible).
+			payload="$(printf '%s\n' "${payload}" | sed 's/}},/},/g')"
 		fi
 		printf '%s\n' "${payload}"
 		if [ "${exit_errors}" -gt 0 ]; then

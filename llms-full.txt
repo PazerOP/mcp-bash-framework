@@ -12,7 +12,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Create new project in new directory: `bin/mcp-bash new <name> [--no-hello]`.
   - Scaffold assets in an existing project: `bin/mcp-bash scaffold tool|prompt|resource <name>`.
 - Recommended flow to create a new server:
-  1) Install the framework once via the one-liner (no repo clone needed): `curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash` (or pin a version with `--version`; manual `git clone` to `~/.local/share/mcp-bash` is the fallback).
+  1) Install the framework once via a verified download: fetch `install.sh` + `SHA256SUMS`, verify with `sha256sum -c`, then `bash install.sh --verify <sha>` (fallback one-liner: `curl -fsSL https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/main/install.sh | bash -- --yes`).
   2) Create a project dir and initialize: `mkdir ~/my-mcp-server && cd ~/my-mcp-server && mcp-bash init --name my-mcp-server`.
   3) Generate wiring for clients: `mcp-bash config --wrapper` (TTY creates `./my-mcp-server.sh`, piped/redirected prints to stdout) or `mcp-bash config --client <client>` for pasteable JSON.
   4) Add tools/resources/prompts via `mcp-bash scaffold tool|prompt|resource <name>`, then `mcp-bash validate` before wiring to clients.
@@ -27,7 +27,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `tools/<name>/tool.sh` + `tools/<name>/tool.meta.json`.
   - `resources/<name>.meta.json` + content files.
   - `prompts/<name>.meta.json` + template files.
-  - `server.d/register.sh`, `server.d/env.sh`, `server.d/server.meta.json`, optional `server.d/policy.sh` (defines `mcp_tools_policy_check` to allow/deny tools centrally).
+  - `server.d/register.sh` (runs only when `MCPBASH_ALLOW_PROJECT_HOOKS=true` and has safe ownership/permissions), `server.d/env.sh`, `server.d/server.meta.json`, optional `server.d/policy.sh` (defines `mcp_tools_policy_check` to allow/deny tools centrally).
   - `config/roots.json`, `.registry/` (registry cache, not committed).
 
 ## EMBEDDED RESOURCES (type:"resource")
@@ -236,7 +236,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Embedded resources: `examples/06-embedded-resources`.
   - Prompts basics: `examples/07-prompts-basics`.
   - Elicitation: `examples/08-elicitation`.
-  - Manual registration + live progress: `examples/09-manual-registration`.
+  - Registry overrides + live progress: `examples/09-registry-overrides`.
   - Advanced ffmpeg studio: `examples/advanced/ffmpeg-studio`.
 
 ## COMMANDS & TESTING

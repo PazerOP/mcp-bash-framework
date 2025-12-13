@@ -159,8 +159,10 @@ For manual control without the `debug` subcommand:
 
 ## CI Mode Notes
 - Enable with `MCPBASH_CI_MODE=true` to get CI-friendly defaults: tmp root under `RUNNER_TEMP`/`$GITHUB_WORKSPACE/.mcpbash-tmp`/`TMPDIR`, default log dir, keep-logs, and timestamped log messages.
-- CI mode writes `failure-summary.jsonl` (per-tool summaries: exit code, timeout flag, stderr tail, trace line, hashed args, counts) and a one-time `env-snapshot.json` (bash version, OS, cwd, PATH first/last/count) under the log dir.
+- CI mode writes `failure-summary.jsonl` (per-tool summaries: exit code, timeout flag, stderr tail, trace line, hashed args, counts) and a one-time `env-snapshot.json` (bash version, OS, cwd, PATH first/last/count, `pathBytes`/`envBytes` in bytes, `jsonTool`/`jsonToolBin`) under the log dir. The snapshot records counts/sizes only—no env contents are dumped.
 - On GitHub Actions, if tracing provides a file:line, CI mode emits `::error` annotations for tool failures/timeouts.
+- Integration/conformance tests may also write **failure bundles** under `${MCPBASH_LOG_DIR}/failure-bundles/` containing `requests*.ndjson`, `responses*.ndjson`, and relevant `progress.*.ndjson`/`logs.*.ndjson` stream files to make Windows CI failures diagnosable from artifacts.
+- Background workers start lazily: resource subscription polling begins after the first `resources/subscribe`, and the progress flusher starts only when live progress is enabled or a feature (like elicitation) requires it.
 
 Example:
 ```bash
@@ -185,4 +187,5 @@ rm -rf ${TMPDIR:-/tmp}/mcpbash.debug.*
 ## See Also
 
 - [LOGGING.md](LOGGING.md) - General logging configuration
+- [INSPECTOR.md](INSPECTOR.md) - MCP Inspector recipes + strict-client pitfalls
 - [BEST-PRACTICES.md](BEST-PRACTICES.md) - Debugging flowchart

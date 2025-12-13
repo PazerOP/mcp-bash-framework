@@ -4,28 +4,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=../common/env.sh
+# shellcheck disable=SC1091
+. "${SCRIPT_DIR}/../common/env.sh"
+# shellcheck source=../common/assert.sh
+# shellcheck disable=SC1091
+. "${SCRIPT_DIR}/../common/assert.sh"
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/mcp-inspector.XXXXXX")"
-cleanup() {
-	if [ -n "${TMP_ROOT:-}" ] && [ -d "${TMP_ROOT}" ]; then
-		rm -rf "${TMP_ROOT}"
-	fi
-}
-trap cleanup EXIT
-
-stage_workspace() {
-	local dest="$1"
-	mkdir -p "${dest}"
-	cp -a "${REPO_ROOT}/bin" "${dest}/"
-	cp -a "${REPO_ROOT}/lib" "${dest}/"
-	cp -a "${REPO_ROOT}/handlers" "${dest}/"
-	cp -a "${REPO_ROOT}/providers" "${dest}/"
-	cp -a "${REPO_ROOT}/sdk" "${dest}/"
-}
-
-WORKSPACE="${TMP_ROOT}/workspace"
-stage_workspace "${WORKSPACE}"
+test_create_tmpdir
+WORKSPACE="${TEST_TMPDIR}/workspace"
+test_stage_workspace "${WORKSPACE}"
 export WORKSPACE
 
 # Bash implementation of inspector test
@@ -36,10 +24,7 @@ export WORKSPACE
 	# Enable startup logging for this test (disabled by default since b832516)
 	export MCPBASH_LOG_STARTUP=true
 
-	# Use a named pipe or coproc. coproc is bash 4+.
-	# Let's use a simple FIFO approach which works on older bash too if needed, but coproc is cleaner.
-	# Assuming bash 4+ since we require bash 3.2+ but macOS bash 3.2 doesn't have coproc.
-	# We'll use file descriptors redirect.
+	# Use FIFOs + file descriptors (Bash 3.2+; avoids coproc which is Bash 4+).
 
 	# Launch server with pipes
 	# We'll read from server_out and write to server_in
@@ -74,7 +59,7 @@ export WORKSPACE
 				kill "${PID}"
 				exit 1
 			fi
-			for cap in logging tools resources prompts completion; do
+			for cap in logging tools resources prompts completions; do
 				if ! echo "${line}" | jq -e ".result.capabilities.${cap}" >/dev/null; then
 					echo "missing capability ${cap}" >&2
 					kill "${PID}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resource provider: fetch files from git:// repositories.
+# Resource provider: fetch files from git+https:// repositories.
 
 set -euo pipefail
 
@@ -12,42 +12,200 @@ mcp_git_log_block() {
 	fi
 }
 
+mcp_git_load_policy() {
+	# Prefer shared policy helpers. If unavailable, fall back to local versions
+	# that STILL enforce allow/deny lists (never fail-open).
+	local sourced="false"
+	if [ -n "${MCPBASH_HOME:-}" ] && [ -f "${MCPBASH_HOME}/lib/policy.sh" ]; then
+		# shellcheck disable=SC1090
+		if . "${MCPBASH_HOME}/lib/policy.sh"; then sourced="true"; fi
+	fi
+	if [ "${sourced}" != "true" ]; then
+		local self_dir=""
+		self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P 2>/dev/null)" || true
+		if [ -n "${self_dir}" ] && [ -f "${self_dir%/}/../lib/policy.sh" ]; then
+			# shellcheck disable=SC1090,SC1091
+			if . "${self_dir%/}/../lib/policy.sh"; then sourced="true"; fi
+		fi
+	fi
+
+	if ! command -v mcp_policy_normalize_host >/dev/null 2>&1; then
+		mcp_policy_normalize_host() {
+			local host="$1"
+			if [ -z "${host}" ]; then
+				return 1
+			fi
+			if [ "${host#\[}" != "${host}" ]; then
+				host="${host#[}"
+				host="${host%]}"
+			fi
+			printf '%s' "${host}" | tr '[:upper:]' '[:lower:]'
+		}
+	fi
+
+	if ! command -v mcp_policy_host_allowed >/dev/null 2>&1; then
+		mcp_policy_host_match_list() {
+			local host="$1"
+			local list="$2"
+			local token
+			list="${list//,/ }"
+			for token in ${list}; do
+				[ -z "${token}" ] && continue
+				if [ "${host}" = "$(mcp_policy_normalize_host "${token}")" ]; then
+					return 0
+				fi
+			done
+			return 1
+		}
+
+		mcp_policy_host_allowed() {
+			local host="$1"
+			local allow_list="$2"
+			local deny_list="$3"
+			if [ -n "${deny_list}" ] && mcp_policy_host_match_list "${host}" "${deny_list}"; then
+				return 1
+			fi
+			if [ -n "${allow_list}" ]; then
+				if mcp_policy_host_match_list "${host}" "${allow_list}"; then
+					return 0
+				fi
+				return 1
+			fi
+			return 0
+		}
+	fi
+}
+
+mcp_git_normalize_path() {
+	local target="$1"
+	# Security requirement: to prevent symlink-based escapes, canonicalization must
+	# resolve symlinks (physical path). If we cannot do that reliably, fail closed.
+	#
+	# Note: mcp_path_normalize may fall back to a logical collapse-only mode when
+	# the host lacks realpath/readlink -f. We intentionally do NOT accept that
+	# mode here.
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "${target}" 2>/dev/null && return 0
+	fi
+	if command -v readlink >/dev/null 2>&1; then
+		if readlink -f / >/dev/null 2>&1; then
+			readlink -f "${target}" 2>/dev/null && return 0
+		fi
+	fi
+	return 1
+}
+
+mcp_git_available_kb() {
+	local target_dir="$1"
+	if command -v df >/dev/null 2>&1; then
+		df -Pk "${target_dir}" 2>/dev/null | awk 'NR==2 {print $4}'
+	fi
+}
+
 if [ "${MCPBASH_ENABLE_GIT_PROVIDER:-false}" != "true" ]; then
 	printf '%s\n' "git provider is disabled (set MCPBASH_ENABLE_GIT_PROVIDER=true to enable)" >&2
 	exit 4
 fi
 
-if [ -n "${MCPBASH_HOME:-}" ] && [ -f "${MCPBASH_HOME}/lib/policy.sh" ]; then
-	# shellcheck disable=SC1090
-	. "${MCPBASH_HOME}/lib/policy.sh"
-fi
+mcp_git_load_policy
 if ! command -v mcp_policy_extract_host_from_url >/dev/null 2>&1; then
 	mcp_policy_extract_host_from_url() {
 		local url="$1"
-		local host="${url#*://}"
-		host="${host%%/*}"
-		host="${host%%:*}"
-		host="${host#\[}"
-		host="${host%\]}"
+		# Best-effort URL host extraction for fallback mode. This must strip
+		# userinfo (user:pass@) to avoid SSRF bypasses.
+		local authority="${url#*://}"
+		authority="${authority%%/*}"
+		authority="${authority%%\?*}"
+		authority="${authority%%\#*}"
+		authority="${authority##*@}"
+		local host=""
+		case "${authority}" in
+		\[*\]*)
+			host="${authority#\[}"
+			host="${host%%\]*}"
+			;;
+		*)
+			host="${authority%%:*}"
+			;;
+		esac
 		printf '%s' "${host}" | tr '[:upper:]' '[:lower:]'
+	}
+	mcp_policy_resolve_ips() {
+		local host="$1"
+		local resolved=""
+		if command -v getent >/dev/null 2>&1; then
+			resolved="$(getent ahosts "${host}" 2>/dev/null | awk '{print $1}')"
+		fi
+		if [ -z "${resolved}" ] && command -v dig >/dev/null 2>&1; then
+			resolved="$(dig +short "${host}" A AAAA 2>/dev/null | sed '/^$/d')"
+		fi
+		if [ -z "${resolved}" ] && command -v host >/dev/null 2>&1; then
+			resolved="$(host "${host}" 2>/dev/null | awk '/has address/{print $4}/IPv6 address/{print $5}')"
+		fi
+		if [ -z "${resolved}" ] && command -v nslookup >/dev/null 2>&1; then
+			resolved="$(nslookup "${host}" 2>/dev/null | awk '/^Address: /{print $2}' | tail -n +2)"
+		fi
+		resolved="$(printf '%s\n' "${resolved}" | sed '/^$/d' | sort -u)"
+		if [ -z "${resolved}" ]; then
+			return 1
+		fi
+		printf '%s\n' "${resolved}"
 	}
 	mcp_policy_host_is_private() {
 		local host="$1"
+		local resolved_ips
 		case "${host}" in
 		"" | localhost | 127.* | 0.0.0.0 | ::1 | "[::1]" | 10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[0-1].* | 169.254.*)
 			return 0
 			;;
 		esac
+		if resolved_ips="$(mcp_policy_resolve_ips "${host}")"; then
+			while IFS= read -r ip; do
+				[ -z "${ip}" ] && continue
+				case "${ip}" in
+				10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[0-1].* | 127.* | 169.254.* | ::1 | fe80:* | fc??:* | fd??:* | ::ffff:127.* | ::ffff:10.* | ::ffff:192.168.* | ::ffff:172.1[6-9].* | ::ffff:172.2[0-9].* | ::ffff:172.3[0-1].* | ::ffff:169.254.* | ::ffff:0:0:127.* | ::ffff:0:0:10.* | ::ffff:0:0:192.168.* | ::ffff:0:0:172.1[6-9].* | ::ffff:0:0:172.2[0-9].* | ::ffff:0:0:172.3[0-1].* | ::ffff:0:0:169.254.*)
+					return 0
+					;;
+				esac
+			done <<EOF
+${resolved_ips}
+EOF
+		fi
 		return 1
 	}
 	mcp_policy_host_allowed() {
+		# Enforce allow/deny even in fallback mode (never fail-open).
+		local host="$1"
+		local allow_list="$2"
+		local deny_list="$3"
+		if [ -n "${deny_list}" ] && mcp_policy_host_match_list "${host}" "${deny_list}"; then
+			return 1
+		fi
+		if [ -n "${allow_list}" ]; then
+			if mcp_policy_host_match_list "${host}" "${allow_list}"; then
+				return 0
+			fi
+			return 1
+		fi
 		return 0
 	}
 fi
 
 uri="${1:-}"
-if [ -z "${uri}" ] || [[ "${uri}" != git://* ]]; then
-	printf '%s\n' "Invalid git URI" >&2
+if [ -z "${uri}" ] || [[ "${uri}" != git+https://* ]]; then
+	printf '%s\n' "Invalid git+https URI" >&2
+	exit 4
+fi
+
+# Reject embedded credentials in the authority portion. Even if host policy
+# strips userinfo for allow/deny checks, passing userinfo through to git would
+# risk leaking secrets via process listings/logs.
+authority="${uri#*://}"
+authority="${authority%%/*}"
+authority="${authority%%\?*}"
+authority="${authority%%\#*}"
+if [[ "${authority}" == *"@"* ]]; then
+	printf '%s\n' "git provider refuses userinfo in URI" >&2
 	exit 4
 fi
 
@@ -57,6 +215,11 @@ if [ -z "${host}" ]; then
 	exit 4
 fi
 if mcp_policy_host_is_private "${host}"; then
+	mcp_git_log_block "${host}"
+	exit 4
+fi
+if [ -z "${MCPBASH_GIT_ALLOW_HOSTS:-}" ] && [ "${MCPBASH_GIT_ALLOW_ALL:-false}" != "true" ]; then
+	printf '%s\n' "git provider requires MCPBASH_GIT_ALLOW_HOSTS or MCPBASH_GIT_ALLOW_ALL=true when enabled" >&2
 	mcp_git_log_block "${host}"
 	exit 4
 fi
@@ -83,11 +246,10 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 export GIT_TERMINAL_PROMPT=0
-export GIT_ALLOW_PROTOCOL=git
+export GIT_ALLOW_PROTOCOL=https
 export GIT_OPTIONAL_LOCKS=0
 
-spec="${uri#git://}"
-repo="git://${spec}"
+repo="${uri#git+}"
 ref="HEAD"
 path=""
 if [[ "${repo}" == *#* ]]; then
@@ -135,6 +297,16 @@ if [ "${max_kb}" -gt 1048576 ]; then
 	max_kb=1048576
 fi
 
+available_kb="$(mcp_git_available_kb "${workdir}")"
+required_kb=$((max_kb + 1024))
+case "${available_kb}" in
+'' | *[!0-9]*) available_kb=0 ;;
+esac
+if [ "${available_kb}" -gt 0 ] && [ "${available_kb}" -lt "${required_kb}" ]; then
+	printf '%s\n' "Insufficient disk space for git provider (need at least ${required_kb} KB free)" >&2
+	exit 5
+fi
+
 run_git() {
 	if command -v timeout >/dev/null 2>&1; then
 		timeout -k 5 "${timeout_secs}" "$@"
@@ -174,7 +346,28 @@ if [ "${dir_size_kb}" -gt "${max_kb}" ]; then
 	exit 6
 fi
 
-target="${repo_dir}/${path}"
+repo_dir_canonical="$(mcp_git_normalize_path "${repo_dir}" 2>/dev/null || true)"
+target="$(mcp_git_normalize_path "${repo_dir}/${path}" 2>/dev/null || true)"
+if [ -z "${repo_dir_canonical}" ] || [ -z "${target}" ]; then
+	printf '%s\n' "Failed to canonicalize repository paths (requires realpath or readlink -f for safe symlink resolution)" >&2
+	exit 5
+fi
+# SECURITY: do not use case/glob matching for containment checks. Paths can
+# contain glob metacharacters like []?* which would turn the check into a
+# wildcard match. Use literal string comparisons.
+base="${repo_dir_canonical}"
+if [ "${base}" != "/" ]; then
+	base="${base%/}"
+fi
+if [ "${target}" != "${base}" ]; then
+	if [ "${base}" != "/" ]; then
+		prefix="${base}/"
+		if [ "${target:0:${#prefix}}" != "${prefix}" ]; then
+			printf '%s\n' "File ${path} escapes repository root" >&2
+			exit 3
+		fi
+	fi
+fi
 if [ ! -f "${target}" ]; then
 	printf '%s\n' "File ${path} not found in repository" >&2
 	exit 3

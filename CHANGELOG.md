@@ -5,6 +5,78 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-12-13
+
+### Documentation
+- Clarified Windows support: Git Bash is CI-tested; WSL works like Linux but is not separately validated in CI.
+- README MCP spec coverage table now marks Resources as fully supported (templates/binary included).
+- Fixed `docs/ERRORS.md` examples to reflect that `result.isError=true` is derived from a non-zero tool exit.
+- Added `docs/INSPECTOR.md` with MCP Inspector recipes and strict-client schema/shape pitfalls.
+- Clarified completion script argument parsing: `MCP_COMPLETION_ARGS_JSON` is `params.arguments` (use `.query` / `.prefix`).
+
+### Added
+- Declarative project registration via `server.d/register.json` (data-only alternative to `server.d/register.sh`) with strict validation, safe-permissions checks, and per-kind override semantics.
+- `mcp-bash run-tool` now supports per-invocation allowlisting via `--allow-self`, `--allow <tool>`, and `--allow-all`.
+- Installer verification flag `--verify` to validate downloaded archives against published SHA256 checksums; pairs with release-published tarball and SHA256SUMS.
+- Installer `--archive` flag to install from a local tar.gz (or URL) after verifying it externally (or via `--verify`).
+- GitHub Actions release workflow (tag-triggered) builds a tarball and publishes SHA256SUMS for installer verification.
+- Release prep automation: `scripts/bump-version.sh`, `scripts/render-readme.sh`, and a `Prepare Release` workflow to open a PR that bumps `VERSION` and re-renders `README.md`.
+- CI/release guards: validate that `VERSION` matches the tag and that `README.md` is rendered from `README.md.in` for the release version.
+- Unified test wrapper `test/run-all.sh` to sequence lint/unit/integration/examples/stress/smoke suites with skip flags.
+- Windows Git Bash/MSYS guidance surfaced in `mcp-bash doctor` (stdout and `--json`) to set `MCPBASH_JSON_TOOL=jq` and `MSYS2_ARG_CONV_EXCL="*"`.
+- Documentation updates: README troubleshooting section, installer verification example, allowlist env mode examples in README/ENV_REFERENCE, CI-mode guidance in CONTRIBUTING.
+- Resource templates: auto-discovery of `uriTemplate` metadata, manual registration helpers, `.registry/resource-templates.json` cache with hash-based pagination, and shared `resources/list_changed` notifications. New example and docs cover client-side expansion and collision rules.
+- Documentation updates: clarified batching (legacy/opt-in) in `SPEC-COMPLIANCE.md`, noted minimal mode capability omissions, added `docs/README.md` index and project structure clarifications, documented `resources/subscribe` notification shape, and added registry-size guidance in `PERFORMANCE.md`.
+- Windows CI guidance in `docs/WINDOWS.md` recommends jq overrides (`MCPBASH_JSON_TOOL=jq`, `MCPBASH_JSON_TOOL_BIN=$(command -v jq)`) to avoid gojq exec-limit failures on GitHub Actions runners.
+- `mcp-bash scaffold completion <name>` generates a starter completion script, registers it in `server.d/register.sh`, and wires a default timeout.
+
+### Changed
+- Installer `--verify` for tagged releases now targets the release-published tarball (`releases/download/vX.Y.Z/mcp-bash-vX.Y.Z.tar.gz`) so it stays in sync with the `SHA256SUMS` asset.
+- Tagged archive installs now attempt to verify against `SHA256SUMS` automatically when available (without requiring `--verify`).
+- Outgoing request IDs are now allocated via a lock-backed counter in the state dir to prevent cross-process ID reuse; elicitation polling in the flusher uses the shared counter.
+- Background workers now start lazily: resource subscription polling begins on first `resources/subscribe`, and the progress flusher runs only when live progress is enabled or elicitation is supported (reduces overhead on Windows runners).
+- All example tool/resource names switched to hyphenated form to match the validated naming regex.
+- Server now advertises the spec-compliant `completions` capability in initialize responses; tests assert capability presence.
+- Tool metadata parsing consolidates to a single jq pass per meta file, reducing per-tool process overhead during registry scans.
+- Scaffolded tool template now treats `name` as optional with a default, matching the description.
+- JSON tool detection now prefers jq over gojq, supports explicit MCPBASH_JSON_TOOL(_BIN) overrides, and validates candidates via `--version` before enabling full protocol mode.
+- CI env snapshot now runs after JSON tool detection and records PATH/env byte sizes plus `jsonTool`/`jsonToolBin` metadata (counts only; no env contents captured).
+- JSON-RPC batch handling is now protocol-aware: protocol `2025-03-26` auto-accepts batch arrays; newer protocols reject arrays unless `MCPBASH_COMPAT_BATCHES=true` is set for legacy clients, with clearer error messaging.
+- Worker wait loop sleep increased to reduce busy-wait CPU churn when slots are full.
+- Security hardening: git provider now requires allowlists, canonicalizes repo paths, and pre-checks disk space; HTTPS provider resolves hosts and blocks obfuscated private IPs; remote token guard enforces 32+ char secrets, throttles failures, and redacts tokens in debug logs; `MCPBASH_TOOL_ENV_MODE=inherit` now requires explicit opt-in via `MCPBASH_TOOL_ENV_INHERIT_ALLOW=true`; JSON tool overrides are ignored for root unless explicitly allowed (`MCPBASH_ALLOW_JSON_TOOL_OVERRIDE_FOR_ROOT=true`); tool metadata parsing no longer uses eval.
+- **BREAKING**: Project registry hooks are now disabled by default; set `MCPBASH_ALLOW_PROJECT_HOOKS=true` to execute `server.d/register.sh`. Hooks are refused if the file is group/world writable or ownership mismatches the current user.
+- **BREAKING**: Tool execution now defaults to deny unless explicitly allowlisted via `MCPBASH_TOOL_ALLOWLIST` (set to `*` to allow all in trusted projects). Paths are validated for ownership and safe permissions before execution.
+- Debug payload redaction now scrubs common secret keys beyond `remoteToken`.
+- Installer/docs now prefer verified downloads over `curl | bash` (one-liner retained as a labeled fallback).
+- List endpoints now report total counts via `result._meta["mcpbash/total"]` (and no longer emit a top-level `total`) for stricter MCP client compatibility.
+- `resources/subscribe` now returns only `{subscriptionId}` (spec-shaped) instead of including extra fields.
+- `notifications/resources/updated` is now spec-shaped and emits only `params.uri`; clients should call `resources/read` to fetch updated content.
+- Completion results no longer include the non-spec `result._meta.cursor` field (use `result.completion.nextCursor`).
+- HTTPS provider is now deny-by-default for public hosts: set `MCPBASH_HTTPS_ALLOW_HOSTS` (preferred) or `MCPBASH_HTTPS_ALLOW_ALL=true` to permit outbound HTTPS fetches; URL host parsing strips userinfo to prevent SSRF bypasses.
+- HTTPS provider no longer falls back to wget; curl is required to support DNS pinning via `--resolve`.
+- Git provider path canonicalization now fails closed without `realpath` or `readlink -f` to prevent symlink-based escapes.
+- Git provider now only accepts `git+https://` URIs (plaintext `git://` removed).
+
+### Fixed
+- Manual registration hook size-limit errors now set status for `resourceTemplates` consistently.
+- JSON-RPC handlers no longer emit error `code: 0` when underlying registry failures occur (falls back to `-32603`).
+- Removed duplicate YAML meta from the progress-and-cancellation example (JSON is canonical).
+- Windows CI failures caused by `gojq` `E2BIG` exec errors are avoided by the jq-first detection order and exec sanity check.
+- Windows Git Bash example flakiness: runtime now guarantees `MCPBASH_STATE_DIR`/`MCPBASH_LOCK_ROOT` exist (with a short-path fallback), and example tests capture server stderr and fail fast on shutdown watchdog timeouts or `mktemp` template failures.
+- Progress/log streaming is more reliable across platforms: portable byte offsets in the flusher and explicit flushes before worker cleanup reduce missing tail output.
+- HTTPS provider pins curl connections to vetted IPs via `--resolve` to mitigate DNS rebinding SSRF between pre-check and fetch.
+- Registry refresh-path and git repo-root containment checks now use literal (non-glob) prefix comparisons to avoid metacharacter bypasses.
+- Debug payload redaction now scrubs common secret keys across the full JSON payload (not only `_meta`) to reduce accidental leakage during debugging.
+- `mcp_json_trim` rewritten to avoid O(n^2) trimming on large payloads.
+- Shutdown finish branch corrected to prevent a syntax error in staged environments.
+- `MCPBASH_SHUTDOWN_TIMEOUT=0` is now treated as "use the default" to avoid accidental zero-timeout shutdowns.
+- `tools/call` now returns `-32602` (Invalid params) for tool not found, instead of `-32601` (Method not found), for JSON-RPC spec compliance.
+- `resources/read` now returns `-32002` (Resource not found) for missing resources, instead of `-32601` (Method not found), per MCP spec.
+- Resource providers no longer require the executable bit (more reliable on Git Bash/MSYS and some filesystems).
+- Git Bash CRLF handling: strip `\r` from env passthrough and metadata keys to prevent subtle Windows-only failures.
+- Completion scripts and custom providers work more reliably across platforms.
+- JSON-RPC error responses omit `id` when the request `id` is invalid/unknown (strict JSON-RPC compliance).
+
 ## [0.6.0] - 2025-12-08
 
 ### Added

@@ -1,0 +1,1 @@
+This file is reachable via the project-files template.

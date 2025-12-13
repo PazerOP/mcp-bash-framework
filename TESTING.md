@@ -8,6 +8,7 @@ For the full list of environment knobs and defaults, see [docs/ENV_REFERENCE.md]
 - `UNICODE=1` uses ✅/❌; default output is ASCII `[PASS]/[FAIL]`.
 - `MCPBASH_LOG_JSON_TOOL=log` forces JSON tooling detection logs even when `VERBOSE` is off.
 - Tar staging: CI turns it on (`MCPBASH_CI_MODE=1`); default is off locally. Override with `MCPBASH_STAGING_TAR=1` to force use or `=0` to disable.
+- Quick start (all suites): `./test/run-all.sh` (add `--skip-integration`/`--skip-examples`/`--skip-stress`/`--skip-smoke` as needed).
 
 ## Linting
 
@@ -15,12 +16,13 @@ For the full list of environment knobs and defaults, see [docs/ENV_REFERENCE.md]
 ./test/lint.sh
 ```
 
-## Smoke Tests
+## Smoke Tests (local quick check; not run in CI)
 
 ```
 ./test/smoke.sh
 ```
 
+- Local precheck for init→list→call; CI relies on richer coverage in integration and compatibility suites.
 - Scaffolded tools include a per-tool smoke script at `tools/<name>/smoke.sh`; run it after editing a tool to ensure stdout JSON is valid. Update its sample args if you change `tool.meta.json`.
 
 ## Unit Tests

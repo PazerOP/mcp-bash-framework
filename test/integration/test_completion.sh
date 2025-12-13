@@ -24,6 +24,11 @@ JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
 
+init_caps="$(grep '"id":"1"' "${TMP}/responses.ndjson" | head -n1)"
+if ! echo "${init_caps}" | jq -e '.result.capabilities.completions? | . == {}' >/dev/null; then
+	test_fail "initialize response missing completions capability"
+fi
+
 if ! grep -q '"id":"2"' "${TMP}/responses.ndjson"; then
 	test_fail "completion/complete response missing"
 fi
@@ -33,7 +38,7 @@ suggestions_len="$(echo "$resp_json" | jq '.result.completion.values | length')"
 suggestion_type="$(echo "$resp_json" | jq -r '.result.completion.values[0].type')"
 suggestion_text="$(echo "$resp_json" | jq -r '.result.completion.values[0].text')"
 has_more="$(echo "$resp_json" | jq '.result.completion.hasMore')"
-cursor="$(echo "$resp_json" | jq -r '.result._meta.cursor // empty')"
+cursor="$(echo "$resp_json" | jq -r '.result.completion.nextCursor // empty')"
 
 test_assert_eq "$suggestions_len" "1"
 test_assert_eq "$suggestion_type" "text"
@@ -41,7 +46,7 @@ if [[ "$suggestion_text" != *"plan roadmap"* ]]; then
 	test_fail "suggestion text mismatch: $suggestion_text"
 fi
 test_assert_eq "$has_more" "true"
-if [ -z "${cursor}" ]; then
+if [ -z "${cursor}" ] || [ "${cursor}" = "null" ]; then
 	test_fail "expected cursor for pagination when hasMore=true"
 fi
 

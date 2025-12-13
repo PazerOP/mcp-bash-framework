@@ -49,6 +49,6 @@ fi
 ```
 
 **Success criteria**
-- `tools/list` shows `example.elicitation`
-- Calling `example.elicitation` walks through all four elicitation types
+- `tools/list` shows `example-elicitation`
+- Calling `example-elicitation` walks through all four elicitation types
 - Final output shows: `mode=X, quality=Y, features=[A, B]`

@@ -41,6 +41,10 @@ mcp_handle_resources() {
 		cursor="$(mcp_json_extract_cursor "${json_payload}")"
 		if ! list_json="$(mcp_resources_list "${limit}" "${cursor}")"; then
 			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			# Some lib paths initialise error code to 0; never emit code 0 over JSON-RPC.
+			case "${code}" in
+			"" | "0") code="-32603" ;;
+			esac
 			local message
 			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resources}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
@@ -119,18 +123,8 @@ mcp_handle_resources() {
 			return 0
 		fi
 		local response_payload response
-		response_payload="$(
-			"${MCPBASH_JSON_TOOL_BIN}" -n -c \
-				--arg sub "${subscription_id}" \
-				--arg uri "${effective_uri}" \
-				--argjson resource "${result_json}" '
-					{
-						subscription: {id: $sub, uri: $uri},
-						subscriptionId: $sub,
-						resource: $resource
-					}
-				'
-		)"
+		# MCP 2025-11-25: resources/subscribe returns only {subscriptionId}.
+		response_payload="$("${MCPBASH_JSON_TOOL_BIN}" -n -c --arg sub "${subscription_id}" '{subscriptionId: $sub}')"
 		response="$(printf '{"jsonrpc":"2.0","id":%s,"result":%s}' "${id}" "${response_payload}")"
 		mcp_logging_debug "${logger}" "Subscribe emitting response subscription=${subscription_id}"
 		rpc_send_line_direct "${response}"
@@ -157,8 +151,19 @@ mcp_handle_resources() {
 		cursor="$(mcp_json_extract_cursor "${json_payload}")"
 		if ! list_json="$(mcp_resources_templates_list "${limit}" "${cursor}")"; then
 			local code="${_MCP_RESOURCES_ERR_CODE:--32603}"
+			if [ "${code}" = "0" ]; then
+				if [ -n "${cursor}" ]; then
+					code="-32602"
+				else
+					code="-32603"
+				fi
+			fi
 			local message
-			message=$(mcp_resources_quote "${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resource templates}")
+			local err_text="${_MCP_RESOURCES_ERR_MESSAGE:-Unable to list resource templates}"
+			if [ "${code}" = "-32602" ] && [ -z "${_MCP_RESOURCES_ERR_MESSAGE:-}" ]; then
+				err_text="Invalid cursor"
+			fi
+			message=$(mcp_resources_quote "${err_text}")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id}" "${code}" "${message}"
 			return 0
 		fi

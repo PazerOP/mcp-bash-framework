@@ -1,5 +1,5 @@
 {
-  "name": "example.logger",
+  "name": "example-logger",
   "description": "Emits an informational log entry",
   "inputSchema": {
     "type": "object",
@@ -17,4 +17,3 @@
   },
   "timeoutSecs": 5
 }
-

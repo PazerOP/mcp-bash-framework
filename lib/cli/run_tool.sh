@@ -13,6 +13,10 @@ if ! command -v mcp_roots_normalize_path >/dev/null 2>&1; then
 	# shellcheck source=../roots.sh disable=SC1090,SC1091
 	. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/roots.sh"
 fi
+if ! command -v mcp_json_extract_file_required >/dev/null 2>&1; then
+	# shellcheck source=../json.sh disable=SC1090,SC1091
+	. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/json.sh"
+fi
 
 # Globals: usage() from bin, MCPBASH_PROJECT_ROOT, MCPBASH_JSON_TOOL[_BIN], MCPBASH_MODE and runtime globals set by initialize_runtime_paths.
 
@@ -31,9 +35,19 @@ mcp_cli_run_tool_load_cache() {
 	# shellcheck disable=SC2034
 	MCP_TOOLS_REGISTRY_PATH="${cache_path}"
 	# shellcheck disable=SC2034
-	MCP_TOOLS_REGISTRY_HASH="$("${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty' "${cache_path}" 2>/dev/null || printf '')"
+	MCP_TOOLS_REGISTRY_HASH="$(mcp_json_extract_file_required "${cache_path}" "-r" '.hash // empty' "run-tool: invalid tools registry cache")" || return 1
+	if [ -z "${MCP_TOOLS_REGISTRY_HASH}" ]; then
+		printf 'run-tool: invalid tools registry cache (missing hash)\n' >&2
+		return 1
+	fi
 	# shellcheck disable=SC2034
-	MCP_TOOLS_TOTAL="$("${MCPBASH_JSON_TOOL_BIN}" -r '.total // 0' "${cache_path}" 2>/dev/null || printf '0')"
+	MCP_TOOLS_TOTAL="$(mcp_json_extract_file_required "${cache_path}" "-r" '.total // 0 | tostring' "run-tool: invalid tools registry cache")" || return 1
+	case "${MCP_TOOLS_TOTAL}" in
+	'' | *[!0-9]*)
+		printf 'run-tool: invalid tools registry cache (non-numeric total)\n' >&2
+		return 1
+		;;
+	esac
 	# shellcheck disable=SC2034
 	MCP_TOOLS_LAST_SCAN="$(date +%s)"
 	MCP_TOOLS_TTL="${MCP_TOOLS_TTL:-31536000}"
@@ -75,6 +89,9 @@ mcp_cli_run_tool() {
 	local no_refresh="false"
 	local minimal="false"
 	local print_env="false"
+	local allow_self="false"
+	local allow_all="false"
+	local allow_names=()
 	local tool_name=""
 
 	while [ $# -gt 0 ]; do
@@ -109,6 +126,20 @@ mcp_cli_run_tool() {
 		--print-env)
 			print_env="true"
 			;;
+		--allow-self)
+			allow_self="true"
+			;;
+		--allow)
+			shift
+			if [ -z "${1:-}" ]; then
+				printf 'run-tool: --allow requires a tool name\n' >&2
+				exit 1
+			fi
+			allow_names+=("$1")
+			;;
+		--allow-all)
+			allow_all="true"
+			;;
 		--project-root)
 			shift
 			project_root="${1:-}"
@@ -119,10 +150,16 @@ Usage:
   mcp-bash run-tool <name> [--args JSON] [--roots paths] [--dry-run]
                      [--timeout SECS] [--verbose] [--no-refresh]
                      [--minimal] [--project-root DIR] [--print-env]
+                     [--allow-self] [--allow TOOL] [--allow-all]
 
 Invoke a tool directly with the same env wiring used by the server.
 
 Examples:
+  # Allow just this invocation
+  mcp-bash run-tool hello --allow-self --args @args.json
+  mcp-bash run-tool hello --allow hello --args @args.json
+  # Unsafe (trusted projects only):
+  mcp-bash run-tool hello --allow-all --args @args.json
   mcp-bash run-tool hello --args @args.json --roots .
   mcp-bash run-tool hello --print-env --dry-run
 EOF
@@ -156,6 +193,30 @@ EOF
 			printf 'run-tool: tool name required\n' >&2
 			exit 1
 		fi
+	fi
+
+	# Per-invocation allow policy for CLI runs. This keeps the global default
+	# deny posture while letting explicit CLI calls opt in narrowly.
+	if [ "${allow_all}" = "true" ]; then
+		MCPBASH_TOOL_ALLOWLIST="*"
+		export MCPBASH_TOOL_ALLOWLIST
+	elif [ "${allow_self}" = "true" ] || [ "${#allow_names[@]}" -gt 0 ] 2>/dev/null; then
+		local allowlist="${tool_name}"
+		if [ "${allow_self}" != "true" ]; then
+			allowlist=""
+		fi
+		local idx
+		for idx in "${!allow_names[@]}"; do
+			local entry="${allow_names[${idx}]}"
+			[ -n "${entry}" ] || continue
+			if [ -n "${allowlist}" ]; then
+				allowlist="${allowlist} ${entry}"
+			else
+				allowlist="${entry}"
+			fi
+		done
+		MCPBASH_TOOL_ALLOWLIST="${allowlist}"
+		export MCPBASH_TOOL_ALLOWLIST
 	fi
 
 	# Allow explicit project override
@@ -242,6 +303,10 @@ EOF
 		MCPBASH_TOOL_STREAM_STDERR=true
 		export MCPBASH_TOOL_STREAM_STDERR
 	fi
+
+	# Let the policy layer tailor error messages for explicit CLI invocations.
+	MCPBASH_TOOL_POLICY_CONTEXT="run-tool"
+	export MCPBASH_TOOL_POLICY_CONTEXT
 
 	local result_json=""
 	# CLI invocations don't have request _meta; pass empty object

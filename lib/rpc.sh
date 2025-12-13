@@ -17,8 +17,25 @@ mcp_rpc_callback_path() {
 }
 
 mcp_rpc_next_outgoing_id() {
-	local id="${MCPBASH_NEXT_OUTGOING_ID}"
-	MCPBASH_NEXT_OUTGOING_ID=$((MCPBASH_NEXT_OUTGOING_ID + 1))
+	local id_file="${MCPBASH_STATE_DIR}/next.outgoing.id"
+	local id next_id
+
+	# Fallback to in-process counter if state/locks are unavailable (minimal mode)
+	if [ -z "${MCPBASH_STATE_DIR:-}" ] || [ -z "${MCPBASH_LOCK_ROOT:-}" ] || ! command -v mcp_lock_acquire >/dev/null 2>&1; then
+		id="${MCPBASH_NEXT_OUTGOING_ID}"
+		MCPBASH_NEXT_OUTGOING_ID=$((MCPBASH_NEXT_OUTGOING_ID + 1))
+		printf '%s' "${id}"
+		return 0
+	fi
+
+	mcp_lock_acquire "next_outgoing_id"
+	id="$(cat "${id_file}" 2>/dev/null || true)"
+	case "${id}" in
+	'' | *[!0-9]*) id="${MCPBASH_NEXT_OUTGOING_ID:-1}" ;;
+	esac
+	next_id=$((id + 1))
+	printf '%s' "${next_id}" >"${id_file}"
+	mcp_lock_release "next_outgoing_id"
 	printf '%s' "${id}"
 }
 

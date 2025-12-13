@@ -6,12 +6,12 @@ Key points:
 
 - **Framework/project separation**: Install the framework once (e.g., via `install.sh`), create unlimited MCP server projects. Your tools stay yours; upgrades are clean.
 - **Stdio transport only**: Standard input/output communication. No daemons, no HTTP servers, no hidden state.
-- **Auto-discovery & auto-detection**: Tools/resources/prompts are discovered from project directories; project root is auto-detected when you run `mcp-bash` inside a project (for MCP clients, set `MCPBASH_PROJECT_ROOT` explicitly).
+- **Auto-discovery & auto-detection**: Tools/resources/prompts are discovered from project directories; project root is auto-detected when you run `mcp-bash` inside a project (for MCP clients, set `MCPBASH_PROJECT_ROOT` explicitly). Manual registry hooks run only when `MCPBASH_ALLOW_PROJECT_HOOKS=true` and have safe ownership/permissions.
 - **Built-in DX commands**: `mcp-bash new`, `mcp-bash init`, `mcp-bash scaffold tool|prompt|resource`, `mcp-bash validate [--json|--strict|--explain-defaults]`, `mcp-bash config [--json|--client|--wrapper]` (`--show` prints labeled snippets per client; use `--client` to filter), `mcp-bash doctor [--json]`, `mcp-bash registry status`, `mcp-bash run-tool [--print-env]`.
-- **Tool policy hook**: Optional `server.d/policy.sh` defines `mcp_tools_policy_check()` to allow/deny tools centrally (read-only, allowlists, audit); default allows all.
+- **Tool policy**: Default deny unless `MCPBASH_TOOL_ALLOWLIST` is set (use `*` only in trusted projects). Optional `server.d/policy.sh` defines `mcp_tools_policy_check()` for centralized allow/deny.
 - **Tool annotations**: Declare behavior hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) in `.meta.json` to help clients present appropriate UI cues.
 - **Protocol version**: Targets MCP `2025-11-25` with negotiated downgrades to `2025-06-18`, `2025-03-26`, and `2024-11-05`.
-- **Cross-platform**: macOS, Linux, and Windows (Git Bash/WSL) support.
+- **Cross-platform**: macOS, Linux, and Windows (Git Bash CI-tested; WSL works like Linux).
 - **CLI `run-tool`**: Direct tool invocation with roots, dry-run, timeout override, verbose stderr, `--print-env`; covered by unit and example smoke tests.
 - **Scaffolded smoke scripts**: Each scaffolded tool ships with `tools/<name>/smoke.sh` to validate stdout JSON quickly; update the sample args in the script if you change `tool.meta.json`.
 - **Test harnesses**: `test_run_mcp` (NDJSON batch, preferred) and `test/common/session.sh` (interactive sequential calls; skips notifications, overwrites EXIT traps, no timeout).
@@ -19,7 +19,7 @@ Key points:
 
 ## Docs
 
-- [README](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/README.md): Quick start, client recipes (Claude Desktop, Cursor, Windsurf, etc.), configuration reference, and feature overview.
+- [README](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/README.md): Quick start (verified-download install path), client recipes (Claude Desktop, Cursor, Windsurf, etc.), configuration reference, and feature overview.
 - [Architecture Guide](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/docs/ARCHITECTURE.md): Internal architecture, lifecycle loop, worker model, and handler implementation details.
 - [Project Structure Guide](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/docs/PROJECT-STRUCTURE.md): Layouts, Docker deployment, multi-environment setups, and path resolution.
 - [Protocol Compliance](https://github.com/yaniv-golan/mcp-bash-framework/blob/main/SPEC-COMPLIANCE.md): Detailed MCP protocol support breakdown and capability coverage matrix.
@@ -37,7 +37,7 @@ Key points:
 - [06-embedded-resources](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/examples/06-embedded-resources): Tool output that embeds files (`type:"resource"`).
 - [07-prompts-basics](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/examples/07-prompts-basics): Discovering and rendering prompt templates.
 - [08-elicitation](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/examples/08-elicitation): Client-driven elicitation prompts that gate tool execution.
-- [09-manual-registration](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/examples/09-manual-registration): Manual registry overrides, live progress streaming, and custom resource providers.
+- [09-registry-overrides](https://github.com/yaniv-golan/mcp-bash-framework/tree/main/examples/09-registry-overrides): Declarative registry overrides, live progress streaming, and custom resource providers.
 
 ## SDK & Scaffolding
 

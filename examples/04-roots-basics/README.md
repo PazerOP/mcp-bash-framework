@@ -18,10 +18,10 @@
 
 **Try it**
 ```
-> tools/call example.roots.read {"arguments":{"path":"./data/sample.txt"}}
+> tools/call example-roots-read {"arguments":{"path":"./data/sample.txt"}}
 < {"result":{"content":[{"type":"text","text":"Contents of /.../data/sample.txt\nHello from roots example!\n"}]}}
 
-> tools/call example.roots.read {"arguments":{"path":"/etc/passwd"}}
+> tools/call example-roots-read {"arguments":{"path":"/etc/passwd"}}
 < {"result":{"content":[{"type":"text","text":"{\"error\":\"Path is outside allowed roots\",\"path\":\"/etc/passwd\",\"hint\":\"Try a path within: ./data\"}"}],"isError":true}}
 ```
 

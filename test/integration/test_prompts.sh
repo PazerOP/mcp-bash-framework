@@ -20,9 +20,11 @@ esac
 
 test_create_tmpdir
 
+ROOT="${TEST_TMPDIR}/workspace"
+test_stage_workspace "${ROOT}"
+
 # --- Auto-discovery prompts ---
-AUTO_ROOT="${TEST_TMPDIR}/auto"
-test_stage_workspace "${AUTO_ROOT}"
+AUTO_ROOT="${ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${AUTO_ROOT}/server.d/register.sh"
 mkdir -p "${AUTO_ROOT}/prompts"
@@ -48,6 +50,7 @@ cat <<'JSON' >"${AUTO_ROOT}/requests.ndjson"
 {"jsonrpc":"2.0","method":"notifications/initialized"}
 {"jsonrpc":"2.0","id":"auto-list","method":"prompts/list","params":{"limit":1}}
 {"jsonrpc":"2.0","id":"auto-get","method":"prompts/get","params":{"name":"prompt.alpha","arguments":{"name":"World"}}}
+{"jsonrpc":"2.0","id":"auto-missing","method":"prompts/get","params":{"name":"prompt.missing","arguments":{}}}
 JSON
 
 (
@@ -71,16 +74,24 @@ if ! jq -e '
 		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "auto-get") |
 	(trimstr(.result.text) == "Hello World!") and
-	(trimstr(.result.messages[0].content[0].text) == "Hello World!") and
+	(trimstr(.result.messages[0].content.text) == "Hello World!") and
 	(.result.arguments == {name: "World"})
 ' "${AUTO_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ auto-get response invalid\n' >&2
 	exit 1
 fi
 
+if ! jq -e '
+	select(.id == "auto-missing") |
+	(.error.code == -32602)
+' "${AUTO_ROOT}/responses.ndjson" >/dev/null; then
+	printf '❌ auto-missing response invalid (expected -32602)\n' >&2
+	exit 1
+fi
+
 # --- Manual registration overrides ---
-MANUAL_ROOT="${TEST_TMPDIR}/manual"
-test_stage_workspace "${MANUAL_ROOT}"
+MANUAL_ROOT="${ROOT}"
+rm -rf "${MANUAL_ROOT}/prompts"
 mkdir -p "${MANUAL_ROOT}/prompts/manual"
 
 cat <<'EOF_PROMPT' >"${MANUAL_ROOT}/prompts/manual/greet.txt"
@@ -143,7 +154,7 @@ if ! jq -e '
 		($s | gsub("^[[:space:]]+";"") | gsub("[[:space:]]+$";""));
 	select(.id == "manual-get") |
 	(trimstr(.result.text) == "Goodbye Ada, see you soon.") and
-	(trimstr(.result.messages[0].content[0].text) == "Goodbye Ada, see you soon.")
+	(trimstr(.result.messages[0].content.text) == "Goodbye Ada, see you soon.")
 ' "${MANUAL_ROOT}/responses.ndjson" >/dev/null; then
 	printf '❌ manual-get response invalid\n' >&2
 	exit 1
@@ -152,9 +163,9 @@ fi
 # --- TTL-driven list_changed notifications ---
 
 run_windows_prompt_notification() {
-	local win_root="${TEST_TMPDIR}/poll-win"
-	test_stage_workspace "${win_root}"
+	local win_root="${ROOT}"
 	rm -f "${win_root}/server.d/register.sh"
+	rm -rf "${win_root}/prompts"
 	mkdir -p "${win_root}/prompts"
 
 	cat <<'EOF_PROMPT' >"${win_root}/prompts/live.txt"
@@ -208,10 +219,10 @@ if [ "${IS_WINDOWS}" = "true" ]; then
 	exit 0
 fi
 
-POLL_ROOT="${TEST_TMPDIR}/poll"
-test_stage_workspace "${POLL_ROOT}"
+POLL_ROOT="${ROOT}"
 # Remove register.sh to force auto-discovery (chmod -x doesn't work on Windows)
 rm -f "${POLL_ROOT}/server.d/register.sh"
+rm -rf "${POLL_ROOT}/prompts"
 mkdir -p "${POLL_ROOT}/prompts"
 
 cat <<'EOF_PROMPT' >"${POLL_ROOT}/prompts/live.txt"

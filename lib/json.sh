@@ -137,28 +137,10 @@ mcp_json_strip_bom() {
 
 mcp_json_trim() {
 	local value="$1"
-	while [ -n "${value}" ]; do
-		case "${value}" in
-		$'\r'* | $'\n'* | $'\t'* | ' '*)
-			value="${value#?}"
-			;;
-		*)
-			break
-			;;
-		esac
-	done
-
-	while [ -n "${value}" ]; do
-		case "${value}" in
-		*$'\r' | *$'\n' | *$'\t' | *' ')
-			value="${value%?}"
-			;;
-		*)
-			break
-			;;
-		esac
-	done
-
+	# Trim leading whitespace
+	value="${value#"${value%%[!$' \t\r\n']*}"}"
+	# Trim trailing whitespace
+	value="${value%"${value##*[!$' \t\r\n']}"}"
 	printf '%s' "${value}"
 }
 
@@ -171,6 +153,82 @@ mcp_json_is_array() {
 		return 1
 		;;
 	esac
+}
+
+mcp_json_extract_file_required() {
+	# Extract a value from a JSON file using the configured jq/gojq tool.
+	# Fails closed with a clear stderr message on parse/tool errors.
+	#
+	# Args:
+	# - $1: file path
+	# - $2: jq output mode flag (e.g., -r or -c)
+	# - $3: jq filter expression
+	# - $4: context string (for error messages)
+	local path="$1"
+	local mode="$2"
+	local filter="$3"
+	local context="${4:-}"
+
+	local json_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	if [ -z "${json_bin}" ] || ! command -v "${json_bin}" >/dev/null 2>&1; then
+		if [ -n "${context}" ]; then
+			printf '%s\n' "${context}: JSON tooling unavailable" >&2
+		fi
+		return 1
+	fi
+
+	if [ -z "${mode}" ]; then
+		mode="-r"
+	fi
+
+	local out=""
+	if ! out="$("${json_bin}" "${mode}" "${filter}" "${path}" 2>/dev/null)"; then
+		if [ -n "${context}" ]; then
+			printf '%s\n' "${context}: JSON parse failed" >&2
+		fi
+		return 1
+	fi
+	printf '%s' "${out}"
+	return 0
+}
+
+mcp_json_extract_optional() {
+	# Best-effort JSON extraction for non-critical paths.
+	# Returns $default on errors; optionally logs a warning when available.
+	#
+	# Args:
+	# - $1: JSON string
+	# - $2: jq output mode flag (e.g., -r or -c)
+	# - $3: jq filter expression
+	# - $4: default value
+	# - $5: optional logger name for mcp_logging_warning
+	# - $6: optional context string for warning message
+	local json="$1"
+	local mode="$2"
+	local filter="$3"
+	local default_value="$4"
+	local logger="${5:-}"
+	local context="${6:-}"
+
+	local json_bin="${MCPBASH_JSON_TOOL_BIN:-}"
+	if [ -z "${json_bin}" ] || ! command -v "${json_bin}" >/dev/null 2>&1; then
+		printf '%s' "${default_value}"
+		return 0
+	fi
+	if [ -z "${mode}" ]; then
+		mode="-r"
+	fi
+
+	local out=""
+	if ! out="$(printf '%s' "${json}" | "${json_bin}" "${mode}" "${filter}" 2>/dev/null)"; then
+		if [ -n "${logger}" ] && command -v mcp_logging_warning >/dev/null 2>&1 && [ -n "${context}" ]; then
+			mcp_logging_warning "${logger}" "${context}: JSON parse failed; using default"
+		fi
+		printf '%s' "${default_value}"
+		return 0
+	fi
+	printf '%s' "${out}"
+	return 0
 }
 
 mcp_json_extract_method() {
@@ -982,17 +1040,28 @@ mcp_json_icons_to_data_uris() {
 		return 0
 	fi
 
+	# Validate input is an array before iterating to avoid jq errors on null/objects
+	local icons_type
+	icons_type="$(printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" -r 'type' 2>/dev/null || true)"
+	if [ "${icons_type}" != "array" ]; then
+		printf 'null'
+		return 0
+	fi
+
 	# Process each icon in the array
 	printf '%s' "${icons_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg base "${base_dir}" '
 		[.[] | . as $icon |
-			if (.src | startswith("data:")) or (.src | startswith("http://")) or (.src | startswith("https://")) then
+			# Skip null elements or objects without src string
+			if ($icon | type) != "object" or (($icon.src // null) | type) != "string" then
+				empty
+			elif ($icon.src | startswith("data:")) or ($icon.src | startswith("http://")) or ($icon.src | startswith("https://")) then
 				$icon
 			else
 				# Local file path - mark for shell processing
 				$icon + {"_local": true, "_base": $base}
 			end
 		]
-	' | while IFS= read -r processed; do
+	' 2>/dev/null | while IFS= read -r processed; do
 		# Check if any icons need local file conversion
 		if printf '%s' "${processed}" | "${MCPBASH_JSON_TOOL_BIN}" -e 'any(._local)' >/dev/null 2>&1; then
 			# Has local files - process them

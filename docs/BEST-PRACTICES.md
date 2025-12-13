@@ -64,15 +64,15 @@ This guide distils hands-on recommendations for designing, building, and operati
 | `MCP_TOOLS_TTL`, `MCP_RESOURCES_TTL`, `MCP_PROMPTS_TTL` | Control registry cache lifetime ([docs/REGISTRY.md](REGISTRY.md#ttl-and-regeneration)) | Lower values increase IO load |
 | `MCP_RESOURCES_ROOTS` | Restricts file/resource providers to approved roots ([docs/SECURITY.md](SECURITY.md)) | Mandatory for multi-tenant deployments |
 | `MCPBASH_REGISTRY_MAX_BYTES` | Hard stop for registry cache size | Keep aligned with operator storage policies |
-| `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS` | Optional allow/deny lists (space/comma separated) for HTTPS resource hosts | Private/loopback always blocked; redirects disabled; timeouts/size capped (see docs/SECURITY.md) |
+| `MCPBASH_HTTPS_ALLOW_HOSTS` / `MCPBASH_HTTPS_DENY_HOSTS` | Allow/deny lists (space/comma separated) for HTTPS resource hosts | Private/loopback always blocked; **allow list required** unless `MCPBASH_HTTPS_ALLOW_ALL=true`; redirects disabled; timeouts/size capped (see docs/SECURITY.md) |
 | `MCPBASH_HTTPS_TIMEOUT` / `MCPBASH_HTTPS_MAX_BYTES` | HTTPS provider timeout/size controls | Capped internally (timeout ≤60s, max bytes ≤20MB) |
-| `MCPBASH_ENABLE_GIT_PROVIDER` | Enable git:// resource provider | Default disabled; set to `true` to allow git:// |
+| `MCPBASH_ENABLE_GIT_PROVIDER` | Enable git+https:// resource provider | Default disabled; set to `true` to allow git+https:// |
 | `MCPBASH_GIT_ALLOW_HOSTS` / `MCPBASH_GIT_DENY_HOSTS` | Optional allow/deny lists for git resource hosts | Private/loopback always blocked |
 | `MCPBASH_GIT_TIMEOUT` / `MCPBASH_GIT_MAX_KB` | Git provider timeout/size controls | Capped internally (timeout ≤60s, max size ≤1GB; default 50MB) |
 
 ### Troubleshooting keywords
 - **Minimal mode** – server only exposes lifecycle/ping/logging; often triggered by missing `jq`/`gojq` or forced via `MCPBASH_FORCE_MINIMAL`.
-- **Compatibility toggles** – `MCPBASH_COMPAT_BATCHES` re-enables legacy JSON-RPC batch arrays for older clients.
+- **Compatibility toggles** – `MCPBASH_COMPAT_BATCHES` re-enables legacy JSON-RPC batch arrays for clients using newer protocols; protocol `2025-03-26` accepts arrays automatically.
 - **Discovery churn** – `notifications/*/list_changed` loops may indicate fast TTLs or manual registry overrides; inspect `.registry/*.json`.
 - **Cancellation** – `mcp_is_cancelled` returning true mid-tool (see `examples/03-progress-and-cancellation/tools/slow/tool.sh:5`) highlights clients timing out; revisit tool timeouts and progress cadence.
 - **Progress throttling** – hitting the 100/minute default triggers warning logs and truncated progress; adjust `MCPBASH_MAX_PROGRESS_PER_MIN` when high-frequency updates matter.
@@ -104,7 +104,8 @@ This guide distils hands-on recommendations for designing, building, and operati
 - **Stable vs extension directories** – Core runtime sits under `bin/`, `lib/`, `handlers/`, `providers/`, and `sdk/`. Extension-friendly directories include `tools/`, `resources/`, `prompts/`, `server.d/`, and `.registry/` as illustrated in [README.md](../README.md#repository-layout).
 - **Registration flows**:
   - *Auto-discovery* – Default path scanning populates `.registry/*.json` (see [docs/REGISTRY.md](REGISTRY.md)). Metadata is sourced from `.meta.json` then inline `# mcp:` annotations, falling back to defaults.
-  - *Manual overrides* – Place curated registrations in `server.d/register.sh` when discovery is too slow or when deterministic ordering is required (§9 of the plan). Manual files should emit valid JSON rows and respect TTL rules.
+  - *Declarative registration* – Prefer `server.d/register.json` for deterministic overrides/disablement without executing shell code (see [docs/REGISTRY.md](REGISTRY.md)). Use `[]` to explicitly disable a kind, or omit/null a key to fall through to auto-discovery.
+  - *Hook registration* – Use `server.d/register.sh` only for dynamic/imperative cases; it executes shell code and is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`). See `examples/advanced/register-sh-hooks/`.
 - **Environment staging** – Use `server.d/env.sh` to inject operator-specific configuration without editing tracked files. Document each variable inline for future maintainers.
 
 ## 4. MCP server development best practices
@@ -645,7 +646,7 @@ Cache results by exporting `MCP_TESTS_SKIP_REMOTE=1` when remote fixtures are un
 ### 6.1 Configuration hierarchy
 1. Launch-time environment variables (`MCPBASH_*`, `MCP_*`)
 2. `server.d/env.sh` exports
-3. Manual registration scripts overriding discovery output
+3. Manual registration inputs (`server.d/register.json` / `server.d/register.sh`) overriding discovery output
 4. Client-initiated negotiation (capabilities, logging)
 
 Document configuration in `server.d/README.md` (if present) so on-call operators know which knobs are safe to adjust.
@@ -685,9 +686,9 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 
 ## 7. Security & compliance
 - Start with [docs/SECURITY.md](SECURITY.md) for threat model context. Apply principle of least privilege by scoping `MCP_RESOURCES_ROOTS` and keeping tool environments minimal (`MCPBASH_TOOL_ENV_MODE`).
-- Never enable untrusted `server.d/register.sh` scripts; treat them like application code subject to review and signing.
+- Prefer declarative registration (`server.d/register.json`) when possible; it avoids executing project shell code during list/refresh flows. If you use hook registration, it is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`) and must be owned by the current user with no group/world write bits—review and sign `server.d/register.sh` like application code.
 - Secrets management: rely on OS keychains or inject short-lived tokens at launch. Avoid long-lived tokens in `.env` files that might leak through scaffolds.
-- Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers.
+- Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers. Keep `MCPBASH_TOOL_ALLOWLIST` scoped to the minimal set of tools; use `*` only in fully trusted projects.
 - For compliance regimes, map MCP logs and payload dumps to your retention policies; scrub `mcpbash.state.*` directories after incidents.
 - Treat local validation helpers as privileged operations:
   - `mcp-bash validate --fix` is intended for trusted project trees; it will make scripts executable but deliberately skips auto-fixing symlinked scripts and warns instead so you can audit the targets.
@@ -695,7 +696,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 
 ## 8. Performance & limits
 - Consult [docs/LIMITS.md](LIMITS.md) before tuning concurrency, payload sizes, or progress frequency.
-- **Batch and pagination tuning** – When returning large lists, paginate aggressively via `lib/paginate.sh` helpers and include `hasMore` to prevent client overload.
+- **Batch and pagination tuning** – When returning large lists, paginate aggressively via `lib/paginate.sh` helpers and return `nextCursor` when more items remain to prevent client overload.
 - **Timeout strategies** – Prefer short defaults with retries over very long-running tools. If clients require streaming, add progress signals every ~5 seconds to keep the channel alive.
 - **Benchmarking** – Capture `time bin/mcp-bash < sample.json` metrics before/after optimisation. When adjusting concurrency, monitor CPU steal and memory pressure to avoid thrashing.
 - **Stress testing** – Re-run integration suites concurrently (e.g., `GNU parallel` around `test/integration/test_capabilities.sh`) to validate lock coordination in `lib/lock.sh`.
@@ -713,17 +714,17 @@ sequenceDiagram
   Client->>Server: setLevel / subscribe
   Server-->>Client: notifications (tools/resources/prompts)
   Client->>Server: tool invocation
-  Server-->>Client: result + hasMore cursor
+  Server-->>Client: result + nextCursor
 ```
 
 - **Full vs minimal mode** – Document which commands require full JSON tooling. For example, completing resource list pagination depends on `jq` or `gojq` for canonicalisation; clients should handle `minimal` capability flags gracefully.
-- **Backward compatibility** – Gate legacy JSON-RPC array batches via `MCPBASH_COMPAT_BATCHES`. Default remains strict single-object per line to keep stdout predictable.
+- **Backward compatibility** – Protocol `2025-03-26` accepts JSON-RPC array batches automatically; newer protocols remain strict single-object per line unless `MCPBASH_COMPAT_BATCHES=true` is set for legacy clients.
 - **Transport considerations** – When tunnelling through gateways, preserve stdio framing (one JSON object per line) and forward `Mcp-Session-Id`. Reference [docs/REMOTE.md](REMOTE.md) for gateway-specific nuances.
 - **Example transcripts** – Capture happy-path sequences (initialize → tools/list → tool invocation) using your recording method of choice and store sanitized transcripts under `examples/run/`. (No built-in `--transcript` flag today.)
 
 ## 10. Contribution workflow
 
-- Follow repository coding style (2-space indent, `set -euo pipefail` headers, `shellcheck` visible directives). Use `# shellcheck disable=…` only with in-line justification (see `examples/01-args-and-validation/tools/echo-arg/tool.sh:3`).
+- Follow repository coding style (tab-indent per `.editorconfig`, `set -euo pipefail` headers, `shellcheck` visible directives). Use `# shellcheck disable=…` only with in-line justification (see `examples/01-args-and-validation/tools/echo-arg/tool.sh:3`).
 - Update documentation anytime you change behaviour surfaced in [README.md](../README.md), [SPEC-COMPLIANCE.md](../SPEC-COMPLIANCE.md), or this guide.
 - Keep commits focused; each should include docs/tests when touching behaviour.
 - Release cadence suggestion: tag monthly and document release notes referencing limits, operational changes, and compatibility toggles.

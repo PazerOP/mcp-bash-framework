@@ -1,0 +1,7 @@
+{
+  "name": "project-files",
+  "title": "Project Files",
+  "uriTemplate": "file:///{path}",
+  "description": "Access any file under the project roots",
+  "mimeType": "application/octet-stream"
+}

@@ -13,6 +13,14 @@ MCPBASH_TEST_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 export MCPBASH_HOME="${MCPBASH_TEST_ROOT}"
 export PATH="${MCPBASH_HOME}/bin:${PATH}"
 
+if [ -z "${MCPBASH_TOOL_ALLOWLIST:-}" ]; then
+	export MCPBASH_TOOL_ALLOWLIST="*"
+fi
+
+if [ -z "${MCPBASH_ALLOW_PROJECT_HOOKS:-}" ]; then
+	export MCPBASH_ALLOW_PROJECT_HOOKS="true"
+fi
+
 # Silence JSON tooling detection logs in tests unless explicitly opted in.
 if [ -z "${MCPBASH_LOG_JSON_TOOL:-}" ] && [ "${VERBOSE:-0}" != "1" ]; then
 	MCPBASH_LOG_JSON_TOOL="quiet"
@@ -85,6 +93,107 @@ test_cleanup_tmpdir() {
 	if [ -n "${TEST_TMPDIR:-}" ] && [ -d "${TEST_TMPDIR}" ]; then
 		rm -rf "${TEST_TMPDIR}" 2>/dev/null || true
 	fi
+}
+
+# Capture a minimal, high-signal failure bundle into MCPBASH_LOG_DIR (CI uploads it).
+# Intended for integration/conformance tests where preserved state/log dirs may not
+# be uploaded reliably on Windows runners.
+#
+# Args:
+# - $1: label (string; e.g. test script name)
+# - $2: workspace dir (optional; copy requests/responses from here)
+# - $3: state dir (optional; copy progress/log streams from here)
+# - $@: extra files to copy verbatim (optional)
+test_capture_failure_bundle() {
+	local label="${1:-test}"
+	local workspace="${2:-}"
+	local state_dir="${3:-}"
+	shift 3 || true
+
+	local log_root="${MCPBASH_LOG_DIR:-}"
+	if [ -z "${log_root}" ]; then
+		return 0
+	fi
+	# On Windows runners, MCPBASH_LOG_DIR may be a native path (e.g. D:\a\_temp\...).
+	# Normalize to a MSYS path so mkdir/cp work reliably.
+	if command -v cygpath >/dev/null 2>&1; then
+		log_root="$(cygpath -u "${log_root}" 2>/dev/null || printf '%s' "${log_root}")"
+	fi
+	log_root="${log_root//\\//}"
+
+	local ts
+	ts="$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)"
+	local dest="${log_root%/}/failure-bundles/${label}.${ts}.$$"
+	mkdir -p "${dest}" 2>/dev/null || return 0
+
+	# Copy explicitly provided files first.
+	local f
+	for f in "$@"; do
+		[ -n "${f}" ] || continue
+		if [ -f "${f}" ]; then
+			cp -f "${f}" "${dest}/" 2>/dev/null || true
+		fi
+	done
+
+	# Copy common request/response artifacts from the workspace.
+	if [ -n "${workspace}" ] && [ -d "${workspace}" ]; then
+		if command -v cygpath >/dev/null 2>&1; then
+			workspace="$(cygpath -u "${workspace}" 2>/dev/null || printf '%s' "${workspace}")"
+		fi
+		workspace="${workspace//\\//}"
+		for f in \
+			"${workspace}"/requests*.ndjson \
+			"${workspace}"/responses*.ndjson \
+			"${workspace}"/responses*.ndjson.stderr \
+			"${workspace}"/requests*.ndjson.stderr; do
+			[ -f "${f}" ] || continue
+			cp -f "${f}" "${dest}/" 2>/dev/null || true
+		done
+	fi
+
+	# Copy high-signal state/stream artifacts from the server state dir.
+	if [ -n "${state_dir}" ] && [ -d "${state_dir}" ]; then
+		if command -v cygpath >/dev/null 2>&1; then
+			state_dir="$(cygpath -u "${state_dir}" 2>/dev/null || printf '%s' "${state_dir}")"
+		fi
+		state_dir="${state_dir//\\//}"
+		for f in \
+			"${state_dir}"/progress.*.ndjson \
+			"${state_dir}"/logs.*.ndjson \
+			"${state_dir}"/progress.ndjson \
+			"${state_dir}"/logs.ndjson \
+			"${state_dir}"/payload.debug.log \
+			"${state_dir}"/stdout_corruption.log \
+			"${state_dir}"/watchdog.*.log \
+			"${state_dir}"/stderr.*.log \
+			"${state_dir}"/pid.* \
+			"${state_dir}"/cancelled.*; do
+			[ -f "${f}" ] || continue
+			cp -f "${f}" "${dest}/" 2>/dev/null || true
+		done
+	fi
+
+	# Record bundle provenance for quick inspection.
+	{
+		printf 'label=%s\n' "${label}"
+		printf 'workspace=%s\n' "${workspace}"
+		printf 'state_dir=%s\n' "${state_dir}"
+		printf 'cwd=%s\n' "$(pwd 2>/dev/null || printf '%s' "${PWD}")"
+	} >"${dest}/bundle.meta" 2>/dev/null || true
+}
+
+test_extract_state_dir_from_stderr() {
+	local stderr_file="$1"
+	[ -n "${stderr_file}" ] || return 1
+	[ -f "${stderr_file}" ] || return 1
+	local line=""
+	line="$(grep -m1 -- 'mcp-bash: state preserved at ' "${stderr_file}" 2>/dev/null || true)"
+	[ -n "${line}" ] || return 1
+	line="${line#*mcp-bash: state preserved at }"
+	line="${line%$'\r'}"
+	[ -n "${line}" ] || return 1
+	printf '%s' "${line}"
+	return 0
 }
 
 test_require_command() {
@@ -311,6 +420,7 @@ test_run_mcp() {
 	local workspace="$1"
 	local requests_file="$2"
 	local responses_file="$3"
+	local stderr_file="${responses_file}.stderr"
 
 	if [ ! -f "${workspace}/bin/mcp-bash" ]; then
 		printf 'Workspace %s missing bin/mcp-bash\n' "${workspace}" >&2
@@ -320,11 +430,12 @@ test_run_mcp() {
 	(
 		cd "${workspace}" || exit 1
 		MCPBASH_PROJECT_ROOT="${workspace}" \
+			MCPBASH_ALLOW_PROJECT_HOOKS="${MCPBASH_ALLOW_PROJECT_HOOKS:-}" \
 			MCPBASH_LOG_LEVEL="${MCPBASH_LOG_LEVEL:-info}" \
 			MCPBASH_DEBUG_PAYLOADS="${MCPBASH_DEBUG_PAYLOADS:-}" \
 			MCPBASH_REMOTE_TOKEN="${MCPBASH_REMOTE_TOKEN:-}" \
 			MCPBASH_REMOTE_TOKEN_KEY="${MCPBASH_REMOTE_TOKEN_KEY:-}" \
 			MCPBASH_REMOTE_TOKEN_FALLBACK_KEY="${MCPBASH_REMOTE_TOKEN_FALLBACK_KEY:-}" \
-			./bin/mcp-bash <"${requests_file}" >"${responses_file}"
+			./bin/mcp-bash <"${requests_file}" >"${responses_file}" 2>"${stderr_file}"
 	)
 }

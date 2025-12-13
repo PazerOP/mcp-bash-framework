@@ -62,7 +62,7 @@ mcp_handle_completion() {
 		start_offset=0
 		cursor_script_key=""
 		if [ -n "${cursor}" ]; then
-			if ! mcp_completion_decode_cursor "${cursor}" "${name}" "${args_hash}"; then
+			if ! mcp_completion_decode_cursor "${cursor}" "${name}" "${args_hash}" "true"; then
 				local message
 				message=$(mcp_completion_quote "Invalid cursor")
 				printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"

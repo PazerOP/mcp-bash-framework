@@ -64,6 +64,90 @@ mcp_tools_scan_root() {
 	mcp_registry_resolve_scan_root "${MCPBASH_TOOLS_DIR}"
 }
 
+mcp_tools_normalize_path() {
+	local target="$1"
+	if command -v mcp_path_normalize >/dev/null 2>&1; then
+		mcp_path_normalize --physical "${target}"
+		return
+	fi
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "${target}" 2>/dev/null
+		return
+	fi
+	(
+		cd "$(dirname "${target}")" 2>/dev/null || exit 1
+		pwd -P 2>/dev/null | awk -v base="$(basename "${target}")" '{print $0"/"base}'
+	)
+}
+
+mcp_tools_stat_perm_mask() {
+	local path="$1"
+	local perm_mask=""
+	if command -v stat >/dev/null 2>&1; then
+		perm_mask="$(stat -c '%a' "${path}" 2>/dev/null || true)"
+		if [ -z "${perm_mask}" ]; then
+			perm_mask="$(stat -f '%Lp' "${path}" 2>/dev/null || true)"
+		fi
+	fi
+	[ -n "${perm_mask}" ] || return 1
+	printf '%s' "${perm_mask}"
+}
+
+mcp_tools_stat_uid_gid() {
+	local path="$1"
+	local uid_gid=""
+	if command -v stat >/dev/null 2>&1; then
+		uid_gid="$(stat -c '%u:%g' "${path}" 2>/dev/null || true)"
+		if [ -z "${uid_gid}" ]; then
+			uid_gid="$(stat -f '%u:%g' "${path}" 2>/dev/null || true)"
+		fi
+	fi
+	[ -n "${uid_gid}" ] || return 1
+	printf '%s' "${uid_gid}"
+}
+
+mcp_tools_validate_path() {
+	local candidate="$1"
+	local canonical root
+	canonical="$(mcp_tools_normalize_path "${candidate}" 2>/dev/null || true)"
+	root="$(mcp_tools_normalize_path "${MCPBASH_TOOLS_DIR}" 2>/dev/null || true)"
+	if [ -z "${canonical}" ] || [ -z "${root}" ]; then
+		return 1
+	fi
+	# SECURITY: do NOT use case/glob matching for containment checks. Tool/root
+	# paths may contain glob metacharacters like []?* which would turn the check
+	# into a wildcard match and allow bypasses.
+	if [ "${root}" != "/" ]; then
+		root="${root%/}"
+	fi
+	if [ "${canonical}" != "${root}" ]; then
+		if [ "${root}" = "/" ]; then
+			:
+		else
+			local prefix="${root}/"
+			if [ "${canonical:0:${#prefix}}" != "${prefix}" ]; then
+				return 1
+			fi
+		fi
+	fi
+	local perm_mask
+	if perm_mask="$(mcp_tools_stat_perm_mask "${canonical}" 2>/dev/null)"; then
+		local perm_bits=$((8#${perm_mask}))
+		if [ $((perm_bits & 0020)) -ne 0 ] || [ $((perm_bits & 0002)) -ne 0 ]; then
+			return 1
+		fi
+	fi
+	local uid_gid cur_uid cur_gid
+	if uid_gid="$(mcp_tools_stat_uid_gid "${canonical}" 2>/dev/null)"; then
+		cur_uid="$(id -u 2>/dev/null || printf '0')"
+		cur_gid="$(id -g 2>/dev/null || printf '0')"
+		case "${uid_gid}" in
+		"${cur_uid}:${cur_gid}" | "${cur_uid}:"*) return 0 ;;
+		esac
+	fi
+	return 1
+}
+
 mcp_tools_manual_begin() {
 	MCP_TOOLS_MANUAL_ACTIVE=true
 	MCP_TOOLS_MANUAL_BUFFER=""
@@ -145,16 +229,16 @@ mcp_tools_manual_finalize() {
 	')"
 
 	local items_json
-	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
+	items_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	hash="$(mcp_hash_string "${items_json}")"
 
-	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local previous_hash="${MCP_TOOLS_REGISTRY_HASH}"
 	MCP_TOOLS_REGISTRY_JSON="${registry_json}"
 	MCP_TOOLS_REGISTRY_HASH="${hash}"
-	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
+	MCP_TOOLS_TOTAL="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${registry_json}"; then
 		mcp_tools_manual_abort
@@ -279,7 +363,7 @@ mcp_tools_collect_embedded_resources() {
 		' "${spec_file}" 2>/dev/null || true)"
 	fi
 
-	if [ -z "${specs_json}" ] || [ "${specs_json}" = "[]" ]; then
+	if [ -z "${specs_json}" ] || [ "${specs_json}" = "[]" ] || [ "${specs_json}" = "null" ]; then
 		return 0
 	fi
 
@@ -356,7 +440,12 @@ mcp_tools_apply_manual_registration() {
 		fi
 		return "${manual_status}"
 	fi
-	return 0
+	# mcp_registry_register_apply returns 0 for both ok and skipped.
+	# Treat skipped as "not applied" so we fall back to cache/scan.
+	if [ "${MCP_REGISTRY_REGISTER_LAST_APPLIED:-false}" = "true" ]; then
+		return 0
+	fi
+	return 1
 }
 
 mcp_tools_load_cache_if_empty() {
@@ -366,10 +455,10 @@ mcp_tools_load_cache_if_empty() {
 
 	local tmp_json=""
 	if tmp_json="$(cat "${MCP_TOOLS_REGISTRY_PATH}")"; then
-		if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
+		if printf '%s' "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
 			MCP_TOOLS_REGISTRY_JSON="${tmp_json}"
-			MCP_TOOLS_REGISTRY_HASH="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
-			MCP_TOOLS_TOTAL="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
+			MCP_TOOLS_REGISTRY_HASH="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+			MCP_TOOLS_TOTAL="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
 			if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${MCP_TOOLS_REGISTRY_JSON}"; then
 				return 1
 			fi
@@ -566,14 +655,14 @@ mcp_tools_apply_manual_json() {
 	local manual_json="$1"
 	local registry_json
 
-	if ! echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.tools | type == "array"' >/dev/null 2>&1; then
+	if ! printf '%s' "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" -e '.tools | type == "array"' >/dev/null 2>&1; then
 		manual_json='{"tools":[]}'
 	fi
 
 	local timestamp
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-	registry_json="$(echo "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg ts "${timestamp}" '{
+	registry_json="$(printf '%s' "${manual_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg ts "${timestamp}" '{
 		version: 1,
 		generatedAt: $ts,
 		items: .tools,
@@ -581,16 +670,16 @@ mcp_tools_apply_manual_json() {
 	}')"
 
 	local items_json
-	items_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
+	items_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
 	local hash
 	hash="$(mcp_hash_string "${items_json}")"
 
-	registry_json="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
+	registry_json="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" --arg hash "${hash}" '.hash = $hash')"
 
 	local new_hash="${hash}"
 	MCP_TOOLS_REGISTRY_JSON="${registry_json}"
 	MCP_TOOLS_REGISTRY_HASH="${new_hash}"
-	MCP_TOOLS_TOTAL="$(echo "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
+	MCP_TOOLS_TOTAL="$(printf '%s' "${registry_json}" | "${MCPBASH_JSON_TOOL_BIN}" '.total')"
 
 	if ! mcp_tools_enforce_registry_limits "${MCP_TOOLS_TOTAL}" "${registry_json}"; then
 		return 1
@@ -648,7 +737,15 @@ mcp_tools_scan() {
 	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-tools-items.XXXXXX")"
 
 	if [ -d "${scan_root}" ]; then
-		find "${scan_root}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
+		while IFS= read -r -d '' path; do
+			# Refuse filenames with newlines/CR to avoid corrupting registries/logs.
+			case "${path}" in
+			*$'\n'* | *$'\r'*)
+				rm -f "${items_file}"
+				mcp_tools_error -32603 "Tool scan encountered unsupported filename (newline/CR) under tools/"
+				return 1
+				;;
+			esac
 			# On Windows (Git Bash/MSYS), -x test is unreliable. Check for shebang or .sh extension as fallback.
 			if [ ! -x "${path}" ]; then
 				# Fallback: check if file has shebang or is .sh/.bash
@@ -689,41 +786,60 @@ mcp_tools_scan() {
 			local annotations="null"
 
 			if [ -f "${meta_json}" ]; then
-				# Read fields individually to avoid collapsing empty columns
-				local j_name
-				j_name="$("${MCPBASH_JSON_TOOL_BIN}" -r '.name // ""' "${meta_json}" 2>/dev/null || printf '')"
-				[ -n "${j_name}" ] && name="${j_name}"
-				description="$("${MCPBASH_JSON_TOOL_BIN}" -r '.description // ""' "${meta_json}" 2>/dev/null || printf '')"
-				arguments="$("${MCPBASH_JSON_TOOL_BIN}" -c '.inputSchema // .arguments // {type:"object",properties:{}}' "${meta_json}" 2>/dev/null || printf '{}')"
-				timeout="$("${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // ""' "${meta_json}" 2>/dev/null || printf '')"
-				output_schema="$("${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				icons="$("${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				annotations="$("${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' "${meta_json}" 2>/dev/null || printf 'null')"
-				# Convert local file paths to data URIs
-				local meta_dir
-				meta_dir="$(dirname "${meta_json}")"
-				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
+				local meta_parts=()
+				while IFS= read -r field; do
+					# Strip \r to handle CRLF line endings from Windows checkouts
+					field="${field%$'\r'}"
+					meta_parts+=("${field}")
+				done < <("${MCPBASH_JSON_TOOL_BIN}" -r '
+					[
+						(.name // ""),
+						(.description // ""),
+						(.inputSchema // .arguments // {type:"object",properties:{}} | @json),
+						(.timeoutSecs // ""),
+						(.outputSchema // null | @json),
+						(.icons // null | @json),
+						(.annotations // null | @json)
+					]
+					| .[]
+				' "${meta_json}" 2>/dev/null | tr -d '\r' || true)
+
+				if [ "${#meta_parts[@]}" -eq 7 ]; then
+					[ -n "${meta_parts[2]}" ] || meta_parts[2]='{}'
+					[ -n "${meta_parts[4]}" ] || meta_parts[4]='null'
+					name="${meta_parts[0]:-${name}}"
+					description="${meta_parts[1]:-${description}}"
+					arguments="${meta_parts[2]}"
+					timeout="${meta_parts[3]}"
+					output_schema="${meta_parts[4]}"
+					icons="${meta_parts[5]:-${icons}}"
+					annotations="${meta_parts[6]:-${annotations}}"
+					# Convert local file paths to data URIs
+					local meta_dir
+					meta_dir="$(dirname "${meta_json}")"
+					icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
+				fi
 			fi
 
 			if [ "${arguments}" = "{}" ]; then
 				local header
 				header="$(head -n 10 "${path}")"
 				local mcp_line
-				mcp_line="$(echo "${header}" | grep "mcp:" | head -n 1)"
+				mcp_line="$(printf '%s\n' "${header}" | grep "mcp:" | head -n 1)"
 				if [ -n "${mcp_line}" ]; then
 					local json_payload
 					json_payload="${mcp_line#*mcp:}"
 					local h_name
-					h_name="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
+					h_name="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 					[ -n "${h_name}" ] && name="${h_name}"
 					local h_desc
-					h_desc="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
+					h_desc="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.description // empty' 2>/dev/null)"
 					[ -n "${h_desc}" ] && description="${h_desc}"
-					arguments="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.arguments // {type: "object", properties: {}}' 2>/dev/null)"
-					timeout="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
-					output_schema="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
-					icons="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
-					annotations="$(echo "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' 2>/dev/null)"
+					arguments="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.arguments // {type: "object", properties: {}}' 2>/dev/null)"
+					timeout="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.timeoutSecs // empty' 2>/dev/null)"
+					output_schema="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
+					icons="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
+					annotations="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' 2>/dev/null)"
 					# Convert local file paths to data URIs (relative to tool script dir)
 					local script_dir
 					script_dir="$(dirname "${path}")"
@@ -732,6 +848,12 @@ mcp_tools_scan() {
 			fi
 
 			arguments="$(mcp_tools_normalize_schema "${arguments}")"
+
+			# Ensure all --argjson values are valid JSON (fallback to safe defaults)
+			[ -z "${arguments}" ] && arguments='{"type":"object","properties":{}}'
+			[ -z "${output_schema}" ] && output_schema='null'
+			[ -z "${icons}" ] && icons='null'
+			[ -z "${annotations}" ] && annotations='null'
 
 			# Construct item object
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
@@ -753,14 +875,17 @@ mcp_tools_scan() {
 				+ (if $out != null then {outputSchema: $out} else {} end)
 				+ (if $icons != null then {icons: $icons} else {} end)
 				+ (if $annotations != null then {annotations: $annotations} else {} end)' >>"${items_file}"
-		done
+		done < <(find "${scan_root}" -type f ! -name ".*" ! -name "*.meta.json" -print0 2>/dev/null)
 	fi
 
 	local timestamp
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s '.' "${items_file}")"
+		local parsed
+		if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by([.name, .path])' "${items_file}" 2>/dev/null)"; then
+			items_json="${parsed}"
+		fi
 	fi
 	rm -f "${items_file}"
 
@@ -768,7 +893,11 @@ mcp_tools_scan() {
 	hash="$(mcp_hash_string "${items_json}")"
 
 	local total
-	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+	# Ensure total is a valid number
+	case "${total}" in
+	'' | *[!0-9]*) total=0 ;;
+	esac
 
 	MCP_TOOLS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
@@ -849,10 +978,9 @@ mcp_tools_list() {
 	# Args:
 	#   limit  - optional max items per page (stringified number).
 	#   cursor - opaque pagination cursor from previous response.
-	# Note: The MCP schema for ListToolsResult requires a `tools` array and
-	# allows additional properties. We include a `total` field as a
-	# spec-compliant extension so clients can see the full count without
-	# extra round trips; strict clients may ignore it safely.
+	# Note: ListToolsResult is paginated; we expose total as an extension via
+	# result._meta["mcpbash/total"] (instead of a top-level field) for strict-client
+	# compatibility.
 	# shellcheck disable=SC2034
 	_MCP_TOOLS_ERROR_CODE=0
 	# shellcheck disable=SC2034
@@ -889,10 +1017,10 @@ mcp_tools_list() {
 
 	local total="${MCP_TOOLS_TOTAL}"
 	local result_json
-	result_json="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" --argjson total "${total}" '
+	result_json="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" --argjson total "${total}" '
 		{
 			tools: .items[$offset:$offset+$limit],
-			total: $total
+			_meta: {"mcpbash/total": $total}
 		}
 	')"
 
@@ -908,7 +1036,7 @@ mcp_tools_metadata_for_name() {
 	local name="$1"
 	mcp_tools_refresh_registry || return 1
 	local metadata
-	if ! metadata="$(echo "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
+	if ! metadata="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg name "${name}" '.items[] | select(.name == $name)' | head -n 1)"; then
 		return 1
 	fi
 	if [ -z "${metadata}" ]; then
@@ -1058,7 +1186,7 @@ mcp_tools_call() {
 
 	local metadata
 	if ! metadata="$(mcp_tools_metadata_for_name "${name}")"; then
-		mcp_tools_error -32601 "Tool not found"
+		mcp_tools_error -32602 "Tool not found"
 		return 1
 	fi
 
@@ -1086,6 +1214,10 @@ mcp_tools_call() {
 		MCPBASH_TOOL_ENV_INHERIT_WARNED="true"
 		mcp_logging_warning "${MCP_TOOLS_LOGGER}" "MCPBASH_TOOL_ENV_MODE=inherit; tools receive the full host environment"
 	fi
+	if [ "${env_mode_lc}" = "inherit" ] && [ "${MCPBASH_TOOL_ENV_INHERIT_ALLOW:-false}" != "true" ]; then
+		mcp_tools_error -32602 "MCPBASH_TOOL_ENV_MODE=inherit requires MCPBASH_TOOL_ENV_INHERIT_ALLOW=true"
+		return 1
+	fi
 
 	# Initialize and enforce project policy (server.d/policy.sh can override).
 	mcp_tools_policy_init
@@ -1101,6 +1233,10 @@ mcp_tools_call() {
 
 	local absolute_path="${MCPBASH_TOOLS_DIR}/${tool_path}"
 	local tool_runner=("${absolute_path}")
+	if ! mcp_tools_validate_path "${absolute_path}"; then
+		mcp_tools_error -32602 "Tool path rejected by policy"
+		return 1
+	fi
 	# On Windows (Git Bash/MSYS), -x test is unreliable. Check for shebang or .sh extension as fallback.
 	if [ ! -x "${absolute_path}" ]; then
 		if [[ ! "${absolute_path}" =~ \.(sh|bash)$ ]] && ! head -n1 "${absolute_path}" 2>/dev/null | grep -q '^#!'; then
@@ -1303,16 +1439,52 @@ mcp_tools_call() {
 				"LANG=${LANG:-C}"
 			)
 			local env_line env_key env_value
+			local saw_progress_stream="false"
+			local saw_progress_token="false"
+			local saw_crlf="false"
+			local saw_progress_stream_cr="false"
+			local saw_progress_token_cr="false"
 			while IFS= read -r env_line || [ -n "${env_line}" ]; do
 				[ -z "${env_line}" ] && continue
+				# Git Bash/MSYS may emit CRLF from `env`; strip trailing CR to avoid
+				# propagating "\r" into paths like MCP_PROGRESS_STREAM.
+				case "${env_line}" in
+				*$'\r')
+					saw_crlf="true"
+					case "${env_line%%=*}" in
+					MCP_PROGRESS_STREAM) saw_progress_stream_cr="true" ;;
+					MCP_PROGRESS_TOKEN) saw_progress_token_cr="true" ;;
+					esac
+					;;
+				esac
+				env_line="${env_line%$'\r'}"
 				env_key="${env_line%%=*}"
 				env_value="${env_line#*=}"
 				case "${env_key}" in
 				MCP_* | MCPBASH_*)
+					case "${env_key}" in
+					MCP_PROGRESS_STREAM) saw_progress_stream="true" ;;
+					MCP_PROGRESS_TOKEN) saw_progress_token="true" ;;
+					esac
 					env_exec+=("${env_key}=${env_value}")
 					;;
 				esac
 			done < <(env)
+
+			if mcp_logging_is_enabled "debug"; then
+				local stream_present="false"
+				local token_present="false"
+				[ -n "${MCP_PROGRESS_STREAM:-}" ] && stream_present="true"
+				[ -n "${MCP_PROGRESS_TOKEN:-}" ] && token_present="true"
+				mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: inherited stream_present=${stream_present} token_present=${token_present} passthrough_stream=${saw_progress_stream} passthrough_token=${saw_progress_token} env_crlf_stripped=${saw_crlf} stream_line_had_cr=${saw_progress_stream_cr} token_line_had_cr=${saw_progress_token_cr}"
+				if mcp_logging_verbose_enabled; then
+					# Show escaped values so hidden CR/LF or whitespace is visible.
+					local stream_q token_q
+					printf -v stream_q '%q' "${MCP_PROGRESS_STREAM:-}"
+					printf -v token_q '%q' "${MCP_PROGRESS_TOKEN:-}"
+					mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: stream=${stream_q} token=${token_q}"
+				fi
+			fi
 
 			env_exec+=(
 				"MCP_SDK=${MCP_SDK}"

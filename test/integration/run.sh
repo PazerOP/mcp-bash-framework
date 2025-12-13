@@ -48,13 +48,17 @@ TESTS=(
 	"test_capabilities.sh"
 	"test_core_errors.sh"
 	"test_completion.sh"
+	"test_conformance_strict_shapes.sh"
 	"test_installer.sh"
 	"test_tools.sh"
 	"test_tools_policy.sh"
 	"test_tools_errors.sh"
 	"test_tools_schema.sh"
 	"test_prompts.sh"
+	"test_project_hooks_disabled.sh"
+	"test_register_json.sh"
 	"test_resources.sh"
+	"test_resource_templates.sh"
 	"test_lifecycle_gating.sh"
 	"test_resources_providers.sh"
 	"test_minimal_mode.sh"
@@ -68,8 +72,8 @@ TESTS=(
 	"test_cli_init_new.sh"
 	"test_cli_init_config_doctor.sh"
 	"test_cli_config_variants.sh"
-	"test_cli_validate_fix.sh"
-	"test_cli_validate_errors.sh"
+	"test_cli_run_tool_allow_self.sh"
+	"test_cli_validate.sh"
 	"test_project_root_detection.sh"
 	"test_elicitation.sh"
 	"test_elicitation_modes.sh"
@@ -113,14 +117,14 @@ run_test() {
 	if [ "${VERBOSE}" = "1" ]; then
 		(
 			set -o pipefail
-			"${SCRIPT_DIR}/${test_script}" 2>&1 | while IFS= read -r line || [ -n "${line}" ]; do
+			bash "${SCRIPT_DIR}/${test_script}" 2>&1 | while IFS= read -r line || [ -n "${line}" ]; do
 				printf '[%s] %s\n' "${test_script}" "${line}"
 			done
 			exit "${PIPESTATUS[0]}"
 		) | tee "${log_file}"
 		status="${PIPESTATUS[0]}"
 	else
-		if "${SCRIPT_DIR}/${test_script}" >"${log_file}" 2>&1; then
+		if bash "${SCRIPT_DIR}/${test_script}" >"${log_file}" 2>&1; then
 			status=0
 		else
 			status=$?
@@ -136,6 +140,10 @@ run_test() {
 	else
 		printf '[%02d/%02d] %s — %s ... %s (%ss)\n' "${index}" "${total}" "${test_script}" "${desc}" "${FAIL_ICON}" "${elapsed}" >&2
 		printf '  log: %s\n' "${log_file}" >&2
+		# Copy the failing test log into MCPBASH_LOG_DIR (CI uploads it reliably).
+		if command -v test_capture_failure_bundle >/dev/null 2>&1; then
+			test_capture_failure_bundle "integration.${test_script}" "" "" "${log_file}"
+		fi
 		printf '  --- full log output ---\n' >&2
 		cat "${log_file}" >&2 || true
 		printf '  --- end of log ---\n' >&2

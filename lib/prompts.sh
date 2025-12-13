@@ -215,19 +215,20 @@ mcp_prompts_refresh_registry() {
 	local scan_root
 	scan_root="$(mcp_prompts_scan_root)"
 	mcp_prompts_init
-	if mcp_registry_register_apply "prompts"; then
-		return 0
-	else
-		local manual_status=$?
-		if [ "${manual_status}" -eq 2 ]; then
-			local err
-			err="$(mcp_registry_register_error_for_kind "prompts")"
-			if [ -z "${err}" ]; then
-				err="Manual registration script returned empty output or non-zero"
-			fi
-			mcp_logging_error "${MCP_PROMPTS_LOGGER}" "${err}"
-			return 1
+	local manual_status=0
+	mcp_registry_register_apply "prompts"
+	manual_status=$?
+	if [ "${manual_status}" -eq 2 ]; then
+		local err
+		err="$(mcp_registry_register_error_for_kind "prompts")"
+		if [ -z "${err}" ]; then
+			err="Manual registration script returned empty output or non-zero"
 		fi
+		mcp_logging_error "${MCP_PROMPTS_LOGGER}" "${err}"
+		return 1
+	fi
+	if [ "${manual_status}" -eq 0 ] && [ "${MCP_REGISTRY_REGISTER_LAST_APPLIED:-false}" = "true" ]; then
+		return 0
 	fi
 	local now
 	now="$(date +%s)"
@@ -235,10 +236,10 @@ mcp_prompts_refresh_registry() {
 	if [ -z "${MCP_PROMPTS_REGISTRY_JSON}" ] && [ -f "${MCP_PROMPTS_REGISTRY_PATH}" ]; then
 		local tmp_json=""
 		if tmp_json="$(cat "${MCP_PROMPTS_REGISTRY_PATH}")"; then
-			if echo "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
+			if printf '%s' "${tmp_json}" | "${MCPBASH_JSON_TOOL_BIN}" . >/dev/null 2>&1; then
 				MCP_PROMPTS_REGISTRY_JSON="${tmp_json}"
-				MCP_PROMPTS_REGISTRY_HASH="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
-				MCP_PROMPTS_TOTAL="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
+				MCP_PROMPTS_REGISTRY_HASH="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.hash // empty')"
+				MCP_PROMPTS_TOTAL="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" '.total // 0')"
 				if ! mcp_prompts_enforce_registry_limits "${MCP_PROMPTS_TOTAL}" "${MCP_PROMPTS_REGISTRY_JSON}"; then
 					return 1
 				fi
@@ -313,7 +314,15 @@ mcp_prompts_scan() {
 	items_file="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-prompts-items.XXXXXX")"
 
 	if [ -d "${prompts_dir}" ]; then
-		find "${prompts_dir}" -type f ! -name ".*" ! -name "*.meta.json" 2>/dev/null | sort | while read -r path; do
+		while IFS= read -r -d '' path; do
+			# Refuse filenames with newlines/CR to avoid corrupting registries/logs.
+			case "${path}" in
+			*$'\n'* | *$'\r'*)
+				rm -f "${items_file}"
+				mcp_logging_error "${MCP_PROMPTS_LOGGER}" "Prompt scan encountered unsupported filename (newline/CR) under prompts/"
+				return 1
+				;;
+			esac
 			local rel_path="${path#"${MCPBASH_PROMPTS_DIR}"/}"
 			local base_name
 			base_name="$(basename "${path}")"
@@ -338,7 +347,8 @@ mcp_prompts_scan() {
 
 			if [ -f "${meta_json}" ]; then
 				local meta
-				meta="$(cat "${meta_json}")"
+				# Strip \r to handle CRLF line endings from Windows checkouts
+				meta="$(tr -d '\r' <"${meta_json}")"
 				local j_name
 				j_name="$(printf '%s' "${meta}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // empty' 2>/dev/null)"
 				[ -n "${j_name}" ] && name="${j_name}"
@@ -357,6 +367,11 @@ mcp_prompts_scan() {
 				icons="$(mcp_json_icons_to_data_uris "${icons}" "${meta_dir}")"
 			fi
 
+			# Ensure all --argjson values are valid JSON (fallback to safe defaults)
+			[ -z "${arguments}" ] && arguments='{"type":"object","properties":{}}'
+			[ -z "${metadata}" ] && metadata='null'
+			[ -z "${icons}" ] && icons='null'
+
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
 				--arg desc "$description" \
@@ -374,21 +389,28 @@ mcp_prompts_scan() {
 					metadata: $meta
 				}
 				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
-		done
+		done < <(find "${prompts_dir}" -type f ! -name ".*" ! -name "*.meta.json" -print0 2>/dev/null)
 	fi
 
 	local timestamp
 	timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	local items_json="[]"
 	if [ -s "${items_file}" ]; then
-		items_json="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}")"
+		local parsed
+		if parsed="$("${MCPBASH_JSON_TOOL_BIN}" -s 'sort_by(.name)' "${items_file}" 2>/dev/null)"; then
+			items_json="${parsed}"
+		fi
 	fi
 	rm -f "${items_file}"
 
 	local hash
 	hash="$(mcp_prompts_hash_string "${items_json}")"
 	local total
-	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length')"
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+	# Ensure total is a valid number
+	case "${total}" in
+	'' | *[!0-9]*) total=0 ;;
+	esac
 
 	MCP_PROMPTS_REGISTRY_JSON="$("${MCPBASH_JSON_TOOL_BIN}" -n \
 		--arg ver "1" \
@@ -459,13 +481,38 @@ mcp_prompts_list() {
 
 	local total="${MCP_PROMPTS_TOTAL}"
 	local result_json
-	# ListPromptsResult also allows additional properties. We expose `total`
-	# alongside `prompts` and optional `nextCursor` as a schema-compliant
-	# extension to report the full count.
-	result_json="$(echo "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
+	# ListPromptsResult is paginated; expose total via result._meta["mcpbash/total"] for
+	# strict-client compatibility (instead of a top-level field).
+	result_json="$(printf '%s' "${MCP_PROMPTS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
+		def args_to_list($args):
+			# MCP prompts/list expects arguments as an array of {name, description?, required?}.
+			# Internally (and in prompt.meta.json), mcp-bash treats "arguments" as a JSON schema
+			# object with {properties, required}. Convert schema -> list for spec compatibility.
+			if ($args | type) == "array" then
+				$args
+			elif ($args | type) == "object" then
+				($args.required // []) as $req
+				| ($args.properties // {}) as $props
+				| ($props
+					| to_entries
+					| map(
+						.key as $k
+						| {
+							name: $k,
+							description: (.value.description // ""),
+							required: (($req | index($k)) != null)
+						}
+					)
+				)
+			else
+				[]
+			end;
 		{
-			prompts: .items[$offset:$offset+$limit],
-			total: $total
+			prompts: (
+				.items[$offset:$offset+$limit]
+				| map(.arguments = (args_to_list(.arguments // {})))
+			),
+			_meta: {"mcpbash/total": $total}
 		}
 	')"
 
@@ -590,7 +637,8 @@ mcp_prompts_emit_render_result() {
 			messages: [
 				{
 					role: $role,
-					content: [{type: "text", text: $text}]
+					# MCP PromptMessage.content is a single content object (not an array).
+					content: {type: "text", text: $text}
 				}
 			]
 		}
