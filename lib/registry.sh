@@ -301,10 +301,7 @@ mcp_registry_register_warn_untrusted() {
 mcp_registry_register_stat_perm_mask() {
 	local path="$1"
 	local perm_mask=""
-	if command -v perl >/dev/null 2>&1; then
-		perm_mask="$(perl -e 'printf "%o\n", (stat($ARGV[0]))[2] & 0777' "${path}" 2>/dev/null || true)"
-	fi
-	if [ -z "${perm_mask}" ] && command -v stat >/dev/null 2>&1; then
+	if command -v stat >/dev/null 2>&1; then
 		perm_mask="$(stat -c '%a' "${path}" 2>/dev/null || true)"
 		if [ -z "${perm_mask}" ]; then
 			perm_mask="$(stat -f '%Lp' "${path}" 2>/dev/null || true)"
@@ -317,10 +314,7 @@ mcp_registry_register_stat_perm_mask() {
 mcp_registry_register_stat_uid_gid() {
 	local path="$1"
 	local uid_gid=""
-	if command -v perl >/dev/null 2>&1; then
-		uid_gid="$(perl -e 'printf "%d:%d\n", (stat($ARGV[0]))[4,5]' "${path}" 2>/dev/null || true)"
-	fi
-	if [ -z "${uid_gid}" ] && command -v stat >/dev/null 2>&1; then
+	if command -v stat >/dev/null 2>&1; then
 		uid_gid="$(stat -c '%u:%g' "${path}" 2>/dev/null || true)"
 		if [ -z "${uid_gid}" ]; then
 			uid_gid="$(stat -f '%u:%g' "${path}" 2>/dev/null || true)"

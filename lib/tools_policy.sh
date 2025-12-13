@@ -23,9 +23,6 @@ mcp_tools_policy_stat_perm_mask() {
 			perm_mask="$(stat -f '%Lp' "${path}" 2>/dev/null || true)"
 		fi
 	fi
-	if [ -z "${perm_mask}" ] && command -v perl >/dev/null 2>&1; then
-		perm_mask="$(perl -e 'printf "%o\n", (stat($ARGV[0]))[2] & 0777' "${path}" 2>/dev/null || true)"
-	fi
 	[ -n "${perm_mask}" ] || return 1
 	printf '%s' "${perm_mask}"
 }
@@ -38,9 +35,6 @@ mcp_tools_policy_stat_uid_gid() {
 		if [ -z "${uid_gid}" ]; then
 			uid_gid="$(stat -f '%u:%g' "${path}" 2>/dev/null || true)"
 		fi
-	fi
-	if [ -z "${uid_gid}" ] && command -v perl >/dev/null 2>&1; then
-		uid_gid="$(perl -e 'printf "%d:%d\n", (stat($ARGV[0]))[4,5]' "${path}" 2>/dev/null || true)"
 	fi
 	[ -n "${uid_gid}" ] || return 1
 	printf '%s' "${uid_gid}"

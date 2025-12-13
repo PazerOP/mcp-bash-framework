@@ -80,6 +80,32 @@ mcp_tools_normalize_path() {
 	)
 }
 
+mcp_tools_stat_perm_mask() {
+	local path="$1"
+	local perm_mask=""
+	if command -v stat >/dev/null 2>&1; then
+		perm_mask="$(stat -c '%a' "${path}" 2>/dev/null || true)"
+		if [ -z "${perm_mask}" ]; then
+			perm_mask="$(stat -f '%Lp' "${path}" 2>/dev/null || true)"
+		fi
+	fi
+	[ -n "${perm_mask}" ] || return 1
+	printf '%s' "${perm_mask}"
+}
+
+mcp_tools_stat_uid_gid() {
+	local path="$1"
+	local uid_gid=""
+	if command -v stat >/dev/null 2>&1; then
+		uid_gid="$(stat -c '%u:%g' "${path}" 2>/dev/null || true)"
+		if [ -z "${uid_gid}" ]; then
+			uid_gid="$(stat -f '%u:%g' "${path}" 2>/dev/null || true)"
+		fi
+	fi
+	[ -n "${uid_gid}" ] || return 1
+	printf '%s' "${uid_gid}"
+}
+
 mcp_tools_validate_path() {
 	local candidate="$1"
 	local canonical root
@@ -105,14 +131,14 @@ mcp_tools_validate_path() {
 		fi
 	fi
 	local perm_mask
-	if perm_mask="$(perl -e 'printf "%o\n", (stat($ARGV[0]))[2] & 0777' "${canonical}" 2>/dev/null)"; then
+	if perm_mask="$(mcp_tools_stat_perm_mask "${canonical}" 2>/dev/null)"; then
 		local perm_bits=$((8#${perm_mask}))
 		if [ $((perm_bits & 0020)) -ne 0 ] || [ $((perm_bits & 0002)) -ne 0 ]; then
 			return 1
 		fi
 	fi
 	local uid_gid cur_uid cur_gid
-	if uid_gid="$(perl -e 'printf "%d:%d\n", (stat($ARGV[0]))[4,5]' "${canonical}" 2>/dev/null)"; then
+	if uid_gid="$(mcp_tools_stat_uid_gid "${canonical}" 2>/dev/null)"; then
 		cur_uid="$(id -u 2>/dev/null || printf '0')"
 		cur_gid="$(id -g 2>/dev/null || printf '0')"
 		case "${uid_gid}" in
