@@ -748,6 +748,19 @@ mcp_resources_metadata_for_name() {
 	printf '%s' "${metadata}"
 }
 
+mcp_resources_metadata_for_uri() {
+	local uri="$1"
+	mcp_resources_refresh_registry || return 1
+	local metadata
+	if ! metadata="$(printf '%s' "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg uri "${uri}" '.items[] | select(.uri == $uri)' | head -n 1)"; then
+		return 1
+	fi
+	if [ -z "${metadata}" ]; then
+		return 1
+	fi
+	printf '%s' "${metadata}"
+}
+
 mcp_resources_templates_has_variable() {
 	local template="$1"
 	printf '%s' "${template}" | grep -q '{[^}]*[^[:space:]][^}]*}'
@@ -1498,7 +1511,8 @@ mcp_resources_read() {
 			mcp_resources_error -32602 "Resource not found"
 			return 1
 		fi
-		metadata='{}'
+		# Try to resolve metadata by URI (resources/read is URI-addressed in MCP).
+		metadata="$(mcp_resources_metadata_for_uri "${explicit_uri}" 2>/dev/null || echo "{}")"
 	fi
 
 	if mcp_logging_is_enabled "debug"; then
@@ -1512,14 +1526,14 @@ mcp_resources_read() {
 
 	local uri provider mime
 	uri="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r --arg explicit "${explicit_uri}" 'if $explicit != "" then $explicit else .uri // "" end')"
-	provider="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // "file"')"
+	provider="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.provider // ""')"
 	mime="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.mimeType // "text/plain"')"
 
 	if [ -z "${uri}" ]; then
 		mcp_resources_error -32602 "Resource URI missing"
 		return 1
 	fi
-	if [ -z "${provider}" ] || { [ "${provider}" != "file" ] && [ "${provider}" != "https" ] && [ "${provider}" != "git" ]; }; then
+	if [ -z "${provider}" ]; then
 		local inferred
 		inferred="$(mcp_resources_provider_from_uri "${uri}")"
 		if [ -n "${inferred}" ]; then

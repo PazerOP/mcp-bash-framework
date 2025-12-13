@@ -61,6 +61,12 @@ mcp_completion_hash_json() {
 mcp_completion_resolve_script_path() {
 	local raw_path="$1"
 	local root="${MCPBASH_PROJECT_ROOT%/}"
+	# Normalize project root to a physical path (macOS: /tmp -> /private/tmp).
+	# Otherwise, later prefix checks can fail when the candidate resolves via pwd -P.
+	local root_phys=""
+	if root_phys="$(cd "${root}" 2>/dev/null && pwd -P)"; then
+		root="${root_phys}"
+	fi
 	local candidate=""
 	if [ -z "${raw_path}" ]; then
 		return 1
@@ -512,7 +518,7 @@ mcp_completion_normalize_output() {
 				def bool($value):
 					if ($value | type) == "boolean" then $value else false end;
 				def numeric_or_null($value):
-					try ($value | tonumber) catch null end;
+					(try ($value | tonumber) catch null);
 
 				(parse($raw)) as $payload
 				| if $payload == null then
@@ -641,22 +647,25 @@ mcp_completion_run_provider() {
 			if [ -n "${prompt_rel}" ]; then
 				prompt_abs="${MCPBASH_PROMPTS_DIR}/${prompt_rel}"
 			fi
-			# shellcheck disable=SC2030,SC2031
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				export \
-					MCP_COMPLETION_NAME="${name}" \
-					MCP_COMPLETION_ARGS_JSON="${args_json}" \
-					MCP_COMPLETION_LIMIT="${limit}" \
-					MCP_COMPLETION_OFFSET="${offset}" \
-					MCP_COMPLETION_ARGS_HASH="${args_hash}" \
-					MCP_PROMPT_REL_PATH="${prompt_rel}" \
-					MCP_PROMPT_PATH="${prompt_abs}" \
-					MCP_PROMPT_METADATA="${MCP_COMPLETION_PROVIDER_METADATA}"
+				local runner=(
+					env
+					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
+					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
+					"MCP_COMPLETION_NAME=${name}"
+					"MCP_COMPLETION_ARGS_JSON=${args_json}"
+					"MCP_COMPLETION_LIMIT=${limit}"
+					"MCP_COMPLETION_OFFSET=${offset}"
+					"MCP_COMPLETION_ARGS_HASH=${args_hash}"
+					"MCP_PROMPT_REL_PATH=${prompt_rel}"
+					"MCP_PROMPT_PATH=${prompt_abs}"
+					"MCP_PROMPT_METADATA=${MCP_COMPLETION_PROVIDER_METADATA}"
+				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${abs_script}"
+					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
 				else
-					"${abs_script}"
+					"${runner[@]}" "${abs_script}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		elif [ "${MCP_COMPLETION_PROVIDER_TYPE}" = "resource" ]; then
@@ -665,46 +674,58 @@ mcp_completion_run_provider() {
 			if [ -n "${res_rel}" ]; then
 				res_abs="${MCPBASH_RESOURCES_DIR}/${res_rel}"
 			fi
-			# shellcheck disable=SC2030,SC2031
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				export \
-					MCP_COMPLETION_NAME="${name}" \
-					MCP_COMPLETION_ARGS_JSON="${args_json}" \
-					MCP_COMPLETION_LIMIT="${limit}" \
-					MCP_COMPLETION_OFFSET="${offset}" \
-					MCP_COMPLETION_ARGS_HASH="${args_hash}" \
-					MCP_RESOURCE_REL_PATH="${res_rel}" \
-					MCP_RESOURCE_PATH="${res_abs}" \
-					MCP_RESOURCE_URI="${MCP_COMPLETION_PROVIDER_RESOURCE_URI}" \
-					MCP_RESOURCE_PROVIDER="${MCP_COMPLETION_PROVIDER_RESOURCE_PROVIDER}" \
-					MCP_RESOURCE_METADATA="${MCP_COMPLETION_PROVIDER_METADATA}"
+				local runner=(
+					env
+					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
+					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
+					"MCP_COMPLETION_NAME=${name}"
+					"MCP_COMPLETION_ARGS_JSON=${args_json}"
+					"MCP_COMPLETION_LIMIT=${limit}"
+					"MCP_COMPLETION_OFFSET=${offset}"
+					"MCP_COMPLETION_ARGS_HASH=${args_hash}"
+					"MCP_RESOURCE_REL_PATH=${res_rel}"
+					"MCP_RESOURCE_PATH=${res_abs}"
+					"MCP_RESOURCE_URI=${MCP_COMPLETION_PROVIDER_RESOURCE_URI}"
+					"MCP_RESOURCE_PROVIDER=${MCP_COMPLETION_PROVIDER_RESOURCE_PROVIDER}"
+					"MCP_RESOURCE_METADATA=${MCP_COMPLETION_PROVIDER_METADATA}"
+				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${abs_script}"
+					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
 				else
-					"${abs_script}"
+					"${runner[@]}" "${abs_script}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		else
-			# shellcheck disable=SC2030,SC2031
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				export \
-					MCP_COMPLETION_NAME="${name}" \
-					MCP_COMPLETION_ARGS_JSON="${args_json}" \
-					MCP_COMPLETION_LIMIT="${limit}" \
-					MCP_COMPLETION_OFFSET="${offset}" \
-					MCP_COMPLETION_ARGS_HASH="${args_hash}"
+				local runner=(
+					env
+					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
+					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
+					"MCP_COMPLETION_NAME=${name}"
+					"MCP_COMPLETION_ARGS_JSON=${args_json}"
+					"MCP_COMPLETION_LIMIT=${limit}"
+					"MCP_COMPLETION_OFFSET=${offset}"
+					"MCP_COMPLETION_ARGS_HASH=${args_hash}"
+				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${abs_script}"
+					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
 				else
-					"${abs_script}"
+					"${runner[@]}" "${abs_script}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		fi
 		status=$?
 		script_output="$(cat "${tmp_out}" 2>/dev/null || true)"
 		stderr_output="$(cat "${tmp_err}" 2>/dev/null || true)"
+		if [ "${MCPBASH_PRESERVE_STATE:-false}" = "true" ] && [ -n "${MCPBASH_STATE_DIR:-}" ]; then
+			local safe_name="${name}"
+			safe_name="${safe_name//[^a-zA-Z0-9._-]/_}"
+			cp -f "${tmp_out}" "${MCPBASH_STATE_DIR}/completion.${safe_name}.${RANDOM}.stdout" 2>/dev/null || true
+			cp -f "${tmp_err}" "${MCPBASH_STATE_DIR}/completion.${safe_name}.${RANDOM}.stderr" 2>/dev/null || true
+		fi
 		rm -f "${tmp_out}" "${tmp_err}"
 		if [ "${status}" -ne 0 ]; then
 			# shellcheck disable=SC2034
@@ -803,20 +824,25 @@ mcp_completion_finalize() {
 		has_more_json="true"
 	fi
 	local cursor="${mcp_completion_cursor}"
-	printf '%s' "$(
+	local out=""
+	if ! out="$(
 		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--argjson suggestions "${mcp_completion_suggestions}" \
 			--argjson has_more "${has_more_json}" \
 			--arg cursor "${cursor}" '
-				{
-					completion: {
-						values: $suggestions,
-						hasMore: ($has_more == true),
-						nextCursor: (if $cursor == "" then null else $cursor end)
-					}
-				}
+				def base:
+					{completion: {values: $suggestions, hasMore: ($has_more == true)}};
+				if $cursor == "" then
+					base
+				else
+					(base | .completion.nextCursor = $cursor)
+				end
 			'
-	)"
+	)"; then
+		# Never emit malformed JSON; fall back to an empty completion result.
+		out='{"completion":{"values":[],"hasMore":false}}'
+	fi
+	printf '%s' "${out}"
 }
 mcp_completion_wait_for_pid() {
 	local pid="$1"
