@@ -223,5 +223,11 @@ if ! jq -e '
 	[select(.method=="notifications/progress") | .params.progress] as $p
 	| ($p | length) >= 1
 ' "${MANUAL_ROOT}/responses.ndjson" >/dev/null; then
+	# Dump diagnostics to CI output before failing
+	printf '\n=== Server stderr (diagnostics) ===\n' >&2
+	cat "${MANUAL_ROOT}/responses.ndjson.stderr" >&2 || true
+	printf '\n=== All responses (looking for notifications/progress) ===\n' >&2
+	jq -c 'select(.method)' "${MANUAL_ROOT}/responses.ndjson" >&2 || true
+	printf '\n=== End diagnostics ===\n' >&2
 	test_fail "expected at least one notifications/progress event"
 fi
