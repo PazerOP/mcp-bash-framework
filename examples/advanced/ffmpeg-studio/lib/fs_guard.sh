@@ -62,7 +62,7 @@ mcp_ffmpeg_guard_init() {
 		return 1
 	fi
 
-	local -a entries=()
+	local entries_tsv=""
 	local jq_script_file
 	jq_script_file="$(mktemp "${TMPDIR:-/tmp}/mcp-ffmpeg-jq.XXXXXX")"
 	cat <<'JQ' >"${jq_script_file}"
@@ -79,25 +79,25 @@ mcp_ffmpeg_guard_init() {
   end
 JQ
 
-	if ! mapfile -t entries < <("${json_bin}" -r -f "${jq_script_file}" "${config}"); then
+	if ! entries_tsv="$("${json_bin}" -r -f "${jq_script_file}" "${config}")"; then
 		rm -f "${jq_script_file}"
 		printf 'mcp_ffmpeg_guard: invalid config in %s\n' "${config}" >&2
 		return 1
 	fi
 	rm -f "${jq_script_file}"
 
-	if [[ "${#entries[@]}" -eq 0 ]]; then
+	if [[ -z "${entries_tsv}" ]]; then
 		printf 'mcp_ffmpeg_guard: no media roots configured\n' >&2
 		return 1
 	fi
 
 	MCP_FFMPEG_ROOTS=()
 	MCP_FFMPEG_MODES=()
-	local -A seen=()
+	local seen_list=$'\n'
 
-	for entry in "${entries[@]}"; do
-		local raw_path="${entry%%$'\t'*}"
-		local mode="${entry#*$'\t'}"
+	while IFS=$'\t' read -r raw_path mode || [[ -n "${raw_path:-}" ]]; do
+		[[ -z "${raw_path:-}" ]] && continue
+		[[ -n "${mode:-}" ]] || mode="rw"
 		case "${mode}" in
 		rw | ro) ;;
 		*)
@@ -126,13 +126,15 @@ JQ
 			return 1
 		fi
 
-		if [[ -n "${seen[${abs_path}]:-}" ]]; then
+		case "${seen_list}" in
+		*$'\n'"${abs_path}"$'\n'*)
 			continue
-		fi
-		seen["${abs_path}"]=1
+			;;
+		esac
+		seen_list+="${abs_path}"$'\n'
 		MCP_FFMPEG_ROOTS+=("${abs_path}")
 		MCP_FFMPEG_MODES+=("${mode}")
-	done
+	done <<<"${entries_tsv}"
 
 	if [[ "${#MCP_FFMPEG_ROOTS[@]}" -eq 0 ]]; then
 		printf 'mcp_ffmpeg_guard: no usable media roots found\n' >&2
