@@ -1022,11 +1022,21 @@ mcp_core_build_error_response() {
 	local code="$2"
 	local message="$3"
 	local data="$4"
-	local id_value
+	local id_kv
 	local data_json
 	local message_json
 
-	id_value="${id_json:-null}"
+	# MCP requires request IDs MUST NOT be null. For error responses where the
+	# request ID is unknown/unreadable (e.g. parse errors), omit `id` entirely
+	# rather than emitting `"id": null`.
+	case "${id_json:-}" in
+	null | '')
+		id_kv=''
+		;;
+	*)
+		id_kv=',"id":'"${id_json}"
+		;;
+	esac
 	message_json="$(mcp_json_quote_text "${message}")"
 
 	if [ -n "${data}" ]; then
@@ -1038,9 +1048,9 @@ mcp_core_build_error_response() {
 			data_json="$(mcp_json_quote_text "${data}")"
 			;;
 		esac
-		printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s,"data":%s}}' "${id_value}" "${code}" "${message_json}" "${data_json}"
+		printf '{"jsonrpc":"2.0"%s,"error":{"code":%s,"message":%s,"data":%s}}' "${id_kv}" "${code}" "${message_json}" "${data_json}"
 	else
-		printf '{"jsonrpc":"2.0","id":%s,"error":{"code":%s,"message":%s}}' "${id_value}" "${code}" "${message_json}"
+		printf '{"jsonrpc":"2.0"%s,"error":{"code":%s,"message":%s}}' "${id_kv}" "${code}" "${message_json}"
 	fi
 }
 

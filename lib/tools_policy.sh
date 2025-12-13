@@ -49,7 +49,8 @@ mcp_tools_policy_stat_uid_gid() {
 mcp_tools_policy_check_secure_path() {
 	local target="$1"
 	[ -n "${target}" ] || return 1
-	[ -f "${target}" ] || return 1
+	# Accept files and directories (we validate ownership/perms for both).
+	[ -f "${target}" ] || [ -d "${target}" ] || return 1
 	# Never source symlinks.
 	[ ! -L "${target}" ] || return 1
 
