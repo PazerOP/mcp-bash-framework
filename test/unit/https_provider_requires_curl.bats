@@ -48,6 +48,23 @@ exec /usr/bin/mktemp "$@"
 EOF
 chmod 700 "${BIN_DIR}/mktemp"
 
+# Provide bash so env-based shims can run even when PATH omits /bin.
+# On Linux (usrmerge), adding /bin to PATH can also expose curl; we want curl
+# to be truly absent for this test.
+cat >"${BIN_DIR}/bash" <<'EOF'
+#!/bin/bash
+exec /bin/bash "$@"
+EOF
+chmod 700 "${BIN_DIR}/bash"
+
+# Provider uses an EXIT trap that calls rm; include a shim so PATH can exclude
+# /bin (usrmerge can otherwise expose curl on Linux).
+cat >"${BIN_DIR}/rm" <<'EOF'
+#!/bin/bash
+exec /bin/rm "$@"
+EOF
+chmod 700 "${BIN_DIR}/rm"
+
 # Minimal coreutils shims (provider/policy use tr/grep).
 cat >"${BIN_DIR}/tr" <<'EOF'
 #!/usr/bin/env bash
@@ -76,7 +93,7 @@ stderr_file="${TEST_TMPDIR}/stderr.txt"
 
 printf ' -> fails closed when curl is missing, even if wget exists\n'
 set +e
-PATH="${BIN_DIR}:/bin" \
+PATH="${BIN_DIR}" \
 	MCPBASH_HOME="${FAKE_HOME}" \
 	MCPBASH_HTTPS_ALLOW_ALL="true" \
 	/bin/bash "${PROVIDER}" "https://example.com/" 1>/dev/null 2>"${stderr_file}"
