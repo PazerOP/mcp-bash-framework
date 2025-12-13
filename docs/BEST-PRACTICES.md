@@ -104,7 +104,8 @@ This guide distils hands-on recommendations for designing, building, and operati
 - **Stable vs extension directories** – Core runtime sits under `bin/`, `lib/`, `handlers/`, `providers/`, and `sdk/`. Extension-friendly directories include `tools/`, `resources/`, `prompts/`, `server.d/`, and `.registry/` as illustrated in [README.md](../README.md#repository-layout).
 - **Registration flows**:
   - *Auto-discovery* – Default path scanning populates `.registry/*.json` (see [docs/REGISTRY.md](REGISTRY.md)). Metadata is sourced from `.meta.json` then inline `# mcp:` annotations, falling back to defaults.
-  - *Manual overrides* – Place curated registrations in `server.d/register.sh` when discovery is too slow or when deterministic ordering is required (§9 of the plan). Manual files should emit valid JSON rows and respect TTL rules.
+  - *Declarative registration* – Prefer `server.d/register.json` for deterministic overrides/disablement without executing shell code (see [docs/REGISTRY.md](REGISTRY.md)). Use `[]` to explicitly disable a kind, or omit/null a key to fall through to auto-discovery.
+  - *Hook registration* – Use `server.d/register.sh` only for dynamic/imperative cases; it executes shell code and is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`). See `examples/advanced/register-sh-hooks/`.
 - **Environment staging** – Use `server.d/env.sh` to inject operator-specific configuration without editing tracked files. Document each variable inline for future maintainers.
 
 ## 4. MCP server development best practices
@@ -645,7 +646,7 @@ Cache results by exporting `MCP_TESTS_SKIP_REMOTE=1` when remote fixtures are un
 ### 6.1 Configuration hierarchy
 1. Launch-time environment variables (`MCPBASH_*`, `MCP_*`)
 2. `server.d/env.sh` exports
-3. Manual registration scripts overriding discovery output
+3. Manual registration inputs (`server.d/register.json` / `server.d/register.sh`) overriding discovery output
 4. Client-initiated negotiation (capabilities, logging)
 
 Document configuration in `server.d/README.md` (if present) so on-call operators know which knobs are safe to adjust.
@@ -685,7 +686,7 @@ Document configuration in `server.d/README.md` (if present) so on-call operators
 
 ## 7. Security & compliance
 - Start with [docs/SECURITY.md](SECURITY.md) for threat model context. Apply principle of least privilege by scoping `MCP_RESOURCES_ROOTS` and keeping tool environments minimal (`MCPBASH_TOOL_ENV_MODE`).
-- Manual registry hooks are opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`) and must be owned by the current user with no group/world write bits. Only enable on trusted repos; review and sign `server.d/register.sh` like application code.
+- Prefer declarative registration (`server.d/register.json`) when possible; it avoids executing project shell code during list/refresh flows. If you use hook registration, it is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`) and must be owned by the current user with no group/world write bits—review and sign `server.d/register.sh` like application code.
 - Secrets management: rely on OS keychains or inject short-lived tokens at launch. Avoid long-lived tokens in `.env` files that might leak through scaffolds.
 - Validate third-party scaffolds before execution. Run `shellcheck` manually on contributions and require signed commits for sensitive providers. Keep `MCPBASH_TOOL_ALLOWLIST` scoped to the minimal set of tools; use `*` only in fully trusted projects.
 - For compliance regimes, map MCP logs and payload dumps to your retention policies; scrub `mcpbash.state.*` directories after incidents.

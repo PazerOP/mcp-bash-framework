@@ -14,7 +14,7 @@ mcp-bash is CI-tested on Windows using Git Bash (MSYS2). WSL also works and beha
 - Install JSON tooling manually (`pacman -S jq` or a downloaded `gojq`).
 
 ## Executable detection
-Windows fakes execute bits. The scanner falls back to `.sh`/`.bash` extensions and shebangs when `-x` is unreliable. Use `.sh` plus `#!/usr/bin/env bash` or register tools manually via `server.d/register.sh`.
+Windows fakes execute bits. The scanner falls back to `.sh`/`.bash` extensions and shebangs when `-x` is unreliable. Use `.sh` plus `#!/usr/bin/env bash`, or register tools declaratively via `server.d/register.json` (preferred). Hook-based registration via `server.d/register.sh` also works but is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true`).
 
 ## gojq notes
 `gojq` v0.12.16 struggles with `--slurpfile` on Windows. Prefer `cat file.ndjson | jq -s '...'` and use standard `jq` when available.

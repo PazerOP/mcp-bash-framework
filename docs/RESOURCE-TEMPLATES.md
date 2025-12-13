@@ -18,7 +18,28 @@ Add `uriTemplate` to a resource meta file (omit `uri`):
 ```
 Discovery scans `resources/*.meta.json`, requires `uriTemplate` to be a string with at least one `{variable}`, and skips entries that also set `uri`.
 
-## Manual registration (`server.d/register.sh`)
+## Declarative registration (`server.d/register.json`)
+
+Register templates without executing shell code during list/refresh flows:
+
+```json
+// server.d/register.json
+{
+  "version": 1,
+  "resourceTemplates": [
+    {
+      "name": "logs-by-date",
+      "title": "Log Files by Date",
+      "uriTemplate": "file:///var/log/{service}/{date}.log",
+      "description": "Access log files by service and date"
+    }
+  ]
+}
+```
+
+If `server.d/register.json` is present, it takes precedence over `server.d/register.sh` (no fallback on validation errors). See [REGISTRY.md](REGISTRY.md) for the full schema and strictness rules.
+
+## Hook registration (`server.d/register.sh`)
 
 Manual templates merge on top of auto-discovered entries (manual wins on name collisions):
 ```bash

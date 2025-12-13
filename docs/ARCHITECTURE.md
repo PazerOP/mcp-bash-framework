@@ -9,7 +9,7 @@ _Figure: High-level dataflow—MCP client sends JSON-RPC over stdio to mcp-bash 
 
 ## Repository layout
 ```
-~/.local/share/mcp-bash/   # or mcp-bash-framework/ if cloned manually
+~/.local/share/mcp-bash/   # or any directory if cloned manually
 ├─ bin/mcp-bash
 ├─ lib/
 │  ├─ auth.sh
@@ -52,9 +52,11 @@ _Figure: High-level dataflow—MCP client sends JSON-RPC over stdio to mcp-bash 
 │  └─ prompts.sh
 ├─ providers/
 ├─ sdk/
-├─ server.d/
-│  ├─ env.sh
-│  └─ register.sh
+├─ server.d/                # optional project hooks/config
+│  ├─ env.sh                 # environment overrides
+│  ├─ register.json          # preferred: data-only registration (no shell execution)
+│  ├─ register.sh            # hook registration (opt-in; executes shell code)
+│  └─ policy.sh              # optional: tool allow/deny hook
 ├─ scaffold/
 ├─ examples/
 ├─ docs/
@@ -96,7 +98,8 @@ Stable modules live under `bin/` and `lib/`, protocol handlers under `handlers/`
 - `tools/call` wires the SDK env, captures stdout/stderr, surfaces `_meta.stderr`, emits structured content when metadata declares `outputSchema`, and returns `isError` on tool exit codes.
 - Embedded resource content: tools can append to `MCP_TOOL_RESOURCES_FILE` (JSON array or tab-separated `path<TAB>mime<TAB>uri`) to have the framework emit `{type:"resource"}` entries in the result `content` array; binary files are base64 encoded automatically.
 - Tool policy hook: if present, `server.d/policy.sh` defines `mcp_tools_policy_check()` and is invoked before every tool run (default implementation allows all tools).
-- Executable `server.d/register.sh` (gated by `MCPBASH_ALLOW_PROJECT_HOOKS=true` and safe ownership/permissions) can return a `tools` array to replace auto-discovery.
+- Declarative registration: `server.d/register.json` can provide a `tools` array (and other kinds) without executing project shell code; if present, it takes precedence and invalid input fails loudly (no fallback to hooks).
+- Hook registration: `server.d/register.sh` can return a `tools` array to replace auto-discovery, but it executes shell code and is opt-in (`MCPBASH_ALLOW_PROJECT_HOOKS=true` plus safe ownership/permissions).
 
 ### Resources
 - `handlers/resources.sh` supports `resources/list`, `resources/read`, `resources/subscribe`, and `resources/unsubscribe`, declining them in minimal mode.
@@ -104,12 +107,12 @@ Stable modules live under `bin/` and `lib/`, protocol handlers under `handlers/`
 - Pagination mirrors tools via `lib/paginate.sh`, tracking registry hashes for list_changed notifications and returning `resources`, optional `nextCursor`, and an extension count via `result._meta["mcpbash/total"]`.
 - `resources/read` resolves URIs through providers (default `providers/file.sh`), enforces roots allow lists, returns MIME hints and `_meta` diagnostics, and can subscribe; optional polling (`MCPBASH_RESOURCES_POLL_INTERVAL_SECS`, default `2`, set `0` to disable) pushes updates.
 - File providers translate `C:\` prefixes into `/c/...` on Git-Bash/MSYS and honor `MSYS2_ARG_CONV_EXCL`. Git and HTTPS providers live in `providers/git.sh` and `providers/https.sh`.
-- `server.d/register.sh` may emit `{ "tools": [...], "resources": [...], "prompts": [...] }` to bypass auto-discovery.
+- `server.d/register.json` can supply `resources` / `resourceTemplates` for data-only overrides; `server.d/register.sh` may emit `{ "tools": [...], "resources": [...], "resourceTemplates": [...], "prompts": [...], "completions": [...] }` for hook-based overrides (opt-in).
 
 ### Prompts
 - `handlers/prompts.sh` implements `prompts/list` and `prompts/get`, rejecting both in minimal mode.
 - `lib/prompts.sh` scans `prompts/`, writes `.registry/prompts.json`, paginates deterministically (returning `prompts`, optional `nextCursor`, and an extension count via `result._meta["mcpbash/total"]`), and renders templates with argument schemas into structured and text content.
-- Manual overrides: `server.d/register.sh` can return a `prompts` array.
+- Manual overrides: `server.d/register.json` or `server.d/register.sh` can provide a `prompts` array; prefer `register.json` unless you need dynamic behavior.
 
 ### Roots
 - `handlers/roots.sh` handles `notifications/roots/list_changed` by re-requesting roots (debounced).
