@@ -211,8 +211,9 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `-32601` → method not found / unsupported method.
   - `-32602` → invalid params (bad args, unsupported protocol version, invalid cursor, invalid log level).
   - `-32603` → internal error (tool timeout, provider failure, output size limit, registry errors, empty handler response).
+  - `-32000` → server not initialized (`initialize` not completed).
   - `-32001` → tool cancelled (SIGTERM/INT).
-  - `-32002` → server not initialized (`initialize` not completed).
+  - `-32002` → resource not found (`resources/read`).
   - `-32003` → server shutting down (rejecting new work).
   - `-32005` → `exit` called before `shutdown` requested.
 - Tool vs resource failures:
@@ -220,7 +221,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Resource failures: use JSON-RPC error objects; no `isError` flag.
   - Oversized tool/resource outputs: response is replaced with `-32603` error; partial payloads are never returned.
 - Provider exit code mapping (from `docs/ERRORS.md`):
-  - `file.sh`: exit `2` (outside allowed roots) → `-32603`; exit `3` (missing file) → `-32601`.
+  - `file.sh`: exit `2` (outside allowed roots) → `-32603`; exit `3` (missing file) → `-32002`.
   - `git.sh`: exit `4` (invalid URI or missing git) → `-32602`; exit `5` (clone/fetch failure) → `-32603`.
   - `https.sh`: exit `4` (invalid URI or missing curl/wget) → `-32602`; exit `5` (network/timeout) → `-32603`; exit `6` (payload exceeds `MCPBASH_HTTPS_MAX_BYTES`) → `-32603`.
   - Any other provider exit → `-32603` with stderr text when available.
