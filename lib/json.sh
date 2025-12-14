@@ -1018,7 +1018,7 @@ mcp_json_extract_progress_token() {
 	esac
 }
 
-mcp_json_extract_completion_name() {
+mcp_json_extract_completion_ref_type() {
 	local json="$1"
 	if mcp_runtime_is_minimal_mode; then
 		printf ''
@@ -1027,10 +1027,97 @@ mcp_json_extract_completion_name() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.type? // ""' 2>/dev/null
 		;;
 	*)
 		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_ref_name() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.name? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_ref_uri() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.uri? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_argument_name() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.name? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_argument_value() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.value? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_context_arguments() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf '{}'
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '(.params.context.arguments? // {}) | if type == "object" then . else {} end' 2>/dev/null; then
+			printf '{}'
+		fi
+		;;
+	*)
+		printf '{}'
 		;;
 	esac
 }
@@ -1068,7 +1155,27 @@ mcp_json_extract_completion_arguments() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '.params.arguments // {}' 2>/dev/null; then
+		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '
+			def obj_or_empty($v):
+				if ($v | type) == "object" then $v else {} end;
+			def str_or_empty($v):
+				if ($v | type) == "string" then $v else "" end;
+
+			(.params.argument? // {}) as $arg
+			| (str_or_empty($arg.value)) as $value
+			| {
+				query: $value,
+				prefix: $value,
+				argument: {
+					name: (str_or_empty($arg.name)),
+					value: $value
+				},
+				context: {
+					arguments: obj_or_empty(.params.context.arguments? // {})
+				},
+				ref: (obj_or_empty(.params.ref? // {}))
+			}
+		' 2>/dev/null; then
 			printf '{}'
 		fi
 		;;
@@ -1087,7 +1194,8 @@ mcp_json_extract_completion_query() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.arguments.query? // .params.arguments.prefix? // ""' 2>/dev/null
+		# MCP 2025-11-25: params.argument.value
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.value? // ""' 2>/dev/null
 		;;
 	*)
 		printf ''

@@ -218,7 +218,7 @@ if [ "${IS_WINDOWS}" = "true" ]; then
 	cat >"${COMP_ROOT}/requests.ndjson" <<'EOF'
 {"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"c1","method":"completion/complete","params":{"name":"demo.completion","arguments":{"query":"re"},"limit":3}}
+{"jsonrpc":"2.0","id":"c1","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"demo.completion"},"argument":{"name":"query","value":"re"},"limit":3}}
 EOF
 
 	run_server "${COMP_ROOT}" "${COMP_ROOT}/requests.ndjson" "${COMP_ROOT}/responses.ndjson" "${server_json_tool}"
@@ -244,7 +244,7 @@ EOF
 	cat >"${COMP_ROOT}/requests_page2.ndjson" <<EOF
 {"jsonrpc":"2.0","id":"init2","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"c2","method":"completion/complete","params":{"name":"demo.completion","cursor":"${cursor}","limit":3}}
+{"jsonrpc":"2.0","id":"c2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"demo.completion"},"argument":{"name":"query","value":"re"},"cursor":"${cursor}","limit":3}}
 EOF
 
 	run_server "${COMP_ROOT}" "${COMP_ROOT}/requests_page2.ndjson" "${COMP_ROOT}/responses_page2.ndjson" "${server_json_tool}"
@@ -266,7 +266,7 @@ else
 		test_fail "initialize timeout"
 	fi
 	session_send '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-	session_send '{"jsonrpc":"2.0","id":"c1","method":"completion/complete","params":{"name":"demo.completion","arguments":{"query":"re"},"limit":3}}'
+	session_send '{"jsonrpc":"2.0","id":"c1","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"demo.completion"},"argument":{"name":"query","value":"re"},"limit":3}}'
 	c1_line="$(session_wait_for_id "${COMP_ROOT}/responses.ndjson" "c1" 15 || true)"
 	if [ -z "${c1_line}" ]; then
 		stop_server_session "${COMP_ROOT}"
@@ -294,7 +294,7 @@ else
 	fi
 
 	session_send "$(jq -n -c --arg cursor "${cursor}" \
-		'{"jsonrpc":"2.0","id":"c2","method":"completion/complete","params":{"name":"demo.completion","cursor":$cursor,"limit":3}}')"
+		'{"jsonrpc":"2.0","id":"c2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"demo.completion"},"argument":{"name":"query","value":"re"},"cursor":$cursor,"limit":3}}')"
 	c2_line="$(session_wait_for_id "${COMP_ROOT}/responses.ndjson" "c2" 15 || true)"
 	stop_server_session "${COMP_ROOT}"
 

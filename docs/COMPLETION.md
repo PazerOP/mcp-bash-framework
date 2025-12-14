@@ -14,10 +14,32 @@
 }
 ```
 
-- `name` must be unique. Clients call `completion/complete` with this name.
+- `name` must be unique. Clients reference it via `params.ref` in `completion/complete` requests.
 - `path` is relative to `MCPBASH_PROJECT_ROOT` for `manual` providers.
 - `timeoutSecs` is optional; defaults to no per-request timeout (global watchdogs still apply).
 - The registry rejects duplicates, missing paths, or buffer overflows (guarded by `MCPBASH_MANUAL_BUFFER_MAX_BYTES`).
+
+## Client request shape (MCP 2025-11-25)
+
+Use `ref` + `argument`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "c1",
+  "method": "completion/complete",
+  "params": {
+    "ref": {"type": "ref/prompt", "name": "demo.completion"},
+    "argument": {"name": "query", "value": "re"},
+    "limit": 3,
+    "context": {"arguments": {}}
+  }
+}
+```
+
+Notes:
+- `ref/prompt` uses the prompt name (this maps to the completion provider name for manual completions).
+- `ref/resource` uses `ref.uri`; mcp-bash resolves it to a registered resource name when possible.
 
 ## Provider Types
 - **builtin**: fallback generator when no registration matches.
@@ -29,7 +51,8 @@
 
 Environment variables:
 - `MCP_COMPLETION_NAME` – completion name (string).
-- `MCP_COMPLETION_ARGS_JSON` – JSON object from `params.arguments` (use `jq`/`gojq`).
+- `MCP_COMPLETION_ARGS_JSON` – JSON object derived from the request params:
+  - a normalized object that includes `query`/`prefix` (from `params.argument.value`) plus `ref` and `context.arguments`
 - `MCP_COMPLETION_LIMIT` – max suggestions requested (int; capped at 100).
 - `MCP_COMPLETION_OFFSET` – pagination offset (int).
 - `MCP_COMPLETION_ARGS_HASH` – opaque hash for cursor binding.
@@ -69,7 +92,7 @@ Stdout (any of):
 ## Example Flow
 See `examples/10-completions`:
 - Registers `demo.completion` via `server.d/register.json`.
-- Script reads `.query` (or `.prefix`) from `MCP_COMPLETION_ARGS_JSON` (which is `params.arguments`), filters suggestions, and paginates with `hasMore`.
+- Script reads `.query` (or `.prefix`) from `MCP_COMPLETION_ARGS_JSON`, filters suggestions, and paginates with `hasMore`.
 - `completion/complete` returns suggestions, `hasMore`, and `nextCursor` until results are exhausted.
 
 If you need **dynamic/imperative** completion registration (for example, generate names from the filesystem or gate entries on env vars), see `examples/advanced/register-sh-hooks/` which uses `server.d/register.sh` (opt-in).

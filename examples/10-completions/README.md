@@ -24,7 +24,7 @@
 - Stdout: array of `{type:"text",text:"..."}` or object with `suggestions`, `hasMore`, optional `next`/`cursor`.
 
 **Success criteria**
-- `completion/complete` with `{"name":"demo.completion","arguments":{"query":"re"}}` returns matches like `retry`, `review`, etc.
+- `completion/complete` with `{"ref":{"type":"ref/prompt","name":"demo.completion"},"argument":{"name":"query","value":"re"}}` returns matches like `retry`, `review`, etc.
 - Responses include `hasMore=true` on the first page and an opaque `nextCursor`; subsequent calls with `cursor` walk the remaining results.
 
 See also: [docs/COMPLETION.md](../../docs/COMPLETION.md) for the full guide.

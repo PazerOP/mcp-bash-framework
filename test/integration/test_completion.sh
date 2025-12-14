@@ -18,8 +18,8 @@ trap 'rm -rf "${TMP}"' EXIT
 cat <<'JSON' >"${TMP}/requests.ndjson"
 {"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"2","method":"completion/complete","params":{"name":"example","arguments":{"query":"plan roadmap"},"limit":1}}
-{"jsonrpc":"2.0","id":"badcursor","method":"completion/complete","params":{"name":"example","cursor":"not-a-cursor"}}
+{"jsonrpc":"2.0","id":"2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"limit":1}}
+{"jsonrpc":"2.0","id":"badcursor","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"cursor":"not-a-cursor"}}
 JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
@@ -57,7 +57,7 @@ test_assert_eq "${bad_cursor_code}" "-32602"
 cat >"${TMP}/requests_page2.ndjson" <<JSON
 {"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"page2","method":"completion/complete","params":{"name":"example","cursor":"${cursor}","limit":1}}
+{"jsonrpc":"2.0","id":"page2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"cursor":"${cursor}","limit":1}}
 JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests_page2.ndjson" >"${TMP}/responses_page2.ndjson" || true

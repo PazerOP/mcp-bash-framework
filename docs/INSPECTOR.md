@@ -56,6 +56,30 @@ If the web UI fails to connect even though stdio works:
 - Prefer Inspector CLI or raw stdio transcripts.
 - On macOS, `localhost` can resolve to IPv6 first; some proxies bind only IPv4. If possible, use `127.0.0.1`.
 - Watch for proxy query strings with malformed env blocks (e.g., `env=undefined`).
+- **“CORS policy / No Access-Control-Allow-Origin” during connect** can be caused by the **Inspector’s `/stdio` URL getting too long**. The Inspector UI encodes environment variables into a URL query parameter, and a huge `PATH` can push the request past practical limits.
+  - Fix in the UI: add an **Environment Variable** for `PATH` with a short value (or remove other large env vars).
+  - Fix when launching Inspector: run it with a minimal `PATH` (use an absolute `npx` path if needed), e.g.:
+    ```bash
+    CLIENT_PORT=6324 SERVER_PORT=6327 \
+    PATH='/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin' \
+    /opt/homebrew/bin/npx --yes @modelcontextprotocol/inspector --transport stdio -- \
+    ./examples/run 10-completions
+    ```
+- **403 “Invalid origin”** (DNS rebinding protection): set `ALLOWED_ORIGINS` to include the Inspector UI origin you’re using (often both `http://localhost:$CLIENT_PORT` and `http://127.0.0.1:$CLIENT_PORT`).
+
+## Inspector CLI (scriptable; no browser)
+
+MCP Inspector also has a CLI mode that can invoke a small set of methods (tools/resources/prompts/logging). This avoids the UI proxy and is useful for quick smoke checks.
+
+Example:
+
+```bash
+/opt/homebrew/bin/npx --yes @modelcontextprotocol/inspector --cli --transport stdio -- \
+./examples/run 10-completions --method logging/setLevel --log-level debug
+```
+
+Notes:
+- The CLI currently does **not** support `completion/complete`. For completions, use the Inspector UI or raw stdio transcripts.
 
 ## Conformance tests
 
