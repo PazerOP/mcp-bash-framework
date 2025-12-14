@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tool-level policy hook (default allow-all; override via server.d/policy.sh).
+# Tool-level policy hook (deny-by-default; override via server.d/policy.sh).
 
 set -euo pipefail
 
@@ -126,8 +126,10 @@ mcp_tools_policy_init() {
 	return 0
 }
 
-# Default policy: allow all tools. Projects can override by defining the same
-# function in server.d/policy.sh (sourced by mcp_tools_policy_init()).
+# Default policy: deny unless explicitly allowed via MCPBASH_TOOL_ALLOWLIST or
+# MCPBASH_TOOL_ALLOW_DEFAULT=allow|all (see docs/ENV_REFERENCE.md). Projects can
+# override by defining the same function in server.d/policy.sh (sourced by
+# mcp_tools_policy_init()).
 mcp_tools_policy_check() {
 	# $1: tool name; $2: tool metadata JSON string
 	local name="$1"
