@@ -5,6 +5,15 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - Unreleased
+
+### Added
+
+### Changed
+- Tool environment isolation no longer spawns external `env`; uses bash built-ins (`compgen -e`, `unset`) to avoid `E2BIG`/`Argument list too long` failures on Windows/Git Bash with large environments.
+
+### Fixed
+
 ## [0.7.0] - 2025-12-13
 
 ### Documentation

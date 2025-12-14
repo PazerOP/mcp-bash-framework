@@ -19,6 +19,9 @@ Windows fakes execute bits. The scanner falls back to `.sh`/`.bash` extensions a
 ## gojq notes
 `gojq` v0.12.16 struggles with `--slurpfile` on Windows. Prefer `cat file.ndjson | jq -s '...'` and use standard `jq` when available.
 
+## Tool environment isolation
+When `MCPBASH_TOOL_ENV_MODE` is `minimal` (default) or `allowlist`, tool execution isolates the environment using **bash built-ins** (rather than invoking the external `env` binary). This reduces the risk of `E2BIG` / `Argument list too long` failures on Git Bash/MSYS when the host environment (often `PATH`) is large.
+
 ## CI (GitHub Actions)
 - Git Bash runners can hit `Argument list too long` (`E2BIG`) when `gojq` launches with a large PATH/env.
 - Export `MCPBASH_JSON_TOOL=jq` and `MCPBASH_JSON_TOOL_BIN="$(command -v jq)"` before invoking `mcp-bash` to pin jq and avoid the Windows exec-limit issue.
