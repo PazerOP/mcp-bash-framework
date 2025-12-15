@@ -1401,6 +1401,7 @@ mcp_tools_call() {
 		MCP_SDK="${MCPBASH_HOME}/sdk"
 		MCP_TOOL_NAME="${name}"
 		MCP_TOOL_PATH="${absolute_path}"
+		# NOTE: Assign secret-bearing MCP_TOOL_*_JSON values before enabling xtrace.
 		MCP_TOOL_ARGS_JSON="${args_env_value}"
 		MCP_TOOL_METADATA_JSON="${metadata_env_value}"
 		MCP_TOOL_META_JSON="${request_meta_env_value}"
@@ -1428,55 +1429,30 @@ mcp_tools_call() {
 		*) tool_env_mode="minimal" ;;
 		esac
 
-		local env_exec=()
 		local trace_active="${trace_enabled}"
-		if [ "${tool_env_mode}" != "inherit" ]; then
-			env_exec=(
-				env -i
-				"PATH=${PATH:-/usr/bin:/bin}"
-				"HOME=${HOME:-${MCPBASH_PROJECT_ROOT:-${PWD}}}"
-				"TMPDIR=${TMPDIR:-/tmp}"
-				"LANG=${LANG:-C}"
-			)
-			local env_line env_key env_value
-			local saw_progress_stream="false"
-			local saw_progress_token="false"
-			local saw_crlf="false"
-			local saw_progress_stream_cr="false"
-			local saw_progress_token_cr="false"
-			while IFS= read -r env_line || [ -n "${env_line}" ]; do
-				[ -z "${env_line}" ] && continue
-				# Git Bash/MSYS may emit CRLF from `env`; strip trailing CR to avoid
-				# propagating "\r" into paths like MCP_PROGRESS_STREAM.
-				case "${env_line}" in
-				*$'\r')
-					saw_crlf="true"
-					case "${env_line%%=*}" in
-					MCP_PROGRESS_STREAM) saw_progress_stream_cr="true" ;;
-					MCP_PROGRESS_TOKEN) saw_progress_token_cr="true" ;;
-					esac
-					;;
-				esac
-				env_line="${env_line%$'\r'}"
-				env_key="${env_line%%=*}"
-				env_value="${env_line#*=}"
-				case "${env_key}" in
-				MCP_* | MCPBASH_*)
-					case "${env_key}" in
-					MCP_PROGRESS_STREAM) saw_progress_stream="true" ;;
-					MCP_PROGRESS_TOKEN) saw_progress_token="true" ;;
-					esac
-					env_exec+=("${env_key}=${env_value}")
-					;;
-				esac
-			done < <(env)
-
+		mcp_tools_apply_common_tool_env() {
+			# CRLF can leak into env vars on Windows/Git Bash/MSYS; strip it defensively.
+			local saw_crlf="false" saw_progress_stream_cr="false" saw_progress_token_cr="false"
+			case "${MCP_PROGRESS_STREAM:-}" in
+			*$'\r')
+				saw_crlf="true"
+				saw_progress_stream_cr="true"
+				MCP_PROGRESS_STREAM="${MCP_PROGRESS_STREAM%$'\r'}"
+				;;
+			esac
+			case "${MCP_PROGRESS_TOKEN:-}" in
+			*$'\r')
+				saw_crlf="true"
+				saw_progress_token_cr="true"
+				MCP_PROGRESS_TOKEN="${MCP_PROGRESS_TOKEN%$'\r'}"
+				;;
+			esac
 			if mcp_logging_is_enabled "debug"; then
 				local stream_present="false"
 				local token_present="false"
 				[ -n "${MCP_PROGRESS_STREAM:-}" ] && stream_present="true"
 				[ -n "${MCP_PROGRESS_TOKEN:-}" ] && token_present="true"
-				mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: inherited stream_present=${stream_present} token_present=${token_present} passthrough_stream=${saw_progress_stream} passthrough_token=${saw_progress_token} env_crlf_stripped=${saw_crlf} stream_line_had_cr=${saw_progress_stream_cr} token_line_had_cr=${saw_progress_token_cr}"
+				mcp_logging_debug "${MCP_TOOLS_LOGGER}" "Progress wiring: stream_present=${stream_present} token_present=${token_present} env_crlf_stripped=${saw_crlf} stream_had_cr=${saw_progress_stream_cr} token_had_cr=${saw_progress_token_cr}"
 				if mcp_logging_verbose_enabled; then
 					# Show escaped values so hidden CR/LF or whitespace is visible.
 					local stream_q token_q
@@ -1486,58 +1462,6 @@ mcp_tools_call() {
 				fi
 			fi
 
-			env_exec+=(
-				"MCP_SDK=${MCP_SDK}"
-				"MCP_TOOL_NAME=${MCP_TOOL_NAME}"
-				"MCP_TOOL_PATH=${MCP_TOOL_PATH}"
-				"MCP_TOOL_ARGS_JSON=${MCP_TOOL_ARGS_JSON}"
-				"MCP_TOOL_METADATA_JSON=${MCP_TOOL_METADATA_JSON}"
-				"MCP_TOOL_META_JSON=${MCP_TOOL_META_JSON}"
-				"MCP_TOOL_ERROR_FILE=${MCP_TOOL_ERROR_FILE}"
-				"MCP_TOOL_RESOURCES_FILE=${tool_resources_file}"
-				"MCP_ELICIT_SUPPORTED=${elicit_supported}"
-				"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL:-}"
-				"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN:-}"
-				"MCPBASH_MODE=${MCPBASH_MODE:-full}"
-			)
-			if declare -F mcp_roots_wait_ready >/dev/null 2>&1; then
-				env_exec+=("MCP_ROOTS_JSON=${MCP_ROOTS_JSON:-[]}")
-				env_exec+=("MCP_ROOTS_PATHS=${MCP_ROOTS_PATHS:-}")
-				env_exec+=("MCP_ROOTS_COUNT=${MCP_ROOTS_COUNT:-0}")
-			fi
-			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && env_exec+=("MCP_TOOL_ARGS_FILE=${MCP_TOOL_ARGS_FILE}")
-			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && env_exec+=("MCP_TOOL_METADATA_FILE=${MCP_TOOL_METADATA_FILE}")
-			[ -n "${MCP_TOOL_META_FILE:-}" ] && env_exec+=("MCP_TOOL_META_FILE=${MCP_TOOL_META_FILE}")
-			[ -n "${tool_resources_file:-}" ] && env_exec+=("MCP_TOOL_RESOURCES_FILE=${tool_resources_file}")
-			if [ "${elicit_supported}" = "1" ]; then
-				env_exec+=("MCP_ELICIT_REQUEST_FILE=${elicit_request_file}")
-				env_exec+=("MCP_ELICIT_RESPONSE_FILE=${elicit_response_file}")
-			fi
-
-			if [ "${trace_enabled}" = "true" ]; then
-				if exec 9>"${trace_file}"; then
-					BASH_XTRACEFD=9
-					PS4="${trace_ps4}"
-					export BASH_XTRACEFD PS4
-					: >"${trace_file}"
-					env_exec+=("BASH_XTRACEFD=9" "PS4=${trace_ps4}" "MCPBASH_TRACE_FILE=${trace_file}")
-				else
-					trace_active="false"
-				fi
-			fi
-
-			if [ "${tool_env_mode}" = "allowlist" ]; then
-				local allowlist_raw allowlist_var allowlist_value
-				allowlist_raw="${MCPBASH_TOOL_ENV_ALLOWLIST:-}"
-				allowlist_raw="${allowlist_raw//,/ }"
-				for allowlist_var in ${allowlist_raw}; do
-					[ -n "${allowlist_var}" ] || continue
-					allowlist_value="${!allowlist_var:-}"
-					[ -n "${allowlist_value}" ] || continue
-					env_exec+=("${allowlist_var}=${allowlist_value}")
-				done
-			fi
-		else
 			export MCP_SDK MCP_TOOL_NAME MCP_TOOL_PATH MCP_TOOL_ARGS_JSON MCP_TOOL_METADATA_JSON MCP_TOOL_META_JSON
 			[ -n "${MCP_TOOL_ARGS_FILE:-}" ] && export MCP_TOOL_ARGS_FILE
 			[ -n "${MCP_TOOL_METADATA_FILE:-}" ] && export MCP_TOOL_METADATA_FILE
@@ -1553,11 +1477,15 @@ mcp_tools_call() {
 				export MCP_ELICIT_RESPONSE_FILE="${elicit_response_file}"
 			fi
 			if [ "${trace_enabled}" = "true" ]; then
+				# Best-effort: ensure the trace file is not world-readable before xtrace
+				# starts writing. On Windows/Git Bash, chmod is best-effort; treat trace
+				# files as sensitive regardless.
+				: >"${trace_file}" 2>/dev/null || true
+				chmod 600 "${trace_file}" 2>/dev/null || true
 				if exec 9>"${trace_file}"; then
 					export BASH_XTRACEFD=9
 					export PS4="${trace_ps4}"
 					export MCPBASH_TRACE_FILE="${trace_file}"
-					: >"${trace_file}"
 				else
 					trace_active="false"
 				fi
@@ -1567,6 +1495,62 @@ mcp_tools_call() {
 				export MCP_ROOTS_PATHS="${MCP_ROOTS_PATHS:-}"
 				export MCP_ROOTS_COUNT="${MCP_ROOTS_COUNT:-0}"
 			fi
+		}
+		if [ "${tool_env_mode}" != "inherit" ]; then
+			# Build the isolated tool environment without spawning external `env`.
+			# On Windows/Git Bash/MSYS, launching subprocesses with a large host env
+			# can hit E2BIG before the tool starts. Prefer bash built-ins.
+			local allowlist_raw allowlist_names
+			allowlist_raw="${MCPBASH_TOOL_ENV_ALLOWLIST:-}"
+			allowlist_raw="${allowlist_raw//,/ }"
+			allowlist_names=" ${allowlist_raw} "
+
+			local env_key
+			for env_key in $(compgen -e); do
+				case "${env_key}" in
+				PATH | HOME | TMPDIR | LANG) ;;
+				MCP_* | MCPBASH_*) ;;
+				*)
+					if [ "${tool_env_mode}" = "allowlist" ]; then
+						case "${allowlist_names}" in
+						*" ${env_key} "*) ;;
+						*) unset "${env_key}" 2>/dev/null || true ;;
+						esac
+					else
+						unset "${env_key}" 2>/dev/null || true
+					fi
+					;;
+				esac
+			done
+
+			# Ensure baseline vars are exported even if we had to default them.
+			export PATH="${PATH:-/usr/bin:/bin}"
+			export HOME="${HOME:-${MCPBASH_PROJECT_ROOT:-${PWD}}}"
+			export TMPDIR="${TMPDIR:-/tmp}"
+			export LANG="${LANG:-C}"
+
+			# Allowlist mode: in addition to keeping already-exported allowlisted vars,
+			# also export allowlisted vars when they are set and non-empty (even if they
+			# were previously shell-only). This makes allowlist behavior predictable for
+			# operators who set variables without `export`.
+			if [ "${tool_env_mode}" = "allowlist" ]; then
+				local allowlist_var allowlist_value
+				for allowlist_var in ${allowlist_raw}; do
+					[ -n "${allowlist_var}" ] || continue
+					case "${allowlist_var}" in
+					[A-Za-z_][A-Za-z0-9_]*) ;;
+					*) continue ;;
+					esac
+					allowlist_value="${!allowlist_var:-}"
+					[ -n "${allowlist_value}" ] || continue
+					# shellcheck disable=SC2163  # Intentional: export var by name stored in allowlist_var
+					export "${allowlist_var}"
+				done
+			fi
+
+			mcp_tools_apply_common_tool_env
+		else
+			mcp_tools_apply_common_tool_env
 		fi
 
 		if [ "${trace_active}" = "true" ]; then
@@ -1594,32 +1578,16 @@ mcp_tools_call() {
 		fi
 
 		if [ -n "${effective_timeout}" ]; then
-			if [ "${tool_env_mode}" != "inherit" ]; then
-				if [ "${stderr_streaming_enabled}" = "true" ]; then
-					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
-				else
-					with_timeout "${effective_timeout}" -- "${env_exec[@]}" "${tool_runner[@]}" 2>>"${stderr_file}"
-				fi
+			if [ "${stderr_streaming_enabled}" = "true" ]; then
+				with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 			else
-				if [ "${stderr_streaming_enabled}" = "true" ]; then
-					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
-				else
-					with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>>"${stderr_file}"
-				fi
+				with_timeout "${effective_timeout}" -- "${tool_runner[@]}" 2>>"${stderr_file}"
 			fi
 		else
-			if [ "${tool_env_mode}" != "inherit" ]; then
-				if [ "${stderr_streaming_enabled}" = "true" ]; then
-					"${env_exec[@]}" "${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
-				else
-					"${env_exec[@]}" "${tool_runner[@]}" 2>>"${stderr_file}"
-				fi
+			if [ "${stderr_streaming_enabled}" = "true" ]; then
+				"${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
 			else
-				if [ "${stderr_streaming_enabled}" = "true" ]; then
-					"${tool_runner[@]}" 2> >(tee "${stderr_file}" >&2)
-				else
-					"${tool_runner[@]}" 2>>"${stderr_file}"
-				fi
+				"${tool_runner[@]}" 2>>"${stderr_file}"
 			fi
 		fi
 		# Outer stderr append captures shell-level errors; tool stderr is redirected above.

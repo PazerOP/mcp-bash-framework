@@ -66,6 +66,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 - Prompt metadata (`prompts/<name>.meta.json`):
   - Fields: `name`, `description`, `path` (template file), `arguments` schema.
   - Templates are plain text; example: `Hello {{var}}!`.
+  - Only `{{var}}` placeholders are substituted (values come from `prompts/get` `arguments`).
 - Completions (manual only, via `server.d/register.sh`):
   - Use:
     - `mcp_completion_manual_begin`
@@ -211,8 +212,9 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `-32601` → method not found / unsupported method.
   - `-32602` → invalid params (bad args, unsupported protocol version, invalid cursor, invalid log level).
   - `-32603` → internal error (tool timeout, provider failure, output size limit, registry errors, empty handler response).
+  - `-32000` → server not initialized (`initialize` not completed).
   - `-32001` → tool cancelled (SIGTERM/INT).
-  - `-32002` → server not initialized (`initialize` not completed).
+  - `-32002` → resource not found (`resources/read`).
   - `-32003` → server shutting down (rejecting new work).
   - `-32005` → `exit` called before `shutdown` requested.
 - Tool vs resource failures:
@@ -220,7 +222,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Resource failures: use JSON-RPC error objects; no `isError` flag.
   - Oversized tool/resource outputs: response is replaced with `-32603` error; partial payloads are never returned.
 - Provider exit code mapping (from `docs/ERRORS.md`):
-  - `file.sh`: exit `2` (outside allowed roots) → `-32603`; exit `3` (missing file) → `-32601`.
+  - `file.sh`: exit `2` (outside allowed roots) → `-32603`; exit `3` (missing file) → `-32002`.
   - `git.sh`: exit `4` (invalid URI or missing git) → `-32602`; exit `5` (clone/fetch failure) → `-32603`.
   - `https.sh`: exit `4` (invalid URI or missing curl/wget) → `-32602`; exit `5` (network/timeout) → `-32603`; exit `6` (payload exceeds `MCPBASH_HTTPS_MAX_BYTES`) → `-32603`.
   - Any other provider exit → `-32603` with stderr text when available.
@@ -260,6 +262,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Smoke: `./test/smoke.sh`.
   - Per-tool smoke: each scaffolded tool ships `tools/<name>/smoke.sh` to validate stdout JSON; update its sample args when you change `tool.meta.json`.
   - Unit: `./test/unit/run.sh`.
+    - Filter: `./test/unit/run.sh lock.bats` (or pass multiple `*.bats`).
   - Integration: `./test/integration/run.sh`.
   - Examples: `./test/examples/run.sh` (NDJSON harness + `run-tool` smoke for hello).
   - `run-tool` coverage: unit (`test/unit/run_tool_cli.bats`) and example smoke (`test/examples/test_run_tool_smoke.sh`).
@@ -269,6 +272,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `VERBOSE=1` → stream per-test logs.
   - `UNICODE=1` → use emoji status markers.
   - `MCPBASH_LOG_JSON_TOOL=log` → log JSON tooling detection during tests.
+  - `MCPBASH_UNIT_TEST_TIMEOUT_SECONDS=120` → per-test timeout for `./test/unit/run.sh`.
 
 ## CONVENTIONS
 

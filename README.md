@@ -113,13 +113,13 @@ command -v jq >/dev/null 2>&1 || command -v gojq >/dev/null 2>&1 || printf '%s\n
 Quick install (good for local dev / trusted networks):
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/v0.7.0/install.sh" | bash -s -- --yes --version "v0.7.0"
+curl -fsSL "https://raw.githubusercontent.com/yaniv-golan/mcp-bash-framework/v0.8.0/install.sh" | bash -s -- --yes --version "v0.8.0"
 ```
 
 Verified install (recommended for production / security-sensitive environments):
 
 ```bash
-version="v0.7.0"
+version="v0.8.0"
 file="mcp-bash-${version}.tar.gz"
 curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/${file}"
 curl -fsSLO "https://github.com/yaniv-golan/mcp-bash-framework/releases/download/${version}/SHA256SUMS"
@@ -148,7 +148,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc (if not 
 Pin a release with the installer (auto-prefixes `v` for bare versions):
 
 ```bash
-bash install.sh --verify <sha256-from-SHA256SUMS> --version 0.7.0
+bash install.sh --verify <sha256-from-SHA256SUMS> --version 0.8.0
 ```
 
 ### 1.5 Verify It Works (30 seconds)
@@ -338,7 +338,7 @@ Framework (Install Once)               Your Project (Version Control This)
 
 ## Direct Tool Execution (run-tool)
 
-Use `run-tool` to invoke a single tool without starting the full MCP server. This wires the same environment as the server (SDK path, args, metadata, roots). Tool names must match `^[a-zA-Z0-9_-]{1,64}$`; Some clients, including Claude Desktop, enforces this and rejects dotted names, so prefer hyphens/underscores for namespaces.
+Use `run-tool` to invoke a single tool without starting the full MCP server. This wires the same environment as the server (SDK path, args, metadata, roots). Tool names must match `^[a-zA-Z0-9_-]{1,64}$`; some clients, including Claude Desktop, enforce this and reject dotted names, so prefer hyphens/underscores for namespaces.
 
 ```bash
 # Basic invocation (project inferred from CWD or MCPBASH_PROJECT_ROOT)

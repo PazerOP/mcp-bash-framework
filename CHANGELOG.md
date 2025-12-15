@@ -5,6 +5,34 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - Unreleased
+
+### Added
+
+### Changed
+- Tool environment isolation no longer spawns external `env`; uses bash built-ins (`compgen -e`, `unset`) to avoid `E2BIG`/`Argument list too long` failures on Windows/Git Bash with large environments.
+- **BREAKING**: Completion/resource providers now run under a curated environment by default (`MCPBASH_PROVIDER_ENV_MODE=isolate`) to reduce `E2BIG` risk; opt into inheritance with `MCPBASH_PROVIDER_ENV_MODE=inherit` + `MCPBASH_PROVIDER_ENV_INHERIT_ALLOW=true` or selectively pass variables via `MCPBASH_PROVIDER_ENV_MODE=allowlist`.
+- **BREAKING**: `completion/complete` requests are now **spec-shape only** (MCP `2025-11-25`: `params.ref` + `params.argument`). The legacy `params.name`/`params.arguments` shape is no longer accepted.
+- **BREAKING**: Prompt templating only substitutes `{{var}}` placeholders from `prompts/get` arguments; other placeholder syntaxes are treated as literal text.
+- CI: Windows integration runs default to non-verbose output and use a PR allowlist to reduce runtime; scheduled runs keep the full suite with per-test timeouts and better log preservation on cancellation.
+- When `MCPBASH_PRESERVE_STATE=true`, per-request worker stderr logs (`stderr.*.log`) are preserved for debugging.
+- Dev: Unit test runner supports filtering and enforces per-test timeouts (`MCPBASH_UNIT_TEST_TIMEOUT_SECONDS`) to avoid hangs and orphaned subprocesses.
+
+### Fixed
+- Error-path JSON stderr logs no longer print full request payloads on parse/extract failures; logs now include bounded, single-line summaries (bytes/hash/excerpt).
+- Tool tracing no longer dumps full args/_meta payloads into xtrace output for SDK helpers; traces remain usable while reducing accidental secret leakage.
+- Completion results are now spec-shaped: `result.completion.values` is emitted as `string[]` (MCP `2025-11-25`).
+- Completion providers, resource providers, and prompt rendering no longer rely on spawning external `env` in their execution paths (improves Windows/Git Bash reliability with large environments).
+- CI env snapshots no longer rely on spawning external `env` when estimating environment size.
+- Resource provider execution no longer breaks under Bash 3.2 `set -u` when running in curated environments (fixes macOS CI integration failures).
+- Windows/Git Bash: curated provider env scrubbing is faster (batch unsets), avoiding provider-suite timeouts under very large environments.
+- Windows/Git Bash: provider isolation no longer preserves arbitrary `MCPBASH_*` variables (reduces env bloat); use `MCPBASH_PROVIDER_ENV_MODE=allowlist` to pass custom `MCPBASH_*` variables to providers.
+
+### Documentation
+- Expanded MCP Inspector troubleshooting (origin allowlist + large `PATH` causing connect failures) and clarified completion request shape expectations in completion docs/examples.
+- Updated `examples/10-completions` to include a demo prompt so completions can be exercised directly from the MCP Inspector UI (Prompts tab).
+- Fixed minor README grammar in the run-tool section.
+
 ## [0.7.0] - 2025-12-13
 
 ### Documentation

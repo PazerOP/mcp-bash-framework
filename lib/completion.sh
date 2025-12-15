@@ -5,6 +5,11 @@ set -euo pipefail
 
 MCP_COMPLETION_LOGGER="${MCP_COMPLETION_LOGGER:-mcp.completion}"
 
+if ! command -v mcp_env_run_curated >/dev/null 2>&1; then
+	# shellcheck source=lib/runtime.sh disable=SC1090,SC1091
+	. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runtime.sh"
+fi
+
 mcp_completion_suggestions="[]"
 mcp_completion_has_more=false
 mcp_completion_cursor=""
@@ -506,7 +511,8 @@ mcp_completion_normalize_output() {
 	local script_output="$1"
 	local limit="${2:-5}"
 	local start="${3:-0}"
-	printf '%s' "$(
+	local out=""
+	if ! out="$(
 		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
 			--arg raw "${script_output}" \
 			--argjson limit "${limit}" \
@@ -519,15 +525,20 @@ mcp_completion_normalize_output() {
 					if ($value | type) == "boolean" then $value else false end;
 				def numeric_or_null($value):
 					(try ($value | tonumber) catch null);
+				def ensure_string_array($value):
+					if ($value | type) != "array" then error("suggestions must be an array")
+					elif ([ $value[] | type ] | all(. == "string")) then $value
+					else error("suggestions must be string[]")
+					end;
 
 				(parse($raw)) as $payload
 				| if $payload == null then
 					{suggestions: [], hasMore: false, next: null, cursor: ""}
 				elif ($payload | type) == "array" then
-					{suggestions: $payload, hasMore: false, next: null, cursor: ""}
+					{suggestions: ensure_string_array($payload), hasMore: false, next: null, cursor: ""}
 				else
 					{
-						suggestions: ($payload.suggestions // []),
+						suggestions: ensure_string_array(($payload.suggestions // [])),
 						hasMore: bool($payload.hasMore),
 						next: $payload.next,
 						cursor: ($payload.nextCursor // $payload.cursor // "")
@@ -545,7 +556,10 @@ mcp_completion_normalize_output() {
 					end))
 				| (.cursor = (if (.cursor | type) == "string" then .cursor else "" end))
 			'
-	)"
+	)"; then
+		return 1
+	fi
+	printf '%s' "${out}"
 }
 
 mcp_completion_builtin_generate() {
@@ -575,9 +589,9 @@ mcp_completion_builtin_generate() {
 			--argjson limit "${limit}" \
 			--argjson offset "${offset}" '
 				[
-					{type: "text", text: $base},
-					{type: "text", text: $base_snippet},
-					{type: "text", text: $base_example}
+					$base,
+					$base_snippet,
+					$base_example
 				] as $candidates
 				| ($candidates[$offset:$offset+$limit]) as $limited
 				| ($limited | length) as $count
@@ -633,9 +647,29 @@ mcp_completion_run_provider() {
 			MCP_COMPLETION_PROVIDER_RESULT_ERROR="Completion script not found"
 			return 1
 		fi
+		# On Windows (Git Bash/MSYS), -x test is unreliable. If the completion script
+		# exists but isn't executable, fall back to invoking it via bash when it
+		# looks like a script (shebang or .sh/.bash extension).
+		local provider_runner=("${abs_script}")
 		if [ ! -x "${abs_script}" ]; then
-			MCP_COMPLETION_PROVIDER_RESULT_ERROR="Completion script not executable"
-			return 1
+			local first_line=""
+			IFS= read -r first_line <"${abs_script}" 2>/dev/null || first_line=""
+			case "${abs_script}" in
+			*.sh | *.bash)
+				provider_runner=(bash "${abs_script}")
+				;;
+			*)
+				case "${first_line}" in
+				'#!'*)
+					provider_runner=(bash "${abs_script}")
+					;;
+				*)
+					MCP_COMPLETION_PROVIDER_RESULT_ERROR="Completion script not executable"
+					return 1
+					;;
+				esac
+				;;
+			esac
 		fi
 		local tmp_out tmp_err
 		tmp_out="$(mktemp "${MCPBASH_TMP_ROOT}/mcp-completion.out.XXXXXX")"
@@ -649,8 +683,7 @@ mcp_completion_run_provider() {
 			fi
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				local runner=(
-					env
+				local env_pairs=(
 					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
 					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
 					"MCP_COMPLETION_NAME=${name}"
@@ -663,9 +696,9 @@ mcp_completion_run_provider() {
 					"MCP_PROMPT_METADATA=${MCP_COMPLETION_PROVIDER_METADATA}"
 				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
+					with_timeout "${timeout}" -- mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				else
-					"${runner[@]}" "${abs_script}"
+					mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		elif [ "${MCP_COMPLETION_PROVIDER_TYPE}" = "resource" ]; then
@@ -676,8 +709,7 @@ mcp_completion_run_provider() {
 			fi
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				local runner=(
-					env
+				local env_pairs=(
 					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
 					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
 					"MCP_COMPLETION_NAME=${name}"
@@ -692,16 +724,15 @@ mcp_completion_run_provider() {
 					"MCP_RESOURCE_METADATA=${MCP_COMPLETION_PROVIDER_METADATA}"
 				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
+					with_timeout "${timeout}" -- mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				else
-					"${runner[@]}" "${abs_script}"
+					mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		else
 			(
 				cd "${MCPBASH_PROJECT_ROOT}" || exit 1
-				local runner=(
-					env
+				local env_pairs=(
 					"MCPBASH_JSON_TOOL_BIN=${MCPBASH_JSON_TOOL_BIN}"
 					"MCPBASH_JSON_TOOL=${MCPBASH_JSON_TOOL}"
 					"MCP_COMPLETION_NAME=${name}"
@@ -711,9 +742,9 @@ mcp_completion_run_provider() {
 					"MCP_COMPLETION_ARGS_HASH=${args_hash}"
 				)
 				if [ -n "${timeout}" ]; then
-					with_timeout "${timeout}" -- "${runner[@]}" "${abs_script}"
+					with_timeout "${timeout}" -- mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				else
-					"${runner[@]}" "${abs_script}"
+					mcp_env_run_curated provider "${env_pairs[@]}" -- "${provider_runner[@]}"
 				fi
 			) >"${tmp_out}" 2>"${tmp_err}"
 		fi
@@ -796,7 +827,7 @@ mcp_completion_add_text() {
 		mcp_completion_has_more=true
 		return 1
 	fi
-	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg text "${text}" '. + [{type: "text", text: $text}]' 2>/dev/null)"; then
+	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" -c --arg text "${text}" '. + [$text]' 2>/dev/null)"; then
 		mcp_completion_suggestions="[]"
 		return 1
 	fi
@@ -811,7 +842,18 @@ mcp_completion_add_json() {
 		mcp_completion_has_more=true
 		return 1
 	fi
-	if ! mcp_completion_suggestions="$(printf '%s' "${mcp_completion_suggestions}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson payload "${json_payload:-"{}"}" '. + [$payload]' 2>/dev/null)"; then
+	# Legacy internal completion items were content objects; completions are now string-only.
+	# Accept only JSON strings here (callers should use mcp_completion_add_text for plain strings).
+	if ! mcp_completion_suggestions="$(
+		"${MCPBASH_JSON_TOOL_BIN}" -n -c \
+			--argjson list "${mcp_completion_suggestions}" \
+			--arg raw "${json_payload:-""}" '
+				(try ($raw | fromjson) catch null) as $payload
+				| if $payload == null then error("invalid json") else . end
+				| if ($payload | type) != "string" then error("completion items must be strings") else . end
+				| ($list // []) + [$payload]
+			' 2>/dev/null
+	)"; then
 		mcp_completion_suggestions="[]"
 		return 1
 	fi

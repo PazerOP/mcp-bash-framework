@@ -18,8 +18,8 @@ trap 'rm -rf "${TMP}"' EXIT
 cat <<'JSON' >"${TMP}/requests.ndjson"
 {"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"2","method":"completion/complete","params":{"name":"example","arguments":{"query":"plan roadmap"},"limit":1}}
-{"jsonrpc":"2.0","id":"badcursor","method":"completion/complete","params":{"name":"example","cursor":"not-a-cursor"}}
+{"jsonrpc":"2.0","id":"2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"limit":1}}
+{"jsonrpc":"2.0","id":"badcursor","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"cursor":"not-a-cursor"}}
 JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests.ndjson" >"${TMP}/responses.ndjson" || true
@@ -35,13 +35,11 @@ fi
 
 resp_json="$(grep '"id":"2"' "${TMP}/responses.ndjson" | head -n1)"
 suggestions_len="$(echo "$resp_json" | jq '.result.completion.values | length')"
-suggestion_type="$(echo "$resp_json" | jq -r '.result.completion.values[0].type')"
-suggestion_text="$(echo "$resp_json" | jq -r '.result.completion.values[0].text')"
+suggestion_text="$(echo "$resp_json" | jq -r '.result.completion.values[0]')"
 has_more="$(echo "$resp_json" | jq '.result.completion.hasMore')"
 cursor="$(echo "$resp_json" | jq -r '.result.completion.nextCursor // empty')"
 
 test_assert_eq "$suggestions_len" "1"
-test_assert_eq "$suggestion_type" "text"
 if [[ "$suggestion_text" != *"plan roadmap"* ]]; then
 	test_fail "suggestion text mismatch: $suggestion_text"
 fi
@@ -57,7 +55,7 @@ test_assert_eq "${bad_cursor_code}" "-32602"
 cat >"${TMP}/requests_page2.ndjson" <<JSON
 {"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}
 {"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":"page2","method":"completion/complete","params":{"name":"example","cursor":"${cursor}","limit":1}}
+{"jsonrpc":"2.0","id":"page2","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"example"},"argument":{"name":"query","value":"plan roadmap"},"cursor":"${cursor}","limit":1}}
 JSON
 
 "${MCPBASH_HOME}/examples/run" 00-hello-tool <"${TMP}/requests_page2.ndjson" >"${TMP}/responses_page2.ndjson" || true
@@ -66,7 +64,7 @@ page2_json="$(grep '"id":"page2"' "${TMP}/responses_page2.ndjson" | head -n1)"
 if [ -z "${page2_json}" ]; then
 	test_fail "missing page2 completion response"
 fi
-page2_text="$(echo "${page2_json}" | jq -r '.result.completion.values[0].text // empty')"
+page2_text="$(echo "${page2_json}" | jq -r '.result.completion.values[0] // empty')"
 page2_has_more="$(echo "${page2_json}" | jq -r '.result.completion.hasMore // false')"
 if [[ "${page2_text}" != *"snippet"* ]]; then
 	test_fail "second page suggestion unexpected: ${page2_text}"

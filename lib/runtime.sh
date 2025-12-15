@@ -519,6 +519,155 @@ mcp_runtime_cleanup_bootstrap() {
 	mcp_runtime_safe_rmrf "${MCPBASH_BOOTSTRAP_TMP_DIR}"
 }
 
+mcp_runtime_estimate_env_bytes() {
+	local bytes=0
+	local env_key
+	for env_key in $(compgen -e); do
+		local value="${!env_key-}"
+		# Approximate `env` output: KEY=VALUE\n
+		bytes=$((bytes + ${#env_key} + 1 + ${#value} + 1))
+	done
+	printf '%s' "${bytes}"
+}
+
+mcp_env_apply_curated_policy() {
+	local policy="$1"
+	shift || true
+
+	local env_mode="isolate"
+	local allowlist_raw=""
+	local allowlist_names=""
+
+	case "${policy}" in
+	provider)
+		env_mode="${MCPBASH_PROVIDER_ENV_MODE:-isolate}"
+		case "${env_mode}" in
+		isolate | ISOLATE | Isolate) env_mode="isolate" ;;
+		allowlist | ALLOWLIST | Allowlist) env_mode="allowlist" ;;
+		inherit | INHERIT | Inherit) env_mode="inherit" ;;
+		*) env_mode="isolate" ;;
+		esac
+		allowlist_raw="${MCPBASH_PROVIDER_ENV_ALLOWLIST:-}"
+		allowlist_raw="${allowlist_raw//,/ }"
+		allowlist_names=" ${allowlist_raw} "
+		if [ "${env_mode}" = "inherit" ] && [ "${MCPBASH_PROVIDER_ENV_INHERIT_ALLOW:-false}" != "true" ]; then
+			env_mode="isolate"
+		fi
+		;;
+	prompt-subst)
+		env_mode="isolate"
+		;;
+	*)
+		printf '%s\n' "mcp-bash: unknown curated env policy '${policy}'" >&2
+		return 1
+		;;
+	esac
+
+	if [ "${env_mode}" = "inherit" ]; then
+		return 0
+	fi
+
+	local env_key
+	local to_unset=()
+	while IFS= read -r env_key; do
+		case "${policy}:${env_key}" in
+		prompt-subst:PATH) ;;
+		prompt-subst:*)
+			to_unset+=("${env_key}")
+			;;
+		provider:PATH | provider:HOME | provider:TMPDIR | provider:TMP | provider:TEMP | provider:LANG | provider:LC_ALL) ;;
+		provider:USERPROFILE | provider:APPDATA | provider:SYSTEMROOT | provider:MSYSTEM | provider:MSYS2_ARG_CONV_EXCL) ;;
+		provider:LC_*) ;;
+		provider:MCP_*) ;;
+		provider:MCPBASH_HOME | provider:MCPBASH_PROJECT_ROOT | provider:MCPBASH_RESOURCES_DIR | provider:MCPBASH_PROMPTS_DIR) ;;
+		provider:MCPBASH_ENABLE_GIT_PROVIDER | provider:MCPBASH_GIT_* | provider:MCPBASH_HTTPS_*) ;;
+		provider:*)
+			if [ "${env_mode}" = "allowlist" ]; then
+				case "${allowlist_names}" in
+				*" ${env_key} "*) ;;
+				*) to_unset+=("${env_key}") ;;
+				esac
+			else
+				to_unset+=("${env_key}")
+			fi
+			;;
+		esac
+	done < <(compgen -e)
+
+	if [ "${#to_unset[@]}" -gt 0 ]; then
+		local chunk=200
+		local i=0
+		while [ "${i}" -lt "${#to_unset[@]}" ]; do
+			unset "${to_unset[@]:i:chunk}" 2>/dev/null || true
+			i=$((i + chunk))
+		done
+	fi
+
+	case "${policy}" in
+	prompt-subst)
+		export PATH="/usr/bin:/bin"
+		export LANG="C"
+		export LC_ALL="C"
+		;;
+	provider)
+		export PATH="${PATH:-/usr/bin:/bin}"
+		export HOME="${HOME:-${MCPBASH_PROJECT_ROOT:-${PWD}}}"
+		export TMPDIR="${TMPDIR:-/tmp}"
+		if [ -z "${TMP-}" ]; then
+			export TMP="${TMPDIR}"
+		fi
+		if [ -z "${TEMP-}" ]; then
+			export TEMP="${TMPDIR}"
+		fi
+		export LANG="${LANG:-C}"
+		if [ -z "${LC_ALL-}" ]; then
+			export LC_ALL="${LANG}"
+		fi
+		;;
+	esac
+	return 0
+}
+
+mcp_env_run_curated() {
+	local policy="$1"
+	shift || true
+
+	local injected_pairs=()
+	while [ $# -gt 0 ]; do
+		if [ "$1" = "--" ]; then
+			shift
+			break
+		fi
+		injected_pairs+=("$1")
+		shift
+	done
+
+	if [ $# -lt 1 ]; then
+		printf '%s\n' "mcp-bash: mcp_env_run_curated expects: <policy> [KEY=VALUE ...] -- <cmd> [args...]" >&2
+		return 1
+	fi
+
+	if ! mcp_env_apply_curated_policy "${policy}"; then
+		return 1
+	fi
+
+	local pair key value
+	# Bash 3.2 + `set -u`: expanding an empty array triggers "unbound variable".
+	if [ "${#injected_pairs[@]}" -gt 0 ]; then
+		for pair in "${injected_pairs[@]}"; do
+			key="${pair%%=*}"
+			value="${pair#*=}"
+			if ! [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+				printf '%s\n' "mcp-bash: invalid env var name in curated env: ${key}" >&2
+				return 1
+			fi
+			export "${key}=${value}"
+		done
+	fi
+
+	exec "$@"
+}
+
 mcp_runtime_write_env_snapshot() {
 	if [ "${MCPBASH_CI_MODE:-false}" != "true" ]; then
 		return 0
@@ -540,8 +689,8 @@ mcp_runtime_write_env_snapshot() {
 	path_count=0
 	path_first=""
 	path_last=""
-	path_bytes="$(printf '%s' "${path_entries}" | wc -c | tr -d ' ')"
-	env_bytes="$(env | wc -c | tr -d ' ')"
+	path_bytes="${#path_entries}"
+	env_bytes="$(mcp_runtime_estimate_env_bytes)"
 	os_name="$(uname -s 2>/dev/null || printf '')"
 	cwd="$(pwd 2>/dev/null || printf '')"
 	json_tool="${MCPBASH_JSON_TOOL:-none}"
@@ -806,7 +955,7 @@ mcp_runtime_set_process_group() {
 
 	# Check if the process is already its own group leader (job control worked)
 	local pgid
-	pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
+	pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ' || true)"
 	if [ -n "${pgid}" ] && [ "${pgid}" = "${pid}" ]; then
 		return 0
 	fi
@@ -822,7 +971,7 @@ mcp_runtime_lookup_pgid() {
 	[ -n "${pid}" ] || return 1
 
 	# Use ps to look up the process group ID (POSIX-compliant)
-	pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')"
+	pgid="$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ' || true)"
 
 	# Fallback to assuming pid == pgid if ps fails
 	if [ -z "${pgid}" ]; then

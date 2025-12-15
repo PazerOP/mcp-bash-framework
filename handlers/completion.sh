@@ -27,11 +27,57 @@ mcp_handle_completion() {
 
 	case "${method}" in
 	completion/complete)
-		local name
-		name="$(mcp_json_extract_completion_name "${json_payload}")"
+		# MCP 2025-11-25 shape: params.ref + params.argument (no legacy support).
+		# Normalize to an internal "name" for provider selection/cursor binding.
+		local name ref_type
+		ref_type="$(mcp_json_extract_completion_ref_type "${json_payload}")"
+		if [ -z "${ref_type}" ]; then
+			local message
+			message=$(mcp_completion_quote "Completion ref is required")
+			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
+			return 0
+		fi
+		case "${ref_type}" in
+		ref/prompt)
+			name="$(mcp_json_extract_completion_ref_name "${json_payload}")"
+			;;
+		ref/resource)
+			local ref_uri
+			ref_uri="$(mcp_json_extract_completion_ref_uri "${json_payload}")"
+			if [ -n "${ref_uri}" ]; then
+				# Try to resolve the resource registry entry by URI and use its name
+				# so resource completion providers can be selected by metadata.
+				local metadata resolved
+				metadata="$(mcp_resources_metadata_for_uri "${ref_uri}" 2>/dev/null || true)"
+				resolved=""
+				if [ -n "${metadata}" ]; then
+					resolved="$(printf '%s' "${metadata}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.name // ""' 2>/dev/null || true)"
+				fi
+				if [ -n "${resolved}" ]; then
+					name="${resolved}"
+				else
+					# Fall back to the URI; this still enables builtin completion
+					# and keeps cursor binding stable across pages.
+					name="${ref_uri}"
+				fi
+			fi
+			;;
+		*)
+			name=""
+			;;
+		esac
 		if [ -z "${name}" ]; then
 			local message
-			message=$(mcp_completion_quote "Completion name is required")
+			message=$(mcp_completion_quote "Completion ref is invalid")
+			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
+			return 0
+		fi
+
+		local arg_name
+		arg_name="$(mcp_json_extract_completion_argument_name "${json_payload}")"
+		if [ -z "${arg_name}" ]; then
+			local message
+			message=$(mcp_completion_quote "Completion argument name is required")
 			printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message":%s}}' "${id}" "${message}"
 			return 0
 		fi

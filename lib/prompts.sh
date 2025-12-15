@@ -29,6 +29,11 @@ if ! command -v mcp_registry_resolve_scan_root >/dev/null 2>&1; then
 	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/registry.sh"
 fi
 
+if ! command -v mcp_env_run_curated >/dev/null 2>&1; then
+	# shellcheck source=lib/runtime.sh disable=SC1090,SC1091
+	. "${MCPBASH_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/lib/runtime.sh"
+fi
+
 mcp_prompts_scan_root() {
 	mcp_registry_resolve_scan_root "${MCPBASH_PROMPTS_DIR}"
 }
@@ -590,7 +595,7 @@ mcp_prompts_render() {
 		export_pairs=""
 	fi
 
-	local env_cmd=("env" "-i" "PATH=${PATH}")
+	local env_pairs=()
 	while IFS=$'\t' read -r export_key export_value; do
 		[ -z "${export_key}" ] && continue
 		case "${export_value}" in
@@ -598,12 +603,25 @@ mcp_prompts_render() {
 			continue
 			;;
 		esac
-		env_cmd+=("${export_key}=${export_value}")
+		env_pairs+=("${export_key}=${export_value}")
 	done <<<"${export_pairs}"
 
 	local text
-	if ! text="$("${env_cmd[@]}" envsubst <"${full_path}")"; then
-		return 1
+	text="$(cat -- "${full_path}" 2>/dev/null || true)"
+
+	# Support {{var}} placeholders using the allowed key/value pairs.
+	if [ -n "${export_pairs}" ]; then
+		while IFS=$'\t' read -r export_key export_value; do
+			[ -n "${export_key}" ] || continue
+			case "${export_value}" in
+			*$'\n'*)
+				continue
+				;;
+			esac
+			local escaped_value
+			escaped_value="$(printf '%s' "${export_value}" | sed -e 's/[\\&|]/\\&/g')"
+			text="$(printf '%s' "${text}" | sed -e "s|{{${export_key}}}|${escaped_value}|g")"
+		done <<<"${export_pairs}"
 	fi
 
 	mcp_prompts_emit_render_result "${text}" "${normalized_args}" "${role}" "${description}" "${metadata_value}"

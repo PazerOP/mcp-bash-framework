@@ -12,6 +12,13 @@ MCP_JSON_CACHE_HAS_ID="false"
 MCP_JSON_CACHE_PARAMS=""
 MCP_JSON_CACHE_HAS_PARAMS="false"
 
+# Internal constants for safe error-path logging (not user-facing env vars).
+_MCP_JSON_LOG_EXCERPT_LIMIT=1024
+
+# Cache SHA-256 backend detection for error paths.
+_MCP_JSON_SHA256_CHECKED=false
+_MCP_JSON_SHA256_BACKEND=""
+
 mcp_json_quote_text() {
 	local input="$1"
 	local length=${#input}
@@ -76,6 +83,106 @@ mcp_json_escape_string() {
 	printf '"%s"' "${escaped}"
 }
 
+mcp_json_log_payload_bytes() {
+	local payload="$1"
+	LC_ALL=C printf '%s' "${payload}" | wc -c | tr -d ' \n'
+}
+
+mcp_json_log_payload_hash16() {
+	local payload="$1"
+
+	if [ "${_MCP_JSON_SHA256_CHECKED}" != "true" ]; then
+		_MCP_JSON_SHA256_CHECKED="true"
+		if command -v sha256sum >/dev/null 2>&1; then
+			_MCP_JSON_SHA256_BACKEND="sha256sum"
+		elif command -v shasum >/dev/null 2>&1; then
+			_MCP_JSON_SHA256_BACKEND="shasum"
+		elif command -v openssl >/dev/null 2>&1; then
+			_MCP_JSON_SHA256_BACKEND="openssl"
+		else
+			_MCP_JSON_SHA256_BACKEND="none"
+		fi
+	fi
+
+	local hash=""
+	case "${_MCP_JSON_SHA256_BACKEND}" in
+	sha256sum)
+		hash="$(printf '%s' "${payload}" | sha256sum | awk '{print $1}' 2>/dev/null || true)"
+		;;
+	shasum)
+		hash="$(printf '%s' "${payload}" | shasum -a 256 | awk '{print $1}' 2>/dev/null || true)"
+		;;
+	openssl)
+		hash="$(printf '%s' "${payload}" | openssl dgst -sha256 2>/dev/null | awk '{print $NF}' 2>/dev/null || true)"
+		;;
+	*)
+		hash=""
+		;;
+	esac
+
+	if [ -z "${hash}" ]; then
+		printf ''
+		return 0
+	fi
+	if [ ${#hash} -le 16 ]; then
+		printf '%s' "${hash}"
+		return 0
+	fi
+	printf '%s' "${hash:0:16}"
+}
+
+mcp_json_log_payload_excerpt() {
+	# SECURITY: This helper must never log raw payload bytes (single-line + sanitized).
+	local payload="$1"
+
+	local prefix=""
+	if prefix="$(LC_ALL=C printf '%s' "${payload}" | head -c "${_MCP_JSON_LOG_EXCERPT_LIMIT}" 2>/dev/null)"; then
+		:
+	else
+		prefix="$(LC_ALL=C printf '%s' "${payload}" | dd bs="${_MCP_JSON_LOG_EXCERPT_LIMIT}" count=1 2>/dev/null || true)"
+	fi
+
+	# Normalize newlines/tabs to visible escapes first.
+	local s="${prefix//$'\r'/\\r}"
+	s="${s//$'\n'/\\n}"
+	s="${s//$'\t'/\\t}"
+
+	# Replace any remaining non-ASCII/control bytes with '?' (keep ASCII printables only).
+	if s="$(LC_ALL=C printf '%s' "${s}" | tr -c '\040-\176' '?' 2>/dev/null)"; then
+		:
+	fi
+
+	# Escape for excerpt="...": backslashes first, then quotes.
+	s="${s//\\/\\\\}"
+	s="${s//\"/\\\"}"
+
+	printf '%s' "${s}"
+}
+
+mcp_json_log_safe_error() {
+	# SECURITY: Never log raw payloads on error paths.
+	local prefix="$1"
+	local payload="$2"
+	local bin="$3"
+
+	local bytes sha truncated excerpt
+	bytes="$(mcp_json_log_payload_bytes "${payload}")"
+	case "${bytes}" in
+	'' | *[!0-9]*) bytes=0 ;;
+	esac
+	truncated="false"
+	if [ "${bytes}" -gt "${_MCP_JSON_LOG_EXCERPT_LIMIT}" ]; then
+		truncated="true"
+	fi
+	sha="$(mcp_json_log_payload_hash16 "${payload}")"
+	if [ -z "${sha}" ]; then
+		sha="none"
+	fi
+	excerpt="$(mcp_json_log_payload_excerpt "${payload}")"
+
+	printf '%s (bin=%s) bytes=%s sha256=%s truncated=%s excerpt="%s"\n' "${prefix}" "${bin}" "${bytes}" "${sha}" "${truncated}" "${excerpt}" >&2
+}
+
 mcp_json_normalize_line() {
 	local line="$1"
 	line="$(mcp_json_strip_bom "${line}")"
@@ -117,7 +224,8 @@ mcp_json_normalize_with_jq() {
 		jq_args=("-cS" ".")
 	fi
 	if ! compact="$(printf '%s' "${line}" | "${MCPBASH_JSON_TOOL_BIN}" "${jq_args[@]}" 2>/dev/null)"; then
-		printf 'JSON normalization failed for: %s using %s\n' "${line}" "${MCPBASH_JSON_TOOL_BIN}" >&2
+		# SECURITY: Never log raw payload bytes.
+		mcp_json_log_safe_error "JSON normalization failed" "${line}" "${MCPBASH_JSON_TOOL_BIN}"
 		return 1
 	fi
 	printf '%s' "${compact}"
@@ -247,7 +355,8 @@ mcp_json_extract_method() {
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
 		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -er '.method | strings' 2>/dev/null; then
-			printf 'Method extraction failed for: %s using %s\n' "${json}" "${MCPBASH_JSON_TOOL_BIN}" >&2
+			# SECURITY: Never log raw payload bytes.
+			mcp_json_log_safe_error "Method extraction failed" "${json}" "${MCPBASH_JSON_TOOL_BIN}"
 			return 1
 		fi
 		;;
@@ -272,7 +381,8 @@ mcp_json_extract_id() {
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
 		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.id' 2>/dev/null; then
-			printf 'ID extraction failed for: %s using %s\n' "${json}" "${MCPBASH_JSON_TOOL_BIN}" >&2
+			# SECURITY: Never log raw payload bytes.
+			mcp_json_log_safe_error "ID extraction failed" "${json}" "${MCPBASH_JSON_TOOL_BIN}"
 			return 1
 		fi
 		;;
@@ -908,7 +1018,7 @@ mcp_json_extract_progress_token() {
 	esac
 }
 
-mcp_json_extract_completion_name() {
+mcp_json_extract_completion_ref_type() {
 	local json="$1"
 	if mcp_runtime_is_minimal_mode; then
 		printf ''
@@ -917,10 +1027,97 @@ mcp_json_extract_completion_name() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.name? // ""' 2>/dev/null
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.type? // ""' 2>/dev/null
 		;;
 	*)
 		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_ref_name() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.name? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_ref_uri() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.ref.uri? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_argument_name() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.name? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_argument_value() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf ''
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.value? // ""' 2>/dev/null
+		;;
+	*)
+		printf ''
+		;;
+	esac
+}
+
+mcp_json_extract_completion_context_arguments() {
+	local json="$1"
+	if mcp_runtime_is_minimal_mode; then
+		printf '{}'
+		return 0
+	fi
+
+	case "${MCPBASH_JSON_TOOL}" in
+	gojq | jq)
+		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '(.params.context.arguments? // {}) | if type == "object" then . else {} end' 2>/dev/null; then
+			printf '{}'
+		fi
+		;;
+	*)
+		printf '{}'
 		;;
 	esac
 }
@@ -958,7 +1155,27 @@ mcp_json_extract_completion_arguments() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -ec '.params.arguments // {}' 2>/dev/null; then
+		if ! printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -c '
+			def obj_or_empty($v):
+				if ($v | type) == "object" then $v else {} end;
+			def str_or_empty($v):
+				if ($v | type) == "string" then $v else "" end;
+
+			(.params.argument? // {}) as $arg
+			| (str_or_empty($arg.value)) as $value
+			| {
+				query: $value,
+				prefix: $value,
+				argument: {
+					name: (str_or_empty($arg.name)),
+					value: $value
+				},
+				context: {
+					arguments: obj_or_empty(.params.context.arguments? // {})
+				},
+				ref: (obj_or_empty(.params.ref? // {}))
+			}
+		' 2>/dev/null; then
 			printf '{}'
 		fi
 		;;
@@ -977,7 +1194,8 @@ mcp_json_extract_completion_query() {
 
 	case "${MCPBASH_JSON_TOOL}" in
 	gojq | jq)
-		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.arguments.query? // .params.arguments.prefix? // ""' 2>/dev/null
+		# MCP 2025-11-25: params.argument.value
+		printf '%s' "${json}" | "${MCPBASH_JSON_TOOL_BIN}" -r '.params.argument.value? // ""' 2>/dev/null
 		;;
 	*)
 		printf ''
