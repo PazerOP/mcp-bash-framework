@@ -25,13 +25,14 @@ out="$(
 		export FOO="bar"
 		export MCP_FOO="m"
 		export MCPBASH_FOO="b"
+		export MCPBASH_HOME="/h"
 		export TMP="t"
 		export TEMP="t2"
 		mcp_env_apply_curated_policy provider
-		printf '%s|%s|%s|%s|%s' "${FOO-}" "${MCP_FOO-}" "${MCPBASH_FOO-}" "${TMP-}" "${TEMP-}"
+		printf '%s|%s|%s|%s|%s|%s' "${FOO-}" "${MCP_FOO-}" "${MCPBASH_FOO-}" "${MCPBASH_HOME-}" "${TMP-}" "${TEMP-}"
 	)
 )"
-assert_eq "|m|b|t|t2" "${out}" "expected ambient vars to be scrubbed in provider policy"
+assert_eq "|m||/h|t|t2" "${out}" "expected ambient vars to be scrubbed in provider policy"
 
 printf ' -> provider allowlist preserves explicitly allowlisted vars\n'
 out="$(

@@ -578,7 +578,9 @@ mcp_env_apply_curated_policy() {
 		provider:PATH | provider:HOME | provider:TMPDIR | provider:TMP | provider:TEMP | provider:LANG | provider:LC_ALL) ;;
 		provider:USERPROFILE | provider:APPDATA | provider:SYSTEMROOT | provider:MSYSTEM | provider:MSYS2_ARG_CONV_EXCL) ;;
 		provider:LC_*) ;;
-		provider:MCP_* | provider:MCPBASH_*) ;;
+		provider:MCP_*) ;;
+		provider:MCPBASH_HOME | provider:MCPBASH_PROJECT_ROOT | provider:MCPBASH_RESOURCES_DIR | provider:MCPBASH_PROMPTS_DIR) ;;
+		provider:MCPBASH_ENABLE_GIT_PROVIDER | provider:MCPBASH_GIT_* | provider:MCPBASH_HTTPS_*) ;;
 		provider:*)
 			if [ "${env_mode}" = "allowlist" ]; then
 				case "${allowlist_names}" in
