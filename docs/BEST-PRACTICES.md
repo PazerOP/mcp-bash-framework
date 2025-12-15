@@ -32,7 +32,7 @@ This guide distils hands-on recommendations for designing, building, and operati
 | `bin/mcp-bash doctor` | Diagnose environment and installation issues (`--json` for CI/log parsing) | [§2](#2-environment--tooling) |
 | `bin/mcp-bash registry status` | Show registry cache status (hash/mtime/counts) | [§5.2](#52-local-workflow) |
 | `./test/lint.sh` | Run shellcheck + shfmt gates; wraps commands from [TESTING.md](../TESTING.md) | [§5.2](#52-local-workflow) |
-| `./test/unit/lock.bats` | Validate lock/serialization primitives (`lib/lock.sh`) | [§5.1](#51-test-pyramid) |
+| `./test/unit/run.sh` | Run unit tests (pass one or more `*.bats` to filter) | [§5.1](#51-test-pyramid) |
 | `./test/integration/test_capabilities.sh` | End-to-end lifecycle/capability checks | [§5.3](#53-ci-triage-matrix) |
 | `./test/examples/test_examples.sh` | Smoke runner ensuring scaffolds/examples stay healthy | [§5.1](#51-test-pyramid) |
 | `MCPBASH_LOG_LEVEL=debug bin/mcp-bash` | Start server with verbose diagnostics ([README.md](../README.md#diagnostics--logging)) | [§6.3](#63-monitoring-and-health) |
@@ -552,14 +552,14 @@ fi
 | Layer | Scope | Expected gates before merge |
 | --- | --- | --- |
 | Lint/format | `./test/lint.sh` (shellcheck+shfmt) | Always required. |
-| Unit | Focused libraries (`test/unit/lock.bats`) | Required when touching `lib/*.sh` or SDK helpers. |
+| Unit | Focused libraries (`./test/unit/run.sh lock.bats`) | Required when touching `lib/*.sh` or SDK helpers. |
 | Integration | Full capability smoke (`test/integration/test_capabilities.sh`) plus targeted suites (`test/integration/test_tools.sh`, etc.) | Required for handler/protocol changes. |
 | Smoke/examples | `test/examples/test_examples.sh` | Run whenever scaffolded assets change. |
 | Stress/soak | Custom loops combining `time ./bin/mcp-bash` with replayed JSON | Required before large releases or concurrency changes. |
 
 ### 5.2 Local workflow
 1. `./test/lint.sh`
-2. `./test/unit/lock.bats` (or relevant unit suite)
+2. `./test/unit/run.sh lock.bats` (or pass one or more relevant `*.bats`)
 3. `./test/integration/test_capabilities.sh`
 4. Focused suite(s) matching touched subsystem(s)
 5. `./test/examples/test_examples.sh`
@@ -781,7 +781,7 @@ sequenceDiagram
 ./test/lint.sh
 
 # Run unit tests
-./test/unit/lock.bats
+./test/unit/run.sh
 
 # Run integration suite
 ./test/integration/test_capabilities.sh

@@ -66,6 +66,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
 - Prompt metadata (`prompts/<name>.meta.json`):
   - Fields: `name`, `description`, `path` (template file), `arguments` schema.
   - Templates are plain text; example: `Hello {{var}}!`.
+  - Only `{{var}}` placeholders are substituted (values come from `prompts/get` `arguments`).
 - Completions (manual only, via `server.d/register.sh`):
   - Use:
     - `mcp_completion_manual_begin`
@@ -261,6 +262,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - Smoke: `./test/smoke.sh`.
   - Per-tool smoke: each scaffolded tool ships `tools/<name>/smoke.sh` to validate stdout JSON; update its sample args when you change `tool.meta.json`.
   - Unit: `./test/unit/run.sh`.
+    - Filter: `./test/unit/run.sh lock.bats` (or pass multiple `*.bats`).
   - Integration: `./test/integration/run.sh`.
   - Examples: `./test/examples/run.sh` (NDJSON harness + `run-tool` smoke for hello).
   - `run-tool` coverage: unit (`test/unit/run_tool_cli.bats`) and example smoke (`test/examples/test_run_tool_smoke.sh`).
@@ -270,6 +272,7 @@ Pure Bash MCP server framework. Bash≥3.2 + jq/gojq. Stdio transport only.
   - `VERBOSE=1` → stream per-test logs.
   - `UNICODE=1` → use emoji status markers.
   - `MCPBASH_LOG_JSON_TOOL=log` → log JSON tooling detection during tests.
+  - `MCPBASH_UNIT_TEST_TIMEOUT_SECONDS=120` → per-test timeout for `./test/unit/run.sh`.
 
 ## CONVENTIONS
 

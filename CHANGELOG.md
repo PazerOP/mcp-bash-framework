@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: Prompt templating only substitutes `{{var}}` placeholders from `prompts/get` arguments; other placeholder syntaxes are treated as literal text.
 - CI: Windows integration runs default to non-verbose output and use a PR allowlist to reduce runtime; scheduled runs keep the full suite with per-test timeouts and better log preservation on cancellation.
 - When `MCPBASH_PRESERVE_STATE=true`, per-request worker stderr logs (`stderr.*.log`) are preserved for debugging.
+- Dev: Unit test runner supports filtering and enforces per-test timeouts (`MCPBASH_UNIT_TEST_TIMEOUT_SECONDS`) to avoid hangs and orphaned subprocesses.
 
 ### Fixed
 - Error-path JSON stderr logs no longer print full request payloads on parse/extract failures; logs now include bounded, single-line summaries (bytes/hash/excerpt).
