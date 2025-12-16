@@ -5,6 +5,11 @@ All notable changes to mcp-bash-framework will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - Unreleased
+
+### Documentation
+- Clarified resource template discoverability: templates are listed via `resources/templates/list` and are not advertised via a dedicated capabilities flag; clients should probe the method (treat `-32601` as unsupported).
+
 ## [0.8.0] - 2025-12-16
 
 ### Added
