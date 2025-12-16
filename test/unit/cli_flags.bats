@@ -82,31 +82,31 @@ if [[ -e "${bad_project}/has spaces.sh" ]]; then
 fi
 
 printf ' -> config --wrapper creates file when stdout is a TTY (script)\n'
-	if ! command -v script >/dev/null 2>&1; then
-		printf '    SKIP (script command not available)\n'
+if ! command -v script >/dev/null 2>&1; then
+	printf '    SKIP (script command not available)\n'
+else
+	# Some platforms ship a script(1) variant with differing arg order; probe before asserting.
+	if ! script -q /dev/null /bin/sh -c "echo probe" </dev/null >/dev/null 2>&1; then
+		printf '    SKIP (script command incompatible on this platform)\n'
 	else
-		# Some platforms ship a script(1) variant with differing arg order; probe before asserting.
-		if ! script -q /dev/null /bin/sh -c "echo probe" </dev/null >/dev/null 2>&1; then
-			printf '    SKIP (script command incompatible on this platform)\n'
-		else
-			rm -f "${PROJECT_ROOT}/cli-flags-test.sh"
-			script_exit=0
-			cmd_str="\"${REPO_ROOT}/bin/mcp-bash\" config --project-root \"${PROJECT_ROOT}\" --wrapper"
-			script -q /dev/null /bin/sh -c "${cmd_str}" </dev/null || script_exit=$?
-			if [ "${script_exit}" -ne 0 ]; then
-				test_fail "config --wrapper exited with code ${script_exit}"
-			fi
-			if [[ ! -f "${PROJECT_ROOT}/cli-flags-test.sh" ]]; then
-				test_fail "Wrapper file not created in TTY mode"
-			fi
-			if [[ ! -x "${PROJECT_ROOT}/cli-flags-test.sh" ]]; then
-				test_fail "Wrapper file not executable"
-			fi
-			rm -f "${PROJECT_ROOT}/cli-flags-test.sh"
+		rm -f "${PROJECT_ROOT}/cli-flags-test.sh"
+		script_exit=0
+		cmd_str="\"${REPO_ROOT}/bin/mcp-bash\" config --project-root \"${PROJECT_ROOT}\" --wrapper"
+		script -q /dev/null /bin/sh -c "${cmd_str}" </dev/null || script_exit=$?
+		if [ "${script_exit}" -ne 0 ]; then
+			test_fail "config --wrapper exited with code ${script_exit}"
 		fi
+		if [[ ! -f "${PROJECT_ROOT}/cli-flags-test.sh" ]]; then
+			test_fail "Wrapper file not created in TTY mode"
+		fi
+		if [[ ! -x "${PROJECT_ROOT}/cli-flags-test.sh" ]]; then
+			test_fail "Wrapper file not executable"
+		fi
+		rm -f "${PROJECT_ROOT}/cli-flags-test.sh"
 	fi
+fi
 
-	printf ' -> config --client outputs pasteable JSON\n'
+printf ' -> config --client outputs pasteable JSON\n'
 "${REPO_ROOT}/bin/mcp-bash" config --project-root "${PROJECT_ROOT}" --client claude-desktop >"${TEST_TMPDIR}/client.json"
 jq -e '.mcpServers["cli-flags-test"].command' "${TEST_TMPDIR}/client.json" >/dev/null
 
@@ -116,6 +116,9 @@ jq -e '.tools.status' "${TEST_TMPDIR}/reg.json" >/dev/null
 
 printf ' -> doctor --json outputs structured data\n'
 (cd "${PROJECT_ROOT}" && "${REPO_ROOT}/bin/mcp-bash" doctor --json >"${TEST_TMPDIR}/doctor.json")
+jq -e '.schemaVersion == 1' "${TEST_TMPDIR}/doctor.json" >/dev/null
+jq -e '.exitCode == 0' "${TEST_TMPDIR}/doctor.json" >/dev/null
+jq -e '.findings | type == "array"' "${TEST_TMPDIR}/doctor.json" >/dev/null
 jq -e '.framework.version' "${TEST_TMPDIR}/doctor.json" >/dev/null
 
 printf 'CLI flags tests passed.\n'

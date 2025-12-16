@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.1] - Unreleased
 
+### Added
+- `mcp-bash doctor`: added `--dry-run` (propose actions) and `--fix` (managed-install-only repairs), plus `--min-version`/`--archive`/`--verify`/`--ref` upgrade inputs, a concurrency lock, and JSON contract fields `schemaVersion`, `exitCode`, `findings`, `proposedActions`, and `actionsTaken`.
+- Installer now writes `INSTALLER.json` into managed installs so `doctor --fix` can reliably distinguish managed vs user-managed installs.
+
 ### Documentation
 - Clarified resource template discoverability: templates are listed via `resources/templates/list` and are not advertised via a dedicated capabilities flag; clients should probe the method (treat `-32601` as unsupported).
 

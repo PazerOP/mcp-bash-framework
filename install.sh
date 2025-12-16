@@ -8,6 +8,8 @@ REPO_URL="${MCPBASH_INSTALL_REPO_URL:-https://github.com/yaniv-golan/mcp-bash-fr
 BRANCH="main"
 VERIFY_SHA256=""
 ARCHIVE_SOURCE=""
+INSTALL_SOURCE="git"
+ARCHIVE_VERIFIED="false"
 
 # Colors (if terminal supports)
 if [ -t 1 ]; then
@@ -200,6 +202,7 @@ fi
 # Clone or copy repository
 info "Downloading mcp-bash framework..."
 if [ -n "${MCPBASH_INSTALL_LOCAL_SOURCE:-}" ]; then
+	INSTALL_SOURCE="local"
 	LOCAL_SRC="${MCPBASH_INSTALL_LOCAL_SOURCE}"
 	if [ ! -d "${LOCAL_SRC}" ]; then
 		error "Local source directory not found: ${LOCAL_SRC}"
@@ -241,6 +244,7 @@ if [ -n "${MCPBASH_INSTALL_LOCAL_SOURCE:-}" ]; then
 	fi
 else
 	if [ "${install_via_archive}" = "true" ]; then
+		INSTALL_SOURCE="archive"
 		if ! command -v tar >/dev/null 2>&1; then
 			error "tar is required to extract archive installs"
 			exit 1
@@ -341,6 +345,7 @@ else
 				exit 1
 			fi
 			success "Archive checksum verified (--verify)"
+			ARCHIVE_VERIFIED="true"
 		else
 			case "${BRANCH}" in
 			v*.*.*)
@@ -375,12 +380,12 @@ else
 
 					if [ -n "${sha_sums_path}" ]; then
 						expected_sha="$(awk -v f="${canonical_file}" '
-							NF >= 2 {
-								file=$2
-								sub(/^\*/, "", file)
-								if (file == f) { print $1; exit 0 }
-							}
-						' "${sha_sums_path}" 2>/dev/null || true)"
+								NF >= 2 {
+									file=$2
+									sub(/^\*/, "", file)
+									if (file == f) { print $1; exit 0 }
+								}
+							' "${sha_sums_path}" 2>/dev/null || true)"
 						if [ -z "${expected_sha}" ]; then
 							# Do not proceed on an unexpected SHA256SUMS shape.
 							if [ "${cleanup_sums}" -eq 1 ]; then
@@ -404,6 +409,7 @@ else
 							exit 1
 						fi
 						success "Archive checksum verified (SHA256SUMS)"
+						ARCHIVE_VERIFIED="true"
 						if [ "${cleanup_sums}" -eq 1 ]; then
 							rm -f "${sha_sums_path}" 2>/dev/null || true
 						fi
@@ -426,6 +432,7 @@ else
 		fi
 		success "Installed from archive"
 	else
+		INSTALL_SOURCE="git"
 		if git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" 2>/dev/null; then
 			success "Cloned from GitHub"
 		else
@@ -434,6 +441,36 @@ else
 		fi
 	fi
 fi
+
+# Write managed-install marker for doctor/self-repair policy.
+# Note: keep this best-effort and dependency-free (jq may not be installed yet).
+installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%s)"
+installed_version=""
+if [ -f "${INSTALL_DIR}/VERSION" ]; then
+	installed_version="$(tr -d '[:space:]' <"${INSTALL_DIR}/VERSION" 2>/dev/null || printf '')"
+fi
+installed_commit=""
+if [ -d "${INSTALL_DIR}/.git" ]; then
+	installed_commit="$(git -C "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+fi
+json_escape() {
+	local s="$1"
+	s="${s//\\/\\\\}"
+	s="${s//\"/\\\"}"
+	s="${s//$'\n'/ }"
+	printf '%s' "${s}"
+}
+cat >"${INSTALL_DIR}/INSTALLER.json" <<EOF
+{
+  "managed": true,
+  "installedAt": "$(json_escape "${installed_at}")",
+  "source": "$(json_escape "${INSTALL_SOURCE}")",
+  "ref": "$(json_escape "${BRANCH}")",
+  "version": "$(json_escape "${installed_version}")",
+  "commit": "$(json_escape "${installed_commit}")",
+  "verified": ${ARCHIVE_VERIFIED}
+}
+EOF
 
 # Create symlink in ~/.local/bin (XDG standard location)
 info "Creating symlink..."
