@@ -162,6 +162,10 @@ mcp-bash doctor
 #   ✓ jq installed: /usr/bin/jq
 #   All checks passed! Ready to build MCP servers.
 
+# Preview and apply managed-install repairs (shim + optional upgrade when --min-version is set):
+mcp-bash doctor --dry-run
+mcp-bash doctor --fix
+
 # Quick end-to-end test (optional):
 mcp-bash new demo-server
 cd demo-server
@@ -363,7 +367,7 @@ See [**Project Structure Guide**](docs/PROJECT-STRUCTURE.md) for detailed layout
 
 - Readiness/health probe: `mcp-bash --health [--project-root DIR] [--timeout SECS]` (`0`=ready, `1`=unhealthy, `2`=misconfigured)
 - Project checks: `mcp-bash validate [--project-root DIR] [--fix] [--json] [--explain-defaults] [--strict]`
-- Environment check: `mcp-bash doctor [--json]`
+- Environment check: `mcp-bash doctor [--json] [--dry-run|--fix]`
 - Registry cache introspection: `mcp-bash registry status [--project-root DIR]`
 - Client config: `mcp-bash config --json` (machine-readable), `--client <name>` (pasteable JSON), `--wrapper` (generate auto-install wrapper)
 
