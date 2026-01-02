@@ -490,6 +490,7 @@ mcp_resources_scan() {
 			local mime="text/plain"
 			local provider=""
 			local icons="null"
+			local visibility="null"
 
 			if [ -f "${meta_json}" ]; then
 				local meta_parts=()
@@ -504,18 +505,20 @@ mcp_resources_scan() {
 						(.uri // ""),
 						(.mimeType // "text/plain"),
 						(.provider // ""),
-						(.icons // null | @json)
+						(.icons // null | @json),
+						(.visibility // null | @json)
 					]
 					| .[]
 				' "${meta_json}" 2>/dev/null | tr -d '\r' || true)
 
-				if [ "${#meta_parts[@]}" -eq 6 ]; then
+				if [ "${#meta_parts[@]}" -eq 7 ]; then
 					[ -n "${meta_parts[0]}" ] && name="${meta_parts[0]}"
 					description="${meta_parts[1]:-${description}}"
 					uri="${meta_parts[2]:-${uri}}"
 					mime="${meta_parts[3]:-${mime}}"
 					provider="${meta_parts[4]:-${provider}}"
 					icons="${meta_parts[5]:-${icons}}"
+					visibility="${meta_parts[6]:-${visibility}}"
 				fi
 
 				# Convert local file paths to data URIs
@@ -539,11 +542,12 @@ mcp_resources_scan() {
 							(.name // ""),
 							(.uri // ""),
 							(.description // ""),
-							(.icons // null | @json)
+							(.icons // null | @json),
+							(.visibility // null | @json)
 						] | @tsv
 					' 2>/dev/null)"; then
-						local h_name h_uri h_desc h_icons
-						IFS=$'\t' read -r h_name h_uri h_desc h_icons <<<"${extraction}"
+						local h_name h_uri h_desc h_icons h_visibility
+						IFS=$'\t' read -r h_name h_uri h_desc h_icons h_visibility <<<"${extraction}"
 						[ -n "${h_name}" ] && name="${h_name}"
 						[ -n "${h_uri}" ] && uri="${h_uri}"
 						[ -n "${h_desc}" ] && description="${h_desc}"
@@ -552,6 +556,9 @@ mcp_resources_scan() {
 							local script_dir
 							script_dir="$(dirname "${path}")"
 							icons="$(mcp_json_icons_to_data_uris "${h_icons}" "${script_dir}")"
+						fi
+						if [ -n "${h_visibility}" ] && [ "${h_visibility}" != "null" ]; then
+							visibility="${h_visibility}"
 						fi
 					fi
 				fi
@@ -582,8 +589,9 @@ mcp_resources_scan() {
 			fi
 			printf '%s\n' "${name}" >>"${names_seen_file}"
 
-			# Ensure icons is valid JSON (fallback to null if empty)
+			# Ensure icons and visibility are valid JSON (fallback to null if empty)
 			[ -z "${icons}" ] && icons='null'
+			[ -z "${visibility}" ] && visibility='null'
 
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
 				--arg name "$name" \
@@ -593,8 +601,10 @@ mcp_resources_scan() {
 				--arg mime "$mime" \
 				--arg provider "$provider" \
 				--argjson icons "$icons" \
+				--argjson visibility "$visibility" \
 				'{name: $name, description: $desc, path: $path, uri: $uri, mimeType: $mime, provider: $provider}
-				+ (if $icons != null then {icons: $icons} else {} end)' >>"${items_file}"
+				+ (if $icons != null then {icons: $icons} else {} end)
+				+ (if $visibility != null then {visibility: $visibility} else {} end)' >>"${items_file}"
 		done < <(find "${resources_dir}" -type f ! -name ".*" ! -name "*.meta.json" -print0 2>/dev/null)
 	fi
 
@@ -691,13 +701,25 @@ mcp_resources_list() {
 		fi
 	fi
 
-	local total="${MCP_RESOURCES_TOTAL}"
+	# Get items and apply visibility filtering
+	local items_json
+	items_json="$(printf '%s' "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
+
+	# Apply visibility filtering if the function is available
+	if command -v mcp_visibility_filter_items >/dev/null 2>&1; then
+		items_json="$(mcp_visibility_filter_items "${items_json}" "${MCPBASH_RESOURCES_DIR}" "resource")"
+	fi
+
+	# Calculate total after filtering
+	local total
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+
 	local result_json
 	# Like tools/list, expose total via result._meta["mcpbash/total"] for strict-client
 	# compatibility (instead of a top-level field).
-	result_json="$(printf '%s' "${MCP_RESOURCES_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
+	result_json="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "$offset" --argjson limit "$numeric_limit" --argjson total "${total}" '
 		{
-			resources: .items[$offset:$offset+$limit],
+			resources: .[$offset:$offset+$limit],
 			_meta: {"mcpbash/total": $total}
 		}
 	')"

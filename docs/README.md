@@ -7,6 +7,7 @@ Quick entry points for common tasks and reference material.
 - **Inspector**: [INSPECTOR.md](INSPECTOR.md) — MCP Inspector recipes and strict-client pitfalls
 - **Environment knobs**: [ENV_REFERENCE.md](ENV_REFERENCE.md) — all env vars with defaults and caps
 - **Registry & discovery**: [REGISTRY.md](REGISTRY.md), [PROJECT-STRUCTURE.md](PROJECT-STRUCTURE.md)
+- **Dynamic visibility**: [VISIBILITY.md](VISIBILITY.md) — conditional tool/resource visibility
 - **Resource templates**: [RESOURCE-TEMPLATES.md](RESOURCE-TEMPLATES.md) — templates, collisions, and client-side expansion
 - **Elicitation**: [ELICITATION.md](ELICITATION.md) — form/URL modes, SDK helpers
 - **Completion**: [COMPLETION.md](COMPLETION.md) — providers, capabilities, pagination

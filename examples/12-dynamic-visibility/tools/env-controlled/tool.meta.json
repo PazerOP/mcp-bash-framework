@@ -1,0 +1,11 @@
+{
+  "name": "env-controlled-admin",
+  "description": "An admin tool that is only visible when ENABLE_ADMIN_TOOLS environment variable is set",
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "visibility": {
+    "env": "ENABLE_ADMIN_TOOLS"
+  }
+}

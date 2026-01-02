@@ -1,0 +1,8 @@
+{
+  "name": "always-visible",
+  "description": "A tool that is always visible (no visibility restrictions)",
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  }
+}

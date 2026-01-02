@@ -815,8 +815,8 @@ mcp_tools_scan() {
 			esac
 			local base_name
 			base_name="$(basename "${path}")"
-			# Skip scaffolded smoke test scripts (not tools)
-			if [ "${base_name}" = "smoke.sh" ]; then
+			# Skip scaffolded smoke test scripts and visibility scripts (not tools)
+			if [ "${base_name}" = "smoke.sh" ] || [ "${base_name}" = "visibility.sh" ]; then
 				continue
 			fi
 			local name="${base_name%.*}"
@@ -838,6 +838,7 @@ mcp_tools_scan() {
 			local output_schema="null"
 			local icons="null"
 			local annotations="null"
+			local visibility="null"
 
 			if [ -f "${meta_json}" ]; then
 				local meta_parts=()
@@ -853,12 +854,13 @@ mcp_tools_scan() {
 						(.timeoutSecs // ""),
 						(.outputSchema // null | @json),
 						(.icons // null | @json),
-						(.annotations // null | @json)
+						(.annotations // null | @json),
+						(.visibility // null | @json)
 					]
 					| .[]
 				' "${meta_json}" 2>/dev/null | tr -d '\r' || true)
 
-				if [ "${#meta_parts[@]}" -eq 7 ]; then
+				if [ "${#meta_parts[@]}" -eq 8 ]; then
 					[ -n "${meta_parts[2]}" ] || meta_parts[2]='{}'
 					[ -n "${meta_parts[4]}" ] || meta_parts[4]='null'
 					name="${meta_parts[0]:-${name}}"
@@ -868,6 +870,7 @@ mcp_tools_scan() {
 					output_schema="${meta_parts[4]}"
 					icons="${meta_parts[5]:-${icons}}"
 					annotations="${meta_parts[6]:-${annotations}}"
+					visibility="${meta_parts[7]:-${visibility}}"
 					# Convert local file paths to data URIs
 					local meta_dir
 					meta_dir="$(dirname "${meta_json}")"
@@ -894,6 +897,7 @@ mcp_tools_scan() {
 					output_schema="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.outputSchema // null' 2>/dev/null)"
 					icons="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.icons // null' 2>/dev/null)"
 					annotations="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.annotations // null' 2>/dev/null)"
+					visibility="$(printf '%s' "${json_payload}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.visibility // null' 2>/dev/null)"
 					# Convert local file paths to data URIs (relative to tool script dir)
 					local script_dir
 					script_dir="$(dirname "${path}")"
@@ -908,6 +912,7 @@ mcp_tools_scan() {
 			[ -z "${output_schema}" ] && output_schema='null'
 			[ -z "${icons}" ] && icons='null'
 			[ -z "${annotations}" ] && annotations='null'
+			[ -z "${visibility}" ] && visibility='null'
 
 			# Construct item object
 			"${MCPBASH_JSON_TOOL_BIN}" -n \
@@ -919,6 +924,7 @@ mcp_tools_scan() {
 				--argjson out "$output_schema" \
 				--argjson icons "$icons" \
 				--argjson annotations "$annotations" \
+				--argjson visibility "$visibility" \
 				'{
 					name: $name,
 					description: $desc,
@@ -928,7 +934,8 @@ mcp_tools_scan() {
 				}
 				+ (if $out != null then {outputSchema: $out} else {} end)
 				+ (if $icons != null then {icons: $icons} else {} end)
-				+ (if $annotations != null then {annotations: $annotations} else {} end)' >>"${items_file}"
+				+ (if $annotations != null then {annotations: $annotations} else {} end)
+				+ (if $visibility != null then {visibility: $visibility} else {} end)' >>"${items_file}"
 		done < <(find "${scan_root}" -type f ! -name ".*" ! -name "*.meta.json" -print0 2>/dev/null)
 	fi
 
@@ -1068,11 +1075,23 @@ mcp_tools_list() {
 		fi
 	fi
 
-	local total="${MCP_TOOLS_TOTAL}"
+	# Get items and apply visibility filtering
+	local items_json
+	items_json="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c '.items')"
+
+	# Apply visibility filtering if the function is available
+	if command -v mcp_visibility_filter_items >/dev/null 2>&1; then
+		items_json="$(mcp_visibility_filter_items "${items_json}" "${MCPBASH_TOOLS_DIR}" "tool")"
+	fi
+
+	# Calculate total after filtering
+	local total
+	total="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" 'length' 2>/dev/null)" || total=0
+
 	local result_json
-	result_json="$(printf '%s' "${MCP_TOOLS_REGISTRY_JSON}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" --argjson total "${total}" '
+	result_json="$(printf '%s' "${items_json}" | "${MCPBASH_JSON_TOOL_BIN}" -c --argjson offset "${offset}" --argjson limit "${numeric_limit}" --argjson total "${total}" '
 		{
-			tools: .items[$offset:$offset+$limit],
+			tools: .[$offset:$offset+$limit],
 			_meta: {"mcpbash/total": $total}
 		}
 	')"

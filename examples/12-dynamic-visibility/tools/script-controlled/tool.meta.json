@@ -1,0 +1,9 @@
+{
+  "name": "script-controlled-tool",
+  "description": "A tool whose visibility is controlled by a custom script (visible during business hours 9-17)",
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "visibility": "./visibility.sh"
+}
